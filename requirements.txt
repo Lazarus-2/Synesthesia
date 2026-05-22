@@ -1,0 +1,49 @@
+# === Web Framework ===
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# === Config ===
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+python-dotenv>=1.0.1
+
+# === LangChain ===
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+langgraph>=0.2.0
+
+# === Vector Store (pick one) ===
+faiss-cpu>=1.9.0
+
+# === Audio Processing ===
+ffmpeg-python>=0.2.0
+pydub>=0.25.1
+librosa>=0.10.2
+soundfile>=0.12.1
+yt-dlp>=2024.10.0
+
+# === Music ML Models ===
+# All pre-trained, no training needed
+# madmom>=0.16.1
+# basic-pitch>=0.4.0
+# demucs is heavy -- uncomment if running stem separation locally
+# demucs>=4.0.1
+# autochord>=0.1.2  # optional simpler alternative to madmom
+
+# === Token counting ===
+tiktoken>=0.8.0
+
+# === Async & Caching ===
+redis>=5.2.0
+# celery>=5.4.0  # uncomment for async task queue
+
+# === Testing ===
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+httpx>=0.27.0
+
+# === Dev ===
+ipython>=8.29.0
