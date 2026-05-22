@@ -36,7 +36,7 @@ uvicorn backend.main:app --reload
 ## Folder Structure
 
 ```
-soundbreak-starter/
+Synesthesia/
 ├── backend/
 │   ├── main.py               # FastAPI entry -- Module 5
 │   ├── config.py             # Env loading -- Module 5
