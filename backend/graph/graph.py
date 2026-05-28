@@ -40,16 +40,29 @@ def build_graph():
 
     g.add_edge(START, "ingest")
     g.add_edge("ingest", "features")
-    g.add_edge("features", "roman")
+    
+    # Conditional routing for retries
+    from backend.graph.nodes import should_retry
+    g.add_conditional_edges(
+        "features",
+        should_retry,
+        {
+            "retry": "features",
+            "fail": END,
+            "ok": "roman"
+        }
+    )
 
-    # TODO(Module 4, Lesson 5): make theory/instrument/similarity run in parallel
+    # Fan-out parallel nodes from roman
     g.add_edge("roman", "theory")
-    g.add_edge("theory", "instrument")
-    g.add_edge("instrument", "similarity")
+    g.add_edge("roman", "instrument")
+    g.add_edge("roman", "similarity")
+
+    # Fan-in back to END
+    g.add_edge("theory", END)
+    g.add_edge("instrument", END)
     g.add_edge("similarity", END)
 
-    # TODO(Module 4, Lesson 3): add conditional edges using should_retry()
-    # TODO(Module 4, Lesson 4): swap InMemorySaver for SqliteSaver in prod
     checkpointer = InMemorySaver()
     return g.compile(checkpointer=checkpointer)
 

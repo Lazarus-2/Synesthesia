@@ -6,8 +6,7 @@ from __future__ import annotations
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda
-from langchain_openai import ChatOpenAI
-
+from backend.chains.llm_factory import build_llm
 from backend.config import get_settings
 from backend.prompts.theory_prompt import theory_prompt
 from backend.schemas import SongAnalysis
@@ -29,11 +28,5 @@ def _format_inputs(analysis: SongAnalysis) -> dict:
 def build_theory_chain() -> Runnable:
     """Build the chain. Call .invoke(SongAnalysis) -> str."""
     s = get_settings()
-    llm = ChatOpenAI(
-        model=s.model_name,
-        temperature=s.theory_temperature,
-        api_key=s.openai_api_key,
-    )
-    # TODO(Module 3, Lesson 2):
-    # Use LCEL pipe syntax: RunnableLambda(_format_inputs) | theory_prompt | llm | StrOutputParser()
+    llm = build_llm(temperature=s.theory_temperature)
     return RunnableLambda(_format_inputs) | theory_prompt | llm | StrOutputParser()
