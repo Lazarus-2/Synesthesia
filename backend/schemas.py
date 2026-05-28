@@ -24,6 +24,7 @@ class ChordEvent(BaseModel):
     end: float = Field(description="End time in seconds")
     chord: str = Field(description="Chord symbol, e.g. 'Cmaj7', 'Am', 'G/B'")
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
+    color: str = Field(default="#8B5CF6", description="Synesthetic color mapped to this chord")
 
 
 class BeatEvent(BaseModel):
@@ -64,6 +65,7 @@ class SongAnalysis(BaseModel):
     sections: list[SongSection] = []
 
     roman: RomanAnalysis | None = None
+    vibe_palette: list[str] = Field(default_factory=list, description="Synesthetic color palette representing the song's key/vibe")
 
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = Field(default_factory=dict)
