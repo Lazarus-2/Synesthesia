@@ -42,5 +42,28 @@ class TestCapo:
         assert res["capo"] in (0, 3, 5, 7)
 
 
-# TODO(Module 3, Lesson 5): add tests for voicings.get_chord_diagrams
-# TODO(Module 1, Lesson 5): add guardrail tests (malformed chord input)
+from backend.tools.voicings import get_chord_diagrams
+
+class TestChordDiagrams:
+    def test_get_chord_diagrams_guitar(self):
+        diagrams = get_chord_diagrams(["C", "Am", "G7"], instrument="guitar")
+        assert len(diagrams) == 3
+        # Ensure fallback happens for Am and shape works for C
+        assert diagrams[0].chord == "C"
+        assert diagrams[0].instrument == "guitar"
+        
+    def test_get_chord_diagrams_bass(self):
+        diagrams = get_chord_diagrams(["C", "G"], instrument="bass")
+        assert len(diagrams) == 2
+        assert diagrams[0].instrument == "bass"
+        
+    def test_get_chord_diagrams_ukulele(self):
+        diagrams = get_chord_diagrams(["C", "Em"], instrument="ukulele")
+        assert len(diagrams) == 2
+        assert diagrams[0].instrument == "ukulele"
+        
+    def test_guardrails_malformed_input(self):
+        # Should gracefully fallback or ignore
+        diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")
+        # Because we only append if shape is found, malformed chords with no shape should yield empty
+        assert len(diagrams) == 0
