@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+
+  mongodb-setup:
+    image: mongo:6.0
+    depends_on:
+      - mongodb
+    restart: "no"
+    command: >
+      bash -c "
+        sleep 5;
+        mongosh --host mongodb:27017 --eval 'rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongodb:27017\"}]})' || true
+      "
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/synesthesia?replicaSet=rs0
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+
+  worker:
+    build: .
+    command: ["taskiq", "worker", "backend.worker:broker", "backend.main"]
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/synesthesia?replicaSet=rs0
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+
+volumes:
+  mongodb_data:
+  redis_data:
