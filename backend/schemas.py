@@ -13,7 +13,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # =============================================================================
 # Core music primitives -- Module 1
 # =============================================================================
@@ -69,6 +68,11 @@ class SongAnalysis(BaseModel):
 
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = Field(default_factory=dict)
+
+    # Relative paths to separated stems (vocals/drums/bass/other), keyed by
+    # stem name. Empty when stem separation was disabled or unavailable.
+    # Frontend builds the URL as ``/api/v1/stems/{job_id}/{stem_name}``.
+    stems: dict[str, str] = Field(default_factory=dict)
 
 
 # =============================================================================
@@ -132,3 +136,8 @@ class AnalyzeResponse(BaseModel):
     analysis: SongAnalysis | None = None
     instrument_guide: InstrumentGuide | None = None
     error: str | None = None
+    # Relative URL the client uses to fetch the staged audio file
+    # (e.g. ``/api/v1/audio/{job_id}``). Populated when the upload path is
+    # known; null for YouTube-only flows during the download phase or for
+    # cached analyses we never re-staged.
+    audio_url: str | None = None

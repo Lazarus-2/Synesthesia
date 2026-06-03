@@ -1,96 +1,121 @@
-# SoundBreak Starter -- Code Along With The Vault
+# Synesthesia
 
-This is the boilerplate scaffolding for the **SoundBreak** project.
-You fill in each file as you complete the corresponding lesson in the vault.
+An AI music-analysis and learning platform. Upload an audio file or paste a
+YouTube URL; Synesthesia runs a LangGraph pipeline that does ML-based audio
+analysis (chords, key, tempo, beats, sections, stems) and then fans out to
+LLM chains that produce a theory explanation, instrument-specific learning
+guide, and similar-song recommendations.
 
-See the project spec: [[../06-Projects/05-Project-SoundBreak]]
+This README is a quick-start; the deeper "how does this fit together"
+discussion lives in [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## Setup
+## Quick start (local, no Docker)
 
 ```bash
-# 1. Create virtual environment
+# Python 3.12
 python -m venv .venv
-source .venv/bin/activate       # macOS/Linux
-# .venv\Scripts\activate        # Windows
+source .venv/bin/activate
+pip install -e ".[dev]"
+# Optionally pull the heavy ML deps:
+#   pip install -e ".[dev,audio-heavy,providers]"
 
-# 2. Install dependencies (heavy! takes a few minutes)
-pip install -r requirements.txt
-
-# 3. Install ffmpeg (system dependency for audio)
-# macOS:  brew install ffmpeg
-# Ubuntu: sudo apt install ffmpeg
-# Windows: download from ffmpeg.org
-
-# 4. Copy environment template and fill in your keys
 cp .env.example .env
-# Edit .env and add OPENAI_API_KEY
+# Edit .env — at minimum set LLM_PROVIDER (default ``ollama``).
 
-# 5. Run the API (once main.py has code)
-uvicorn backend.main:app --reload
+# Bring up Mongo (replica set) + Redis from the compose file:
+docker compose up -d mongodb mongodb-setup redis
+
+# API
+uvicorn backend.main:app --reload                       # http://localhost:8000
+
+# Worker (separate terminal)
+taskiq worker backend.worker:broker backend.main
+
+# Frontend (separate terminal)
+cd frontend/web
+npm install
+npm run dev                                             # http://localhost:3000
 ```
 
----
+## Quick start (Docker, canonical)
 
-## Folder Structure
-
-```
-Synesthesia/
-├── backend/
-│   ├── main.py               # FastAPI entry -- Module 5
-│   ├── config.py             # Env loading -- Module 5
-│   ├── schemas.py            # Pydantic models -- Module 1
-│   ├── prompts/              # Prompt templates -- Module 1
-│   ├── ml/                   # Pre-trained ML models -- Module 1/2
-│   ├── chains/               # LangChain LCEL chains -- Module 3
-│   ├── tools/                # Music theory tools -- Module 3
-│   ├── graph/                # LangGraph pipeline -- Module 4
-│   ├── observability/        # Tracing + logging -- Module 2
-│   └── cache/                # Redis caching -- Module 5
-├── tests/
-│   ├── golden_songs.json     # Eval dataset -- Module 1
-│   ├── test_tools.py         # Unit tests -- Module 3
-│   ├── test_pipeline.py      # Integration -- Module 3
-│   └── eval_runner.py        # CI eval -- Module 5
-└── frontend/                 # Next.js app (Phase 4)
+```bash
+docker compose up -d
 ```
 
----
+Containers:
 
-## What To Build When
+| service        | port  | image-target          |
+|----------------|-------|-----------------------|
+| `mongodb`      | 27017 | `mongo:6.0` (rs0)     |
+| `redis`        | 6379  | `redis:7`             |
+| `api`          | 8000  | `runtime-api`         |
+| `worker`       | —     | `runtime-worker`      |
 
-Every file has a `TODO` comment pointing to the vault lesson where you fill it in.
-Follow this order:
+The MongoDB replica set is **required** — Taskiq transactions need it.
+`mongodb-setup` initiates `rs0` automatically.
 
-| # | Vault Lesson | Files to Fill |
-|---|---|---|
-| 1 | 01/02 Tokens & Embeddings | `backend/schemas.py` (partial) |
-| 2 | 01/03 Prompting | `backend/prompts/*.py` |
-| 3 | 01/04 Sampling | `backend/config.py` (sampling configs) |
-| 4 | 01/05 Evaluation | `tests/golden_songs.json`, `tests/eval_runner.py` |
-| 5 | 02/02 RAG | `backend/chains/similarity_chain.py` (design) |
-| 6 | 02/03 Agent Patterns | `backend/graph/nodes.py` (tool registry) |
-| 7 | 02/04 Memory | `backend/schemas.py` (UserProfile) |
-| 8 | 02/05 Observability | `backend/observability/tracing.py` |
-| 9 | 03/02 LCEL | `backend/chains/theory_chain.py`, `instrument_chain.py` |
-| 10 | 03/03 Retrieval | `backend/chains/similarity_chain.py` |
-| 11 | 03/04 Tools | `backend/tools/*.py` |
-| 12 | 03/05 Testing | `tests/test_tools.py`, `test_pipeline.py` |
-| 13 | 04/02 State & Nodes | `backend/graph/state.py`, `nodes.py` |
-| 14 | 04/03 Routing | `backend/graph/graph.py` (conditional edges) |
-| 15 | 04/04 Checkpoints | `backend/graph/graph.py` (checkpointer) |
-| 16 | 04/05 Patterns | Refactor full `backend/graph/` to use patterns |
-| 17 | 05/02 Cost/Latency | `backend/config.py` (budgets) |
-| 18 | 05/03 Deployment | `backend/main.py`, `Dockerfile` |
-| 19 | 05/04 Security | `backend/main.py` (validation middleware) |
-| 20 | 05/05 CI | `.github/workflows/eval.yml` |
+## Configuration
 
----
+Settings live in `backend/config.py` and are loaded from `.env` via Pydantic
+Settings. The validators fail-fast at startup when:
 
-## First Steps (Before Starting Module 1)
+- The selected `LLM_PROVIDER` is missing its API key.
+- `REQUIRE_AUTH=true` but `AUTH_SECRET_KEY` is empty.
 
-1. Run `pip install -r requirements.txt` (grab a coffee)
-2. Put a test song file in `tests/audio/test_song.mp3`
-3. Verify: `python -c "import madmom, librosa, demucs, basic_pitch; print('ok')"`
-4. Open Module 1 Lesson 2 and start filling in `backend/schemas.py`
+Key env vars: `LLM_PROVIDER`, `MODEL_NAME`, `LLM_FALLBACK_PROVIDER`,
+`MONGO_URI`, `REDIS_URL`, `AUDIO_UPLOAD_DIR`, `STEMS_DIR`, `MAX_UPLOAD_MB`,
+`ALLOWED_ORIGINS` (CSV), `ANALYZE_RATE_LIMIT`, `CHAT_RATE_LIMIT`,
+`REQUIRE_AUTH`, `AUTH_SECRET_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`LOG_FORMAT` (`json` | `plain`).
+
+## Test, lint, type-check
+
+```bash
+pytest                                  # ~60+ tests, no Mongo required
+pytest tests/test_ml.py -v              # ML wrappers against synthetic audio
+ruff check backend/                     # style + bug rules
+mypy --config-file pyproject.toml       # strict-first scope
+cd frontend/web && npm run lint         # ESLint + react-hooks rules
+```
+
+The OpenAPI spec doubles as the TypeScript source of truth:
+
+```bash
+cd frontend/web
+npm run codegen                          # dump openapi.json + regenerate types
+```
+
+CI (`.github/workflows/`) runs lint, test, codegen-check, and a weekly
+golden-songs eval against the LangGraph pipeline.
+
+## Where to look first
+
+- [`backend/main.py`](backend/main.py) — FastAPI app, routes, lifespan, error
+  envelope, rate limiting.
+- [`backend/graph/`](backend/graph/) — the LangGraph pipeline that orchestrates
+  ingest → validate → features → roman → (theory, instrument, similarity,
+  stems) → END.
+- [`backend/chains/`](backend/chains/) — LangChain LCEL chains. Always
+  construct LLMs via `llm_factory.build_llm()` so observability + fallback
+  wrapping stay consistent.
+- [`backend/services/job_store.py`](backend/services/job_store.py) — the
+  process-shared progress + heartbeat surface used by the SSE endpoint.
+- [`backend/observability/`](backend/observability/) — JSON logging +
+  OpenTelemetry tracing.
+- [`frontend/web/src/lib/apiClient.ts`](frontend/web/src/lib/apiClient.ts) —
+  the single fetch / SSE wrapper every store and component should use.
+
+## Plans
+
+The `plans/` directory contains the rolling implementation plans:
+
+- [plans/01-cleanup-and-optimization.md](plans/01-cleanup-and-optimization.md)
+- [plans/02-architecture-and-improvements.md](plans/02-architecture-and-improvements.md)
+- [plans/03-pending-work-and-features.md](plans/03-pending-work-and-features.md)
+- [plans/00-verification-and-corrections.md](plans/00-verification-and-corrections.md)
+
+Plans 1 and 2 are complete; Plan 3 is almost complete (see the file for the
+deferred parking-lot items).

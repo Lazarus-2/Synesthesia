@@ -6,7 +6,10 @@ import { useAppStore } from "../../store/useAppStore";
 
 export const Header: React.FC = () => {
   const { analysis } = useAnalysisStore();
-  const { setActiveTab } = useAppStore();
+  // ``useAppStore`` is intentionally not consumed here yet — kept as a
+  // re-mount anchor for the planned ``setActiveTab("library")`` action when
+  // the library page (Plan 3 A7) ships its breadcrumb in the header.
+  void useAppStore;
 
   if (!analysis) return null;
 

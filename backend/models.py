@@ -1,7 +1,9 @@
-from datetime import datetime, timezone
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field, ConfigDict
-from backend.schemas import ChordEvent, BeatEvent, SongSection, RomanAnalysis, InstrumentGuide
+from datetime import UTC, datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.schemas import BeatEvent, ChordEvent, InstrumentGuide, RomanAnalysis, SongSection
+
 
 class User(BaseModel):
     """User profile mapping metadata, instruments, and skill levels."""
@@ -11,13 +13,23 @@ class User(BaseModel):
     username: str
     instrument: str = "guitar"
     difficulty: str = "beginner"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Persistent personalization (Plan 3 A8) — used to pre-fill the analyze
+    # form and bias the instrument guide. Sparse fields so older records
+    # keep validating; UI falls back to ``instrument``/``difficulty`` above.
+    default_instrument: str | None = None
+    default_difficulty: str | None = None
+    default_capo: int | None = None
+    # Hashed password — set only when the user signs up through the
+    # JWT-backed auth flow (Plan 3 A9). Anonymous chat users have None here.
+    password_hash: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime | None = None
 
 class ChatMessage(BaseModel):
     """Individual conversation message block within a session."""
     role: str  # "user" or "assistant"
     content: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 class ChatSession(BaseModel):
     """Chat session header grouping conversational transcripts."""
@@ -25,29 +37,30 @@ class ChatSession(BaseModel):
 
     id: str = Field(alias="_id")
     user_id: str
-    messages: List[ChatMessage] = []
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    messages: list[ChatMessage] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 class SongAnalysisModel(BaseModel):
     """Song analyzer cache document in MongoDB."""
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(alias="_id")  # Unique hash or YouTube ID
-    file_hash: Optional[str] = None # For deduplication
-    title: Optional[str] = None
-    artist: Optional[str] = None
+    file_hash: str | None = None # For deduplication
+    title: str | None = None
+    artist: str | None = None
     duration: float
     key: str
     tempo: float
     time_signature: str = "4/4"
     
     # Native MongoDB queryable sub-documents
-    chords: List[ChordEvent] = []
-    beats: List[BeatEvent] = []
-    sections: List[SongSection] = []
-    roman: Optional[RomanAnalysis] = None
-    vibe_palette: List[str] = []
+    chords: list[ChordEvent] = []
+    beats: list[BeatEvent] = []
+    sections: list[SongSection] = []
+    roman: RomanAnalysis | None = None
+    vibe_palette: list[str] = []
     
-    theory_explanation: Optional[str] = None
-    instrument_guides: Dict[str, InstrumentGuide] = {}
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    theory_explanation: str | None = None
+    instrument_guides: dict[str, InstrumentGuide] = {}
+    stems: dict[str, str] = {}
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -1,66 +1,124 @@
 "use client";
 
 import React, { useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
+import { apiPostForm, ApiError } from "../../lib/apiClient";
+import { useToastStore } from "../../store/useToastStore";
+import type { AnalyzeResponse } from "../../types";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Sample analysis cards — IDs must match the seed script
+// (``scripts/seed_samples.py``). Each card links to ``/s/{job_id}`` which
+// renders the read-only share page.
+const SAMPLE_CARDS = [
+  {
+    id: "sample-blackbird",
+    title: "Blackbird",
+    artist: "The Beatles",
+    key: "G Major",
+    bpm: "96",
+    color: "bg-secondary-container/80",
+    icons: ["piano", "music_note"],
+  },
+  {
+    id: "sample-wonderwall",
+    title: "Wonderwall",
+    artist: "Oasis",
+    key: "F# Minor",
+    bpm: "87",
+    color: "bg-secondary-container/80",
+    icons: ["music_note"],
+  },
+  {
+    id: "sample-creep",
+    title: "Creep",
+    artist: "Radiohead",
+    key: "G Major",
+    bpm: "92",
+    color: "bg-secondary-container/80",
+    icons: ["music_note", "speaker"],
+  },
+];
 
 export const UploadModal: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const { analysis, startProgressStream } = useAnalysisStore();
   const { setAudioFileUrl } = usePlayerStore();
 
-  // If analysis is already loaded, don't show landing
-  if (analysis) return null;
+  // All hooks declared at the top so the order is stable on every render.
+  // Previously several useCallbacks lived after the early-return below,
+  // which tripped react-hooks/rules-of-hooks.
+  const submitAnalyze = useCallback(async (form: FormData, audioUrl?: string) => {
+    setSubmitError(null);
+    try {
+      const data = await apiPostForm<AnalyzeResponse>("/analyze", form);
+      if (audioUrl) setAudioFileUrl(audioUrl);
+      if (data.status === "done" && data.analysis) {
+        useAnalysisStore.getState().setAnalysis(data.analysis);
+      } else if (data.job_id) {
+        startProgressStream(data.job_id);
+      }
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message :
+        err instanceof Error ? err.message : "Unknown error";
+      const detail = err instanceof ApiError ? err.code : undefined;
+      console.error("analyze error:", err);
+      setSubmitError(message);
+      useToastStore.getState().error("Upload failed", `${detail ? detail + ' — ' : ''}${message}`);
+    }
+  }, [startProgressStream, setAudioFileUrl]);
 
   const handleUpload = useCallback(async (file: File) => {
     const form = new FormData();
     form.append("file", file);
     form.append("instrument", "guitar");
     form.append("difficulty", "beginner");
-
-    try {
-      const res = await fetch(`${API}/analyze`, { method: "POST", body: form });
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-      const data = await res.json();
-
-      // Set audio URL for player
-      setAudioFileUrl(URL.createObjectURL(file));
-
-      if (data.status === "done" && data.analysis) {
-        useAnalysisStore.getState().setAnalysis(data.analysis);
-      } else if (data.job_id) {
-        startProgressStream(data.job_id);
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-    }
-  }, [startProgressStream, setAudioFileUrl]);
+    await submitAnalyze(form, URL.createObjectURL(file));
+  }, [submitAnalyze]);
 
   const handleYoutubeAnalyze = useCallback(async () => {
-    if (!youtubeUrl.trim()) return;
+    const trimmed = youtubeUrl.trim();
+    if (!trimmed) return;
+
+    // Pre-flight validation (Plan 3 live-test report 2): when the user
+    // pastes a local file path or a non-URL string the server's URL guard
+    // rejects it anyway, but we get a clearer message by catching it here
+    // and the user doesn't see "Analyzing…" → "Analysis failed" round-trip.
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      const message = "That doesn't look like a URL. Drop an audio file above or paste a YouTube link.";
+      setSubmitError(message);
+      useToastStore.getState().error("Invalid URL", message);
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      const message = `Only http(s) URLs are accepted (got ${parsed.protocol}).`;
+      setSubmitError(message);
+      useToastStore.getState().error("Invalid URL scheme", message);
+      return;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const youtubeHosts = ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"];
+    if (!youtubeHosts.includes(host)) {
+      const message = `${host} isn't supported. Paste a YouTube URL or upload an audio file.`;
+      setSubmitError(message);
+      useToastStore.getState().error("Unsupported host", message);
+      return;
+    }
+
     const form = new FormData();
-    form.append("youtube_url", youtubeUrl.trim());
+    form.append("youtube_url", trimmed);
     form.append("instrument", "guitar");
     form.append("difficulty", "beginner");
-
-    try {
-      const res = await fetch(`${API}/analyze`, { method: "POST", body: form });
-      if (!res.ok) throw new Error(`Analyze failed: ${res.status}`);
-      const data = await res.json();
-
-      if (data.status === "done" && data.analysis) {
-        useAnalysisStore.getState().setAnalysis(data.analysis);
-      } else if (data.job_id) {
-        startProgressStream(data.job_id);
-      }
-    } catch (err) {
-      console.error("YouTube analyze error:", err);
-    }
-  }, [youtubeUrl, startProgressStream]);
+    await submitAnalyze(form);
+  }, [youtubeUrl, submitAnalyze]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -73,6 +131,9 @@ export const UploadModal: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) handleUpload(file);
   }, [handleUpload]);
+
+  // If analysis is already loaded, don't show landing.
+  if (analysis) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col min-h-screen overflow-y-auto">
@@ -143,6 +204,11 @@ export const UploadModal: React.FC = () => {
               onChange={handleFileChange}
               className="hidden"
             />
+            {submitError && (
+              <p className="mt-4 text-sm text-error relative z-10" role="alert">
+                {submitError}
+              </p>
+            )}
           </div>
 
           {/* YouTube URL Input */}
@@ -191,12 +257,12 @@ export const UploadModal: React.FC = () => {
             Try a Sample Analysis
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { title: "Blackbird", artist: "The Beatles", key: "G Major", bpm: "120", color: "bg-secondary-container/80", icons: ["piano", "music_note"] },
-              { title: "Wonderwall", artist: "Oasis", key: "E Minor", bpm: "94", color: "bg-secondary-container/80", icons: ["music_note"] },
-              { title: "Creep", artist: "Radiohead", key: "C Major", bpm: "78", color: "bg-secondary-container/80", icons: ["music_note", "speaker"] },
-            ].map((card) => (
-              <div key={card.title} className="glass-panel rounded-xl overflow-hidden group cursor-pointer hover:border-primary/30 transition-all flex flex-col">
+            {SAMPLE_CARDS.map((card) => (
+              <Link
+                key={card.id}
+                href={`/s/${card.id}`}
+                className="glass-panel rounded-xl overflow-hidden group cursor-pointer hover:border-primary/30 transition-all flex flex-col"
+              >
                 <div className="h-40 w-full relative overflow-hidden bg-surface-container-high">
                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
                   <div className="absolute bottom-4 left-4 flex gap-2">
@@ -222,9 +288,12 @@ export const UploadModal: React.FC = () => {
                     <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">play_circle</span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
+          <p className="text-xs text-outline-variant text-center mt-4">
+            First time? Run <code className="font-mono text-on-surface-variant">python scripts/seed_samples.py</code> to populate these samples.
+          </p>
         </div>
       </main>
 

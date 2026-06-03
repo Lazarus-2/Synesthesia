@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useAnalysisStore } from "../../store/useAnalysisStore";
+import { API_V1 } from "../../lib/apiClient";
 
 interface Stem {
-  id: string;
+  id: "vocals" | "drums" | "bass" | "other";
   label: string;
   icon: string;
   color: string;
@@ -13,68 +15,154 @@ const STEMS: Stem[] = [
   { id: "vocals", label: "Vocals", icon: "mic", color: "#c4abff" },
   { id: "drums", label: "Drums", icon: "album", color: "#ffb547" },
   { id: "bass", label: "Bass", icon: "speaker", color: "#ffafac" },
-  { id: "melodics", label: "Melodics", icon: "piano", color: "#ffd9ab" },
+  { id: "other", label: "Melodics", icon: "piano", color: "#ffd9ab" },
 ];
 
 export const StemMixer: React.FC = () => {
+  const { analysis, jobId } = useAnalysisStore();
+  // Memoize so the availableStems useMemo isn't recomputed every render
+  // (eslint-react-hooks/exhaustive-deps).
+  const stems = useMemo(
+    () => (analysis as { stems?: Record<string, string> } | null)?.stems ?? {},
+    [analysis],
+  );
+
   const [volumes, setVolumes] = useState<Record<string, number>>({
-    vocals: 80,
-    drums: 100,
-    bass: 70,
-    melodics: 90,
+    vocals: 80, drums: 100, bass: 70, other: 90,
   });
   const [muted, setMuted] = useState<Record<string, boolean>>({});
 
-  const setVolume = (id: string, vol: number) => {
-    setVolumes((prev) => ({ ...prev, [id]: vol }));
-  };
+  // Lazy WebAudio routing — one HTMLAudioElement + GainNode per stem so
+  // the user can blend without re-fetching. Created the first time a stem
+  // has both a URL and isn't muted; teardown on unmount.
+  const audioElementsRef = useRef<Record<string, HTMLAudioElement | null>>({});
+  const gainNodesRef = useRef<Record<string, GainNode | null>>({});
+  const ctxRef = useRef<AudioContext | null>(null);
 
-  const toggleMute = (id: string) => {
+  const availableStems = useMemo(
+    () => STEMS.filter((s) => Boolean(stems[s.id])),
+    [stems],
+  );
+
+  // Sync gain to slider values + mute state.
+  useEffect(() => {
+    for (const s of availableStems) {
+      const gain = gainNodesRef.current[s.id];
+      if (gain) gain.gain.value = muted[s.id] ? 0 : volumes[s.id] / 100;
+    }
+  }, [volumes, muted, availableStems]);
+
+  // Build the audio graph when stems first arrive.
+  useEffect(() => {
+    if (availableStems.length === 0 || !jobId) return;
+    if (!ctxRef.current) {
+      const w = window as unknown as {
+        AudioContext?: typeof AudioContext;
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const Ctor = w.AudioContext ?? w.webkitAudioContext;
+      if (Ctor) ctxRef.current = new Ctor();
+    }
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+
+    for (const s of availableStems) {
+      if (audioElementsRef.current[s.id]) continue;
+      const el = new Audio(`${API_V1}/stems/${encodeURIComponent(jobId)}/${s.id}`);
+      el.crossOrigin = "anonymous";
+      el.preload = "auto";
+      const source = ctx.createMediaElementSource(el);
+      const gain = ctx.createGain();
+      gain.gain.value = muted[s.id] ? 0 : volumes[s.id] / 100;
+      source.connect(gain).connect(ctx.destination);
+      audioElementsRef.current[s.id] = el;
+      gainNodesRef.current[s.id] = gain;
+    }
+    // Snapshot the ref before cleanup runs — the original ref object may
+    // mutate between effect setup and teardown (lint: exhaustive-deps).
+    const elementsSnapshot = audioElementsRef.current;
+    return () => {
+      for (const id of Object.keys(elementsSnapshot)) {
+        elementsSnapshot[id]?.pause();
+      }
+    };
+    // We intentionally exclude volumes/muted from deps — the first effect
+    // syncs them on every change without rebuilding the graph.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableStems, jobId]);
+
+  const setVolume = (id: string, vol: number) =>
+    setVolumes((prev) => ({ ...prev, [id]: vol }));
+  const toggleMute = (id: string) =>
     setMuted((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const allPlay = () => {
+    for (const el of Object.values(audioElementsRef.current)) {
+      el?.play().catch(() => undefined);
+    }
+  };
+  const allPause = () => {
+    for (const el of Object.values(audioElementsRef.current)) el?.pause();
   };
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
-      <h2 className="font-headline text-2xl font-medium text-white">Stems</h2>
+      <div className="flex justify-between items-baseline">
+        <h2 className="font-headline text-2xl font-medium text-white">Stems</h2>
+        {availableStems.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={allPlay}
+              className="px-3 py-1 text-xs rounded-full glass-panel hover:border-primary/30"
+            >
+              Play
+            </button>
+            <button
+              onClick={allPause}
+              className="px-3 py-1 text-xs rounded-full glass-panel hover:border-primary/30"
+            >
+              Pause
+            </button>
+          </div>
+        )}
+      </div>
       <p className="text-sm text-on-surface-variant -mt-2">
-        Adjust individual instrument levels. Requires Demucs stem separation.
+        {availableStems.length === 0
+          ? "Stem separation hasn't run for this analysis yet — enable it in settings, then re-run."
+          : "Adjust individual instrument levels. Stems are streamed independently from the backend."}
       </p>
 
       <div className="flex flex-col gap-4">
         {STEMS.map((stem) => {
+          const isAvailable = Boolean(stems[stem.id]);
           const vol = muted[stem.id] ? 0 : volumes[stem.id];
           return (
             <div
               key={stem.id}
-              className="glass-panel rounded-xl p-4 flex items-center gap-4"
+              className={`glass-panel rounded-xl p-4 flex items-center gap-4 ${
+                isAvailable ? "" : "opacity-40"
+              }`}
             >
-              {/* Icon */}
               <button
                 className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-all ${
-                  muted[stem.id]
-                    ? "bg-white/5 opacity-40"
-                    : "bg-white/10"
+                  muted[stem.id] || !isAvailable ? "bg-white/5" : "bg-white/10"
                 }`}
-                onClick={() => toggleMute(stem.id)}
-                title={muted[stem.id] ? "Unmute" : "Mute"}
+                onClick={() => isAvailable && toggleMute(stem.id)}
+                disabled={!isAvailable}
+                title={!isAvailable ? "Not separated yet" : muted[stem.id] ? "Unmute" : "Mute"}
               >
                 <span
                   className="material-symbols-outlined text-xl"
-                  style={{ color: muted[stem.id] ? "#9e8e7c" : stem.color }}
+                  style={{ color: muted[stem.id] || !isAvailable ? "#9e8e7c" : stem.color }}
                 >
-                  {muted[stem.id] ? "volume_off" : stem.icon}
+                  {muted[stem.id] || !isAvailable ? "volume_off" : stem.icon}
                 </span>
               </button>
 
-              {/* Label + Slider */}
               <div className="flex-grow">
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-sm font-medium text-on-surface">
-                    {stem.label}
-                  </span>
-                  <span className="text-xs text-on-surface-variant tabular-nums">
-                    {vol}%
-                  </span>
+                  <span className="text-sm font-medium text-on-surface">{stem.label}</span>
+                  <span className="text-xs text-on-surface-variant tabular-nums">{vol}%</span>
                 </div>
                 <input
                   type="range"
@@ -83,7 +171,7 @@ export const StemMixer: React.FC = () => {
                   value={vol}
                   onChange={(e) => setVolume(stem.id, Number(e.target.value))}
                   className="stem-slider w-full"
-                  disabled={muted[stem.id]}
+                  disabled={muted[stem.id] || !isAvailable}
                 />
               </div>
             </div>

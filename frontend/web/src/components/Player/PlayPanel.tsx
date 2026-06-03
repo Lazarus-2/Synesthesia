@@ -19,8 +19,7 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
   // Find the minimum fret to determine if we need to show a specific fret range
   const playedFrets = frets.filter(f => f > 0);
   const minFret = playedFrets.length > 0 ? Math.min(...playedFrets) : 1;
-  const maxFret = playedFrets.length > 0 ? Math.max(...playedFrets) : 4;
-  
+
   // Determine if we show the nut (if minFret is 1 or 0)
   const showNut = minFret <= 1;
   const startFret = showNut ? 1 : minFret;
@@ -55,7 +54,6 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
 
       {/* X/O markers and finger dots */}
       {frets.map((fret, stringIdx) => {
-        const leftPct = (stringIdx / 5) * 100;
         
         // Muted string (X)
         if (fret === -1) {

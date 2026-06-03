@@ -30,7 +30,7 @@ export const SettingsPanel: React.FC = () => {
                   ? "bg-secondary-container/15 border-secondary-container/40 glow-violet"
                   : "glass-panel hover:border-primary/30"
               }`}
-              onClick={() => setLlmProvider(prov.id as any)}
+              onClick={() => setLlmProvider(prov.id as "local" | "openai" | "anthropic")}
             >
               <div
                 className={`w-10 h-10 rounded-lg flex items-center justify-center ${

@@ -30,7 +30,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsPlaying: (playing) => {
     const ws = get().wavesurfer;
     if (ws) {
-      playing ? ws.play() : ws.pause();
+      if (playing) ws.play(); else ws.pause();
     }
     set({ isPlaying: playing });
   },

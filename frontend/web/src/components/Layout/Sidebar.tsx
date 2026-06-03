@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { Music, BookOpen, MessageSquare, Sliders } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
@@ -5,12 +7,13 @@ import { useAppStore } from '../../store/useAppStore';
 export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab } = useAppStore();
 
-  const TABS = [
-    { id: "analysis", icon: <Music className="w-5 h-5" />, label: "Analysis" },
+  type SidebarTabId = "play" | "theory" | "chat" | "settings";
+  const TABS: ReadonlyArray<{ id: SidebarTabId; icon: React.ReactNode; label: string }> = [
+    { id: "play", icon: <Music className="w-5 h-5" />, label: "Analysis" },
     { id: "theory", icon: <BookOpen className="w-5 h-5" />, label: "Theory" },
     { id: "chat", icon: <MessageSquare className="w-5 h-5" />, label: "Chat" },
-    { id: "settings", icon: <Sliders className="w-5 h-5" />, label: "Settings" }
-  ] as const;
+    { id: "settings", icon: <Sliders className="w-5 h-5" />, label: "Settings" },
+  ];
 
   return (
     <div className="w-64 border-r border-gray-800 bg-black flex flex-col shrink-0">
@@ -18,7 +21,7 @@ export const Sidebar: React.FC = () => {
         {TABS.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => setActiveTab(tab.id)}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
               activeTab === tab.id 
                 ? "bg-violet-600/20 text-violet-400 border border-violet-500/30" 

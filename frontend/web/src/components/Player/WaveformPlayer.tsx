@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import type WaveSurfer from "wavesurfer.js";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 
@@ -14,15 +15,17 @@ export const WaveformPlayer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isPlaying, setIsPlaying, currentTime, duration, setCurrentTime, setDuration, audioFileUrl, setWavesurfer } = usePlayerStore();
   const { analysis } = useAnalysisStore();
-  const wsRef = useRef<any>(null);
+  const wsRef = useRef<WaveSurfer | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || !audioFileUrl) return;
 
-    let ws: any;
+    // Holder for the cleanup closure — assigned after the async create.
+    let cleanup: (() => void) | null = null;
+
     (async () => {
-      const WaveSurfer = (await import("wavesurfer.js")).default;
-      ws = WaveSurfer.create({
+      const WaveSurferCtor = (await import("wavesurfer.js")).default;
+      const ws: WaveSurfer = WaveSurferCtor.create({
         container: containerRef.current!,
         waveColor: "rgba(255, 181, 71, 0.4)",
         progressColor: "#ffb547",
@@ -45,9 +48,10 @@ export const WaveformPlayer: React.FC = () => {
       ws.on("seeking", () => setCurrentTime(ws.getCurrentTime()));
       ws.on("finish", () => setIsPlaying(false));
       wsRef.current = ws;
+      cleanup = () => ws.destroy();
     })();
 
-    return () => { ws?.destroy(); };
+    return () => { cleanup?.(); };
   }, [audioFileUrl, setDuration, setWavesurfer, setCurrentTime, setIsPlaying]);
 
   const remaining = duration - currentTime;

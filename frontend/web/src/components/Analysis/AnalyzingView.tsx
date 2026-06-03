@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useAnalysisStore, JobStatus } from "../../store/useAnalysisStore";
+import { useAnalysisStore } from "../../store/useAnalysisStore";
 
 const STEPS = [
   { label: "Listening", threshold: 5 },
@@ -9,6 +9,18 @@ const STEPS = [
   { label: "Analyzing theory", threshold: 60 },
   { label: "Generating your guide", threshold: 90 },
 ];
+
+// Constellation positions are rolled once at module load — the visual is
+// pure decoration, and computing them at render time tripped
+// ``react-hooks/purity``. A static array also avoids the re-mount jitter
+// you'd get from a per-mount useMemo.
+const CONSTELLATION = Array.from({ length: 30 }, () => ({
+  size: Math.random() * 2 + 2,
+  left: Math.random() * 100,
+  top: Math.random() * 100,
+  duration: Math.random() * 4 + 3,
+  delay: Math.random() * 5,
+}));
 
 function getActiveStep(progress: number): number {
   for (let i = STEPS.length - 1; i >= 0; i--) {
@@ -30,17 +42,17 @@ export const AnalyzingView: React.FC = () => {
     <div className="fixed inset-0 z-40 bg-background flex items-center justify-center relative overflow-hidden">
       {/* Background constellation dots */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        {Array.from({ length: 30 }).map((_, i) => (
+        {CONSTELLATION.map((p, i) => (
           <div
             key={i}
             className="absolute rounded-full bg-white/10 animate-pulse-glow"
             style={{
-              width: `${Math.random() * 2 + 2}px`,
-              height: `${Math.random() * 2 + 2}px`,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDuration: `${Math.random() * 4 + 3}s`,
-              animationDelay: `${Math.random() * 5}s`,
+              width: `${p.size}px`,
+              height: `${p.size}px`,
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
             }}
           />
         ))}
@@ -70,7 +82,6 @@ export const AnalyzingView: React.FC = () => {
               {STEPS.map((step, i) => {
                 const isDone = i < activeStep || (i === activeStep && jobProgress >= STEPS[i].threshold + 10);
                 const isActive = i === activeStep && !isDone;
-                const isPending = i > activeStep;
 
                 return (
                   <React.Fragment key={step.label}>

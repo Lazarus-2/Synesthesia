@@ -15,6 +15,7 @@ from backend.schemas import (
     Instrument,
     InstrumentGuide,
     RomanAnalysis,
+    SongSection,
 )
 
 
@@ -31,6 +32,8 @@ class AnalysisState(TypedDict, total=False):
     tempo: float
     chords: list[ChordEvent]
     beats: list[BeatEvent]
+    sections: list[SongSection]
+    stems: dict[str, str]  # {stem_name: relative_path_under_stems_dir}
 
     # --- LLM outputs ---
     roman: RomanAnalysis | None

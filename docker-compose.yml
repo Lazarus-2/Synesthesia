@@ -31,9 +31,24 @@ services:
     command: redis-server --save 60 1 --loglevel warning
 
   api:
-    build: .
+    build:
+      context: .
+      target: runtime-api
     ports:
       - "8000:8000"
+    # --timeout-graceful-shutdown lets uvicorn finish in-flight requests
+    # (including SSE streams) before exiting. Pairs with stop_grace_period
+    # below so docker stop / orchestrator drain sequences don't sever
+    # connections mid-response.
+    command:
+      - "uvicorn"
+      - "backend.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--timeout-graceful-shutdown"
+      - "120"
     environment:
       - MONGO_URI=mongodb://mongodb:27017/synesthesia?replicaSet=rs0
       - REDIS_URL=redis://redis:6379/0
@@ -44,10 +59,19 @@ services:
       - .env
     volumes:
       - ./storage:/app/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 130s
 
   worker:
-    build: .
-    command: ["taskiq", "worker", "backend.worker:broker", "backend.main"]
+    build:
+      context: .
+      target: runtime-worker
+    # CMD in the runtime-worker stage already runs taskiq; no override needed.
     environment:
       - MONGO_URI=mongodb://mongodb:27017/synesthesia?replicaSet=rs0
       - REDIS_URL=redis://redis:6379/0
@@ -58,6 +82,9 @@ services:
       - .env
     volumes:
       - ./storage:/app/storage
+    # An analysis run can take 60–120s; give Taskiq room to finish in-flight
+    # jobs before docker SIGKILLs the container.
+    stop_grace_period: 130s
 
 volumes:
   mongodb_data:

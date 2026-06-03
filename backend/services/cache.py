@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 
 from backend.config import get_settings
 
@@ -26,7 +25,7 @@ class HybridCache:
                 print(f"HybridCache: Redis connection offline ({e}). Fallback to local TTL active.")
                 self.redis_client = None
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         """Fetch stringified item from the active store."""
         if self.redis_client:
             try:
@@ -44,7 +43,7 @@ class HybridCache:
             del self.memory_store[key]
         return None
 
-    def set(self, key: str, value: str, ttl_seconds: Optional[int] = 1800) -> bool:
+    def set(self, key: str, value: str, ttl_seconds: int | None = 1800) -> bool:
         """Persist stringified item with expiration (default 30 mins)."""
         if self.redis_client:
             try:

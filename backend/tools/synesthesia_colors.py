@@ -40,9 +40,9 @@ def hex_to_hls(hex_str: str) -> tuple[float, float, float]:
     return colorsys.rgb_to_hls(r, g, b)
 
 
-def hls_to_hex(h: float, l: float, s: float) -> str:
+def hls_to_hex(h: float, lt: float, s: float) -> str:
     """Convert HLS coordinates (0-1) back to hex color string."""
-    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    r, g, b = colorsys.hls_to_rgb(h, lt, s)
     return f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
 
 
@@ -72,7 +72,7 @@ def get_chord_color(chord_symbol: str) -> str:
 
     # Detect chord quality from suffix
     suffix_lower = suffix.lower()
-    h, l, s = hex_to_hls(base_hex)
+    h, lt, s = hex_to_hls(base_hex)  # ``lt`` = lightness; ``l`` flagged as ambiguous
 
     if "dim" in suffix_lower or "o" in suffix_lower or "ø" in suffix_lower:
         # Diminished -> vibrating neon pink shift
@@ -82,17 +82,16 @@ def get_chord_color(chord_symbol: str) -> str:
         return "#B6FF00"
     elif "min" in suffix_lower or "m" in suffix_lower:
         # Minor -> Cooler, deeper, lower lightness & saturation
-        # Make it cooler by shifting hue slightly toward blue
         if norm_root in ("C", "G", "D", "A"):
             h = (h + 0.05) % 1.0  # Shift toward green/blue
-        l = max(0.15, l * 0.5)  # Darker
-        s = max(0.2, s * 0.6)   # Less saturated
+        lt = max(0.15, lt * 0.5)  # Darker
+        s = max(0.2, s * 0.6)     # Less saturated
     elif "7" in suffix_lower:
         # Dominant 7th -> highly saturated neon fluorescent boost
         s = min(1.0, s * 1.3)
-        l = min(0.9, l * 1.1)
+        lt = min(0.9, lt * 1.1)
 
-    return hls_to_hex(h, l, s)
+    return hls_to_hex(h, lt, s)
 
 
 def get_vibe_palette(key_name: str, chord_list: list[str]) -> list[str]:

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "openapi:dump": "(cd ../.. && python scripts/dump_openapi.py -o frontend/web/src/types/openapi.json)",
+    "openapi:codegen": "openapi-typescript src/types/openapi.json -o src/types/api.gen.ts",
+    "codegen": "npm run openapi:dump && npm run openapi:codegen"
   },
   "dependencies": {
     "@tonaljs/tonal": "^4.10.0",
@@ -25,6 +28,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

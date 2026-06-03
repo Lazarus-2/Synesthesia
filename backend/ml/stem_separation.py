@@ -25,18 +25,21 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
         logger.info(f"Stems already exist in {out_dir}")
         return stem_paths
 
+    # Demucs is now lazy-loaded via the registry — first call in this
+    # process builds the Separator (one-time cost), subsequent calls reuse it.
     try:
-        from demucs.api import Separator
-    except ImportError:
+        from backend.ml import registry as ml_registry
+        sep = ml_registry.get("demucs")
+    except (ImportError, ModuleNotFoundError):
         logger.warning("demucs not installed, skipping stem separation")
+        return {}
+    except KeyError:
+        logger.warning("demucs not registered, skipping stem separation")
         return {}
 
     logger.info(f"Running demucs on {audio_path}")
-    
+
     try:
-        # Use htdemucs_ft which is best quality. Will use GPU if PyTorch finds it.
-        sep = Separator(model="htdemucs_ft")
-        
         # separate_audio_file returns (origin, dict_of_sources)
         _, sources = sep.separate_audio_file(audio_path)
         

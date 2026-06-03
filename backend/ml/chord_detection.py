@@ -7,26 +7,28 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+from backend.config import MAX_AUDIO_DURATION_S
 from backend.schemas import ChordEvent
+
+logger = logging.getLogger(__name__)
 
 
 def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
     """Return list of ChordEvent for the song using a pure Python template matching algorithm."""
     import librosa
     import numpy as np
+
     from backend.tools.synesthesia_colors import get_chord_color
 
     try:
-        # Load audio (first 3 minutes for speed)
-        y, sr = librosa.load(str(audio_path), sr=22050, duration=180)
-        # Separate harmonic content for cleaner chroma features
+        y, sr = librosa.load(str(audio_path), sr=22050, duration=MAX_AUDIO_DURATION_S)
         y_harmonic, _ = librosa.effects.hpss(y)
-        # Compute Constant-Q chromagram
         chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, hop_length=512)
-    except Exception:
-        # Fallback empty chord events list
+    except Exception as e:
+        logger.warning("Chord detection failed for %s: %s", audio_path, e)
         return []
 
     num_frames = chroma.shape[1]

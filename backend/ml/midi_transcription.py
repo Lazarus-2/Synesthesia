@@ -20,16 +20,21 @@ def transcribe_to_midi(audio_path: str | Path, out_midi: str | Path) -> Path | N
 
     try:
         from basic_pitch.inference import predict_and_save
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-    except ImportError:
+
+        from backend.ml import registry as ml_registry
+        model_path = ml_registry.get("basic_pitch")
+    except (ImportError, ModuleNotFoundError):
         logger.warning("basic-pitch not installed, skipping MIDI transcription")
+        return None
+    except KeyError:
+        logger.warning("basic_pitch model path not registered")
         return None
 
     logger.info(f"Running basic-pitch on {audio_path}")
-    
+
     out_dir = out_midi.parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         predict_and_save(
             [str(audio_path)],
@@ -38,7 +43,7 @@ def transcribe_to_midi(audio_path: str | Path, out_midi: str | Path) -> Path | N
             sonify_midi=False,
             save_model_outputs=False,
             save_notes=False,
-            model_or_model_path=ICASSP_2022_MODEL_PATH,
+            model_or_model_path=model_path,
         )
         
         # basic_pitch outputs files named like the input but with _basic_pitch.mid
