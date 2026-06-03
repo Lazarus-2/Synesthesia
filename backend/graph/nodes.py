@@ -14,7 +14,23 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from backend.graph.state import AnalysisState
-from backend.schemas import InstrumentGuide, RomanAnalysis
+from backend.schemas import InstrumentGuide, RomanAnalysis, SongAnalysis
+
+
+def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
+    """Pack the analysis-state slice every LLM chain needs.
+
+    Both theory_node and instrument_node feed their LLM chains the same
+    SongAnalysis object built from state, so the construction lives here.
+    """
+    chords = state.get("chords") or []
+    return SongAnalysis(
+        duration=float(chords[-1].end) if chords else 0.0,
+        key=state.get("key", "C major"),
+        tempo=state.get("tempo", 120.0),
+        chords=chords,
+        roman=state.get("roman"),
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -329,16 +345,8 @@ def roman_analysis_node(state: AnalysisState) -> dict:
 def theory_node(state: AnalysisState) -> dict:
     """LLM call: generate natural-language theory explanation."""
     from backend.chains.theory_chain import build_theory_chain
-    from backend.schemas import SongAnalysis
 
-    # Build intermediate SongAnalysis object
-    song_obj = SongAnalysis(
-        duration=float(state["chords"][-1].end) if state.get("chords") else 0.0,
-        key=state.get("key", "C major"),
-        tempo=state.get("tempo", 120.0),
-        chords=state.get("chords", []),
-        roman=state.get("roman"),
-    )
+    song_obj = _song_analysis_from_state(state)
 
     try:
         chain = build_theory_chain()
@@ -367,15 +375,8 @@ def theory_node(state: AnalysisState) -> dict:
 def instrument_node(state: AnalysisState) -> dict:
     """LLM + deterministic chord-diagram merge -> InstrumentGuide."""
     from backend.chains.instrument_chain import build_instrument_chain
-    from backend.schemas import SongAnalysis
 
-    song_obj = SongAnalysis(
-        duration=float(state["chords"][-1].end) if state.get("chords") else 0.0,
-        key=state.get("key", "C major"),
-        tempo=state.get("tempo", 120.0),
-        chords=state.get("chords", []),
-        roman=state.get("roman"),
-    )
+    song_obj = _song_analysis_from_state(state)
 
     payload = {
         "analysis": song_obj,

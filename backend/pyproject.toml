@@ -188,11 +188,14 @@ files = [
     "backend/database.py",
     "backend/models.py",
     "backend/schemas.py",
+    "backend/auth.py",
     "backend/chains/theory_chain.py",
     "backend/prompts/registry.py",
     "backend/observability/logging_config.py",
     "backend/observability/tracing.py",
     "backend/ml/registry.py",
+    "backend/ml/structure_detection.py",
+    "backend/services/job_store.py",
 ]
 # Third-party libs (librosa, demucs, motor, taskiq, langchain_*) ship
 # incomplete or no type info. Ignoring missing imports keeps the gate

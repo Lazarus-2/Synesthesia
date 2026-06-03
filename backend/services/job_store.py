@@ -94,7 +94,8 @@ class HybridJobStore:
         if not raw:
             return None
         try:
-            return json.loads(raw)
+            decoded: dict = json.loads(raw)
+            return decoded
         except json.JSONDecodeError:
             logger.warning("malformed progress payload for job %s", job_id)
             return None
