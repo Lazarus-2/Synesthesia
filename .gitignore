@@ -1,24 +1,46 @@
+# Python venv (root pre-refactor, backend/ post-refactor)
 .venv/
+backend/.venv/
+
+# Python caches
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets and persistent data
 .env
 storage/
 *.db
 *.sqlite
 .DS_Store
+
+# Frontend build output
 node_modules/
 .next/
 dist/
 build/
+
+# Media — never commit audio fixtures (the placeholder marker is allowed)
 *.wav
 *.mp3
 *.flac
 !tests/audio/*.placeholder
+!backend/tests/audio/*.placeholder
+
+# Logs and runtime scratch
+*.log
+logs/
+tmp_audio/
+
+# Playwright E2E artifacts (videos, screenshots — gigabytes)
+tests/e2e_browser/artifacts/
+backend/tests/e2e_browser/artifacts/
 
 # IDE and Editor Files
 .vscode/
 .cursorrules
 cursor_exports.json
-
