@@ -1,0 +1,199 @@
+# PEP 621 project metadata + dependency declarations (Plan 2 H3).
+#
+# Migration status
+# ----------------
+# This file is now the source of truth for runtime + dev dependencies. The
+# legacy ``requirements.txt`` is kept as a frozen compatibility shim for
+# existing CI / Docker workflows that ``pip install -r requirements.txt`` —
+# it should be regenerated from this file when deps change:
+#
+#     pip-compile --extra dev pyproject.toml -o requirements.txt
+#   or
+#     uv pip compile --extra dev pyproject.toml -o requirements.txt
+#
+# Install for local dev:
+#     pip install -e ".[dev]"            # core + dev tooling
+#     pip install -e ".[dev,audio-heavy]" # plus demucs / basic-pitch
+#
+# Editable install pulls the ``backend`` package so ``import backend.main``
+# works without the ``sys.path`` shim used by ``scripts/``.
+
+[project]
+name = "synesthesia"
+version = "0.1.0"
+description = "Music analysis + education platform: LangGraph + FastAPI."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Synesthesia Team" }]
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+
+    # Config
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.1",
+
+    # LangChain + LangGraph
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-community>=0.3.0",
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-mongodb>=0.4.0",
+
+    # Vector ops
+    "faiss-cpu>=1.9.0",
+
+    # Audio processing (always-on baseline)
+    "ffmpeg-python>=0.2.0",
+    "pydub>=0.25.1",
+    "librosa>=0.10.2",
+    "soundfile>=0.12.1",
+    "yt-dlp>=2024.10.0",
+
+    # Tokenization
+    "tiktoken>=0.8.0",
+
+    # Async + queue + cache
+    "redis>=5.2.0",
+    "taskiq>=0.11.0",
+    "taskiq-redis>=0.5.0",
+    "taskiq-fastapi>=0.3.0",
+    "slowapi>=0.1.9",
+
+    # Auth (Plan 2 D4)
+    "PyJWT>=2.9.0",
+    "bcrypt>=4.2.0",
+
+    # Observability (Plan 2 H1)
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0",
+
+    # YAML (prompt registry)
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Extra LLM providers — install only if you actually use them. Cuts the
+# baseline install surface for ops who run a single provider.
+providers = [
+    "langchain-anthropic>=1.4.0",
+    "langchain-google-genai>=4.0.0",
+]
+
+# Heavy audio ML (demucs for stems, basic-pitch for MIDI). These pull
+# torch + tensorflow respectively; gate behind an extra so the CI lint
+# job doesn't drag them in.
+audio-heavy = [
+    "demucs>=4.0.1",
+    "basic-pitch>=0.4.0",
+]
+
+# Test + lint + type-check tooling.
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "ipython>=8.29.0",
+]
+
+[build-system]
+# setuptools is the lowest-friction backend that recognises pep 621.
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+exclude = ["tests*", "frontend*", "storage*", "scripts*"]
+
+
+# ============================================================================
+# Tooling configuration (was the only content of this file before H3)
+# ============================================================================
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "frontend/",
+    "storage/",
+]
+
+[tool.ruff.lint]
+# Start conservative; ratchet up as the codebase tolerates it.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused imports, undefined names)
+    "B",   # flake8-bugbear (real bugs)
+    "UP",  # pyupgrade
+    "I",   # isort
+]
+ignore = [
+    "E501",  # line too long — let formatter handle if/when adopted
+    "B008",  # function call in default arg — FastAPI/Taskiq Depends patterns
+    # The error envelope hides internal exception chains from clients, so
+    # ``raise HTTPException(...) from err`` would leak nothing useful. Keep
+    # bare raises in the body; ``from None`` everywhere would be noise.
+    "B904",
+    # zip(...) on lists whose lengths are guaranteed equal by construction
+    # (music theory mappings). Adding ``strict=True`` would be both noisy
+    # and lie about the intent.
+    "B905",
+    # Throwaway loop variables (e.g. (_idx, val)) sometimes carry semantic
+    # meaning we want to keep readable. Disabled to avoid prefix-with-_ churn.
+    "B007",
+    # E402: top-level imports moved below "from __future__" or inside try
+    # blocks for optional ML deps — intentional in main.py and ml/.
+    "E402",
+]
+
+[tool.mypy]
+python_version = "3.12"
+# ``silent`` follows imports for type info but suppresses errors from
+# modules not in the strict-first scope below. Without this, an in-scope
+# module that imports an out-of-scope one would surface the out-of-scope
+# errors transitively.
+follow_imports = "silent"
+# Strict-first for the modules below; ratchet by adding more entries to
+# ``files`` over time. Modules currently OUT of scope but candidates for
+# future inclusion:
+#   - backend/services/cache.py — Awaitable[str|None] / sync return-type mix
+#   - backend/chains/llm_factory.py — LangChain api_key annotation expects
+#     SecretStr but accepts str at runtime; needs explicit SecretStr wrapping
+files = [
+    "backend/config.py",
+    "backend/database.py",
+    "backend/models.py",
+    "backend/schemas.py",
+    "backend/chains/theory_chain.py",
+    "backend/prompts/registry.py",
+    "backend/observability/logging_config.py",
+    "backend/observability/tracing.py",
+    "backend/ml/registry.py",
+]
+# Third-party libs (librosa, demucs, motor, taskiq, langchain_*) ship
+# incomplete or no type info. Ignoring missing imports keeps the gate
+# focused on our code while still catching internal type bugs.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+disallow_untyped_defs = false  # gradual — enable once codebase is annotated
+check_untyped_defs = true
+strict_equality = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# These modules are pure type-defining; harder targets where strictness pays.
+module = ["backend.schemas", "backend.models"]
+disallow_untyped_defs = true
+disallow_any_generics = true

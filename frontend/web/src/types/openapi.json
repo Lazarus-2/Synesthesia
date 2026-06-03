@@ -1,0 +1,1362 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Synesthesia API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Liveness probe.\n\nCheap and always-200 so orchestrators can use this for \"is the process\nalive\" without depending on downstream services. For dependency state,\nsee :func:`readiness`.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Readiness",
+        "description": "Readiness probe \u2014 pings Mongo and Redis, surfaces per-dependency state.\n\nReturns 200 only when every required dependency is reachable, 503\notherwise with the per-dep breakdown. Use this for Kubernetes\n``readinessProbe`` so traffic doesn't hit a node whose Mongo connection\nis wedged.",
+        "operationId": "readiness_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyze": {
+      "post": {
+        "summary": "Analyze",
+        "description": "Kicks off the audio chord and theory analysis pipeline.",
+        "operationId": "analyze_api_v1_analyze_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_api_v1_analyze_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyze/{job_id}": {
+      "get": {
+        "summary": "Get Analysis",
+        "description": "Retrieves the current status or completed result of a song analysis job from MongoDB.\n\nPass ``?instrument=guitar`` (etc.) to receive the matching instrument guide;\nomitting it returns no guide rather than an arbitrary one.",
+        "operationId": "get_analysis_api_v1_analyze__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "instrument",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instrument"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/progress": {
+      "get": {
+        "summary": "Get Analysis Progress",
+        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The frontend ``openProgressStream`` consumer\nin :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy\nformats; once it ships, the backend can stop emitting untagged frames.",
+        "operationId": "get_analysis_progress_api_v1_jobs__job_id__progress_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user": {
+      "post": {
+        "summary": "Create Or Update User",
+        "description": "Registers user identity or updates musical preferences in MongoDB.",
+        "operationId": "create_or_update_user_api_v1_user_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/{user_id}": {
+      "get": {
+        "summary": "Get User Profile",
+        "description": "Fetches registered profile metadata from MongoDB.",
+        "operationId": "get_user_profile_api_v1_user__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "summary": "Chat",
+        "description": "Conversational AI assistant. Stores messages and coordinates session caching.",
+        "operationId": "chat_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/stream": {
+      "post": {
+        "summary": "Chat Stream",
+        "description": "Conversational AI assistant with SSE streaming response.",
+        "operationId": "chat_stream_api_v1_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/history/{session_id}": {
+      "get": {
+        "summary": "Get Chat History",
+        "description": "Retrieves standard discussion threads from Cache or drops back to MongoDB.",
+        "operationId": "get_chat_history_api_v1_chat_history__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyze": {
+      "post": {
+        "summary": "Analyze",
+        "description": "Kicks off the audio chord and theory analysis pipeline.",
+        "operationId": "analyze_analyze_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_analyze_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyze/{job_id}": {
+      "get": {
+        "summary": "Get Analysis",
+        "description": "Retrieves the current status or completed result of a song analysis job from MongoDB.\n\nPass ``?instrument=guitar`` (etc.) to receive the matching instrument guide;\nomitting it returns no guide rather than an arbitrary one.",
+        "operationId": "get_analysis_analyze__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "instrument",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instrument"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/progress": {
+      "get": {
+        "summary": "Get Analysis Progress",
+        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The frontend ``openProgressStream`` consumer\nin :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy\nformats; once it ships, the backend can stop emitting untagged frames.",
+        "operationId": "get_analysis_progress_jobs__job_id__progress_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user": {
+      "post": {
+        "summary": "Create Or Update User",
+        "description": "Registers user identity or updates musical preferences in MongoDB.",
+        "operationId": "create_or_update_user_user_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{user_id}": {
+      "get": {
+        "summary": "Get User Profile",
+        "description": "Fetches registered profile metadata from MongoDB.",
+        "operationId": "get_user_profile_user__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat": {
+      "post": {
+        "summary": "Chat",
+        "description": "Conversational AI assistant. Stores messages and coordinates session caching.",
+        "operationId": "chat_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/stream": {
+      "post": {
+        "summary": "Chat Stream",
+        "description": "Conversational AI assistant with SSE streaming response.",
+        "operationId": "chat_stream_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/history/{session_id}": {
+      "get": {
+        "summary": "Get Chat History",
+        "description": "Retrieves standard discussion threads from Cache or drops back to MongoDB.",
+        "operationId": "get_chat_history_chat_history__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalyzeResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "processing",
+              "done",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SongAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "instrument_guide": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstrumentGuide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "AnalyzeResponse"
+      },
+      "BeatEvent": {
+        "properties": {
+          "time": {
+            "type": "number",
+            "title": "Time"
+          },
+          "beat_number": {
+            "type": "integer",
+            "title": "Beat Number",
+            "description": "1, 2, 3, 4 for 4/4 time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "beat_number"
+        ],
+        "title": "BeatEvent"
+      },
+      "Body_analyze_analyze_post": {
+        "properties": {
+          "youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Url"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument",
+            "default": "guitar"
+          },
+          "difficulty": {
+            "type": "string",
+            "title": "Difficulty",
+            "default": "beginner"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "title": "Body_analyze_analyze_post"
+      },
+      "Body_analyze_api_v1_analyze_post": {
+        "properties": {
+          "youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Url"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument",
+            "default": "guitar"
+          },
+          "difficulty": {
+            "type": "string",
+            "title": "Difficulty",
+            "default": "beginner"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "title": "Body_analyze_api_v1_analyze_post"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "History",
+            "default": []
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "reply": {
+            "type": "string",
+            "title": "Reply"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply"
+        ],
+        "title": "ChatResponse"
+      },
+      "ChordDiagram": {
+        "properties": {
+          "chord": {
+            "type": "string",
+            "title": "Chord"
+          },
+          "instrument": {
+            "type": "string",
+            "enum": [
+              "guitar",
+              "piano",
+              "ukulele",
+              "bass"
+            ],
+            "title": "Instrument"
+          },
+          "frets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frets"
+          },
+          "fingers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingers"
+          },
+          "right_hand": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Right Hand"
+          },
+          "left_hand": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left Hand"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chord",
+          "instrument"
+        ],
+        "title": "ChordDiagram",
+        "description": "One chord shape for one instrument."
+      },
+      "ChordEvent": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start",
+            "description": "Start time in seconds"
+          },
+          "end": {
+            "type": "number",
+            "title": "End",
+            "description": "End time in seconds"
+          },
+          "chord": {
+            "type": "string",
+            "title": "Chord",
+            "description": "Chord symbol, e.g. 'Cmaj7', 'Am', 'G/B'"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "color": {
+            "type": "string",
+            "title": "Color",
+            "description": "Synesthetic color mapped to this chord",
+            "default": "#8B5CF6"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "chord"
+        ],
+        "title": "ChordEvent",
+        "description": "A single chord at a point in time."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InstrumentGuide": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "enum": [
+              "guitar",
+              "piano",
+              "ukulele",
+              "bass"
+            ],
+            "title": "Instrument"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "beginner",
+              "intermediate",
+              "advanced"
+            ],
+            "title": "Difficulty"
+          },
+          "chord_diagrams": {
+            "items": {
+              "$ref": "#/components/schemas/ChordDiagram"
+            },
+            "type": "array",
+            "title": "Chord Diagrams"
+          },
+          "strum_pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strum Pattern"
+          },
+          "tips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tips"
+          },
+          "capo": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capo",
+            "description": "Capo fret (guitar/uke)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instrument",
+          "difficulty",
+          "chord_diagrams"
+        ],
+        "title": "InstrumentGuide"
+      },
+      "RomanAnalysis": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "progression": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Progression",
+            "description": "e.g. ['I', 'V', 'vi', 'IV']"
+          },
+          "function": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Function",
+            "description": "e.g. ['tonic', 'dominant', 'submediant', 'subdominant']"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "progression",
+          "function"
+        ],
+        "title": "RomanAnalysis",
+        "description": "Roman-numeral analysis of the progression."
+      },
+      "SongAnalysis": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "e.g. 'C major', 'A minor'"
+          },
+          "tempo": {
+            "type": "number",
+            "title": "Tempo",
+            "description": "BPM"
+          },
+          "time_signature": {
+            "type": "string",
+            "title": "Time Signature",
+            "default": "4/4"
+          },
+          "chords": {
+            "items": {
+              "$ref": "#/components/schemas/ChordEvent"
+            },
+            "type": "array",
+            "title": "Chords"
+          },
+          "beats": {
+            "items": {
+              "$ref": "#/components/schemas/BeatEvent"
+            },
+            "type": "array",
+            "title": "Beats",
+            "default": []
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SongSection"
+            },
+            "type": "array",
+            "title": "Sections",
+            "default": []
+          },
+          "roman": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RomanAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vibe_palette": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vibe Palette",
+            "description": "Synesthetic color palette representing the song's key/vibe"
+          },
+          "theory_explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theory Explanation"
+          },
+          "instrument_guides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/InstrumentGuide"
+            },
+            "type": "object",
+            "title": "Instrument Guides"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duration",
+          "key",
+          "tempo",
+          "chords"
+        ],
+        "title": "SongAnalysis",
+        "description": "Top-level result returned to the client."
+      },
+      "SongSection": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "start",
+          "end"
+        ],
+        "title": "SongSection",
+        "description": "Intro, verse, chorus, bridge, outro, etc."
+      },
+      "UserRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument",
+            "default": "guitar"
+          },
+          "difficulty": {
+            "type": "string",
+            "title": "Difficulty",
+            "default": "beginner"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username"
+        ],
+        "title": "UserRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
