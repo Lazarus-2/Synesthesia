@@ -3,6 +3,7 @@ Individual nodes of the analysis graph.
 Each node is a pure function: state -> partial state.
 Vault ref: 04-LangGraph-Core/02-State-Nodes-Edges.md
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -20,10 +21,15 @@ logger = logging.getLogger(__name__)
 # Domains explicitly allowed for yt-dlp ingestion. yt-dlp supports thousands of
 # sites; restricting to YouTube prevents the endpoint from being abused as an
 # arbitrary URL fetcher.
-_YTDLP_ALLOWED_HOSTS = frozenset({
-    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
-    "youtu.be",
-})
+_YTDLP_ALLOWED_HOSTS = frozenset(
+    {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+    }
+)
 
 
 def _validate_youtube_url(url: str) -> None:
@@ -38,9 +44,7 @@ def _validate_youtube_url(url: str) -> None:
     if not host:
         raise ValueError("URL has no host")
     if host not in _YTDLP_ALLOWED_HOSTS:
-        raise ValueError(
-            f"Host not allowed: {host!r}. Only YouTube URLs are accepted."
-        )
+        raise ValueError(f"Host not allowed: {host!r}. Only YouTube URLs are accepted.")
     # Block hosts that resolve to private / loopback / link-local addresses.
     try:
         resolved = socket.getaddrinfo(host, None)
@@ -53,9 +57,7 @@ def _validate_youtube_url(url: str) -> None:
         except ValueError:
             continue
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            raise ValueError(
-                f"Host {host!r} resolves to disallowed address range ({ip_str})"
-            )
+            raise ValueError(f"Host {host!r} resolves to disallowed address range ({ip_str})")
 
 
 def ingest_node(state: AnalysisState) -> dict:
@@ -73,6 +75,7 @@ def ingest_node(state: AnalysisState) -> dict:
 
         try:
             import yt_dlp
+
             out_dir = Path("./storage/uploads")
             out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -80,11 +83,13 @@ def ingest_node(state: AnalysisState) -> dict:
             ydl_opts = {
                 "format": "bestaudio/best",
                 "outtmpl": str(out_path),
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }],
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
                 "quiet": True,
                 # Hardening: never expand playlists, cap file size, fail fast on
                 # unexpected redirects to non-YouTube hosts.
@@ -143,6 +148,7 @@ def validate_audio_node(state: AnalysisState) -> dict:
     # Soft duration check — librosa can probe without fully decoding.
     try:
         import soundfile as sf
+
         with sf.SoundFile(str(p)) as f:
             duration_s = float(f.frames) / max(f.samplerate, 1)
             sr = f.samplerate
@@ -156,22 +162,23 @@ def validate_audio_node(state: AnalysisState) -> dict:
     # truncate at MAX_AUDIO_DURATION_S already; surfacing it as a clear error
     # is friendlier than silently chopping a 10-minute song to 3 minutes.
     from backend.config import MAX_AUDIO_DURATION_S
+
     if duration_s > MAX_AUDIO_DURATION_S * 1.05:
         errors.append(
-            f"validate_audio: duration {duration_s:.1f}s exceeds "
-            f"limit {MAX_AUDIO_DURATION_S}s"
+            f"validate_audio: duration {duration_s:.1f}s exceeds limit {MAX_AUDIO_DURATION_S}s"
         )
         return {"errors": errors}
 
     if sr < 8000:
-        errors.append(
-            f"validate_audio: sample rate {sr}Hz is too low for chord analysis"
-        )
+        errors.append(f"validate_audio: sample rate {sr}Hz is too low for chord analysis")
         return {"errors": errors}
 
     logger.info(
         "validate_audio: %s — duration=%.1fs sr=%d size=%d bytes",
-        p.name, duration_s, sr, size,
+        p.name,
+        duration_s,
+        sr,
+        size,
     )
     return {}
 
@@ -217,7 +224,7 @@ def roman_analysis_node(state: AnalysisState) -> dict:
     """Convert chord labels to Roman numerals based on the detected key."""
     key = state.get("key", "C major")
     chords = state.get("chords", [])
-    
+
     if not chords:
         return {"roman": None}
 
@@ -240,14 +247,22 @@ def roman_analysis_node(state: AnalysisState) -> dict:
     # Roman numerals for major/minor scales (0 to 11 semitone offsets from root)
     # Maps semitone offset -> (RomanNumeralString, is_minor)
     diatonic_major = {
-        0: ("I", False),   2: ("ii", True),   4: ("iii", True),
-        5: ("IV", False),  7: ("V", False),   9: ("vi", True),
-        11: ("vii°", True)
+        0: ("I", False),
+        2: ("ii", True),
+        4: ("iii", True),
+        5: ("IV", False),
+        7: ("V", False),
+        9: ("vi", True),
+        11: ("vii°", True),
     }
     diatonic_minor = {
-        0: ("i", True),    2: ("ii°", True),  3: ("III", False),
-        5: ("iv", True),   7: ("v", True),    8: ("VI", False),
-        10: ("VII", False)
+        0: ("i", True),
+        2: ("ii°", True),
+        3: ("III", False),
+        5: ("iv", True),
+        7: ("v", True),
+        8: ("VI", False),
+        10: ("VII", False),
     }
 
     diatonic_map = diatonic_minor if key_mode == "minor" else diatonic_major
@@ -259,18 +274,18 @@ def roman_analysis_node(state: AnalysisState) -> dict:
         c_name = c_event.chord
         if c_name in ("N.C.", "N", ""):
             continue
-        
+
         # Parse root and quality
         c_match = re.match(r"^([A-G][b#]?)(.*)$", c_name)
         if not c_match:
             continue
-        
+
         c_root, c_suffix = c_match.groups()
         c_pc = get_pitch_class(c_root)
-        
+
         # Calculate interval offset
         offset = (c_pc - key_pc) % 12
-        
+
         # Map to roman numeral
         if offset in diatonic_map:
             numeral, is_min = diatonic_map[offset]
@@ -285,9 +300,9 @@ def roman_analysis_node(state: AnalysisState) -> dict:
             accidental = "b" if offset in (1, 3, 6, 8, 10) else "#"
             # Approximate chromatic degree
             numeral = f"{accidental}degree"
-        
+
         roman_chords.append(numeral)
-        
+
         # Determine simple function
         if offset == 0:
             functions.append("tonic")
@@ -308,13 +323,7 @@ def roman_analysis_node(state: AnalysisState) -> dict:
             dedup_roman.append(r)
             dedup_func.append(f)
 
-    return {
-        "roman": RomanAnalysis(
-            key=key,
-            progression=dedup_roman[:8],
-            function=dedup_func[:8]
-        )
-    }
+    return {"roman": RomanAnalysis(key=key, progression=dedup_roman[:8], function=dedup_func[:8])}
 
 
 def theory_node(state: AnalysisState) -> dict:
@@ -328,7 +337,7 @@ def theory_node(state: AnalysisState) -> dict:
         key=state.get("key", "C major"),
         tempo=state.get("tempo", 120.0),
         chords=state.get("chords", []),
-        roman=state.get("roman")
+        roman=state.get("roman"),
     )
 
     try:
@@ -365,13 +374,13 @@ def instrument_node(state: AnalysisState) -> dict:
         key=state.get("key", "C major"),
         tempo=state.get("tempo", 120.0),
         chords=state.get("chords", []),
-        roman=state.get("roman")
+        roman=state.get("roman"),
     )
 
     payload = {
         "analysis": song_obj,
         "instrument": state.get("instrument", "guitar"),
-        "difficulty": state.get("difficulty", "beginner")
+        "difficulty": state.get("difficulty", "beginner"),
     }
 
     try:
@@ -384,6 +393,7 @@ def instrument_node(state: AnalysisState) -> dict:
         # users came for.
         logger.warning("instrument_node: LLM unavailable: %s", e)
         from backend.tools.voicings import get_chord_diagrams
+
         chords_list = [c.chord for c in payload["analysis"].chords]
         diagrams = get_chord_diagrams(chords_list, payload["instrument"])
         return {
@@ -446,6 +456,7 @@ def similarity_node(state: AnalysisState) -> dict:
     progressions into a common tonal frame (Plan 3 A6).
     """
     from backend.chains.similarity_chain import find_similar
+
     chords_list = [c.chord for c in state.get("chords", [])]
     similar = find_similar(chords_list, key=state.get("key"))
     return {"similar_songs": similar}

@@ -4,6 +4,7 @@ Vault refs:
   - 05-Production-Systems/02-Latency-Cost-Quality.md (model/sampling budgets)
   - 05-Production-Systems/04-Security-Governance.md (rate limits, upload caps)
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -32,12 +33,12 @@ class Settings(BaseSettings):
 
     # --- LLM Config ---
     llm_provider: str = "ollama"  # ollama | openai | anthropic | gemini | groq | openrouter
-    model_name: str = ""          # Empty = use provider default (see llm_factory.py)
+    model_name: str = ""  # Empty = use provider default (see llm_factory.py)
     embedding_model: str = "text-embedding-3-small"
 
     # --- Fallback Config ---
-    llm_fallback_provider: str = ""   # optional fallback provider (e.g., "ollama")
-    llm_fallback_model: str = ""      # optional fallback model name
+    llm_fallback_provider: str = ""  # optional fallback provider (e.g., "ollama")
+    llm_fallback_model: str = ""  # optional fallback model name
 
     # --- Tracing ---
     langchain_tracing_v2: bool = False
@@ -121,9 +122,7 @@ class Settings(BaseSettings):
         if fb and fb in _PROVIDERS_REQUIRING_KEY:
             key_attr = f"{fb}_api_key"
             if not getattr(self, key_attr, ""):
-                raise ValueError(
-                    f"LLM_FALLBACK_PROVIDER={fb} but {key_attr.upper()} is empty."
-                )
+                raise ValueError(f"LLM_FALLBACK_PROVIDER={fb} but {key_attr.upper()} is empty.")
         # Auth gate: if turned on, the JWT signing secret must be set.
         if self.require_auth and not self.auth_secret_key:
             raise ValueError(

@@ -5,6 +5,7 @@ Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 1)
 Usage:
     events = detect_chords("song.mp3")
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,7 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
         templates[f"{notes[i]}m"] = np.roll(base_minor, i)
 
     # 3. Classify each frame (store chord + confidence score)
-    frame_chords = []   # (chord_name, confidence_score)
+    frame_chords = []  # (chord_name, confidence_score)
     for t in range(num_frames):
         chroma_vec = chroma[:, t]
         chroma_norm = np.linalg.norm(chroma_vec)
@@ -59,7 +60,7 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
             continue
 
         chroma_vec = chroma_vec / chroma_norm
-        
+
         best_score = -1.0
         best_chord = "N.C."
 
@@ -69,7 +70,7 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
             if score > best_score:
                 best_score = score
                 best_chord = chord_name
-        
+
         # Clamp confidence to [0, 1]
         confidence = max(0.0, min(1.0, float(best_score)))
         frame_chords.append((best_chord, confidence))
@@ -110,7 +111,7 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
                     end=float(end_time),
                     chord=curr_chord,
                     confidence=round(avg_confidence, 3),
-                    color=get_chord_color(curr_chord)
+                    color=get_chord_color(curr_chord),
                 )
             )
             curr_chord = chord
@@ -127,7 +128,7 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
             end=float(num_frames * time_per_frame),
             chord=curr_chord,
             confidence=round(avg_confidence, 3),
-            color=get_chord_color(curr_chord)
+            color=get_chord_color(curr_chord),
         )
     )
 

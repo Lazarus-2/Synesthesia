@@ -4,20 +4,21 @@ from backend.config import get_settings
 
 settings = get_settings()
 
+
 class HybridCache:
     """Dynamic caching engine providing safe Redis pipelines and memory backup routes."""
+
     def __init__(self):
         self.redis_client = None
         self.memory_store = {}  # Structure: {key: (value_str, expire_epoch)}
-        
+
         if settings.redis_url:
             try:
                 import redis
+
                 # Establish standard client pool connection
                 self.redis_client = redis.from_url(
-                    settings.redis_url,
-                    decode_responses=True,
-                    socket_timeout=2.0
+                    settings.redis_url, decode_responses=True, socket_timeout=2.0
                 )
                 self.redis_client.ping()
                 print("HybridCache: Redis initialized successfully as active engine.")
@@ -33,7 +34,7 @@ class HybridCache:
             except Exception as err:
                 print(f"HybridCache: Redis GET pipeline failure ({err}), failing over...")
                 self.redis_client = None
-                
+
         # Resolve from memory cache
         if key in self.memory_store:
             val, expires = self.memory_store[key]
@@ -55,7 +56,7 @@ class HybridCache:
             except Exception as err:
                 print(f"HybridCache: Redis SET pipeline failure ({err}), failing over...")
                 self.redis_client = None
-                
+
         # Write to memory backup
         expires = time.time() + ttl_seconds if ttl_seconds else None
         self.memory_store[key] = (value, expires)
@@ -70,11 +71,12 @@ class HybridCache:
             except Exception as err:
                 print(f"HybridCache: Redis DEL pipeline failure ({err}), failing over...")
                 self.redis_client = None
-                
+
         if key in self.memory_store:
             del self.memory_store[key]
             return True
         return False
+
 
 # Export unified singleton container
 cache = HybridCache()

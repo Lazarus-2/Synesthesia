@@ -14,6 +14,7 @@ That preserves the API while gaining repair semantics inside the chain.
 
 Vault ref: 03-LangChain-Core/02-Models-Prompts-LCEL.md
 """
+
 from __future__ import annotations
 
 from langchain_core.runnables import Runnable, RunnableLambda
@@ -67,9 +68,7 @@ class TheoryExplanation(BaseModel):
 
 def _format_inputs(analysis: SongAnalysis) -> dict:
     chord_str = " -> ".join(c.chord for c in analysis.chords[:32])
-    roman_str = (
-        " -> ".join(analysis.roman.progression) if analysis.roman else "unknown"
-    )
+    roman_str = " -> ".join(analysis.roman.progression) if analysis.roman else "unknown"
     return {
         "key": analysis.key,
         "tempo": f"{analysis.tempo:.0f}",
@@ -96,9 +95,4 @@ def build_theory_chain() -> Runnable:
     s = get_settings()
     llm = build_llm(temperature=s.theory_temperature)
     structured = llm.with_structured_output(TheoryExplanation)
-    return (
-        RunnableLambda(_format_inputs)
-        | theory_prompt
-        | structured
-        | RunnableLambda(_flatten)
-    )
+    return RunnableLambda(_format_inputs) | theory_prompt | structured | RunnableLambda(_flatten)

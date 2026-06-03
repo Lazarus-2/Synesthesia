@@ -20,6 +20,7 @@ must be thread-safe to call concurrently — the registry serializes only
 the *first* build per key, so subsequent concurrent callers see the cached
 object without contention.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,7 @@ def get(name: str) -> Any:
             return inst
         builder = _builders.get(name)
         if builder is None:
-            raise KeyError(
-                f"ML model {name!r} not registered. Known: {sorted(_builders)}"
-            )
+            raise KeyError(f"ML model {name!r} not registered. Known: {sorted(_builders)}")
         logger.info("ml.registry: building %s", name)
         inst = builder()
         _instances[name] = inst
@@ -67,11 +66,13 @@ def reset_for_tests() -> None:
 # ---- Default builders -------------------------------------------------------
 def _build_demucs():
     from demucs.api import Separator
+
     return Separator(model="htdemucs_ft")
 
 
 def _build_basic_pitch_path():
     from basic_pitch import ICASSP_2022_MODEL_PATH
+
     return ICASSP_2022_MODEL_PATH
 
 

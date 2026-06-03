@@ -5,12 +5,12 @@ We assert *bounded* properties (non-empty result, sane ranges, valid
 labels) against the deterministic ``synthetic_song`` fixture so tests
 don't depend on a real audio file or a GPU.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 
 # ``librosa`` is required by every test in this file; skip gracefully
 # in environments where it's not installed (e.g. very stripped CI).
@@ -20,6 +20,7 @@ pytest.importorskip("librosa")
 class TestKeyEstimation:
     def test_returns_recognised_key_label_for_c_major_audio(self, synthetic_song: Path):
         from backend.ml.key_estimation import estimate_key_and_tempo
+
         key, tempo = estimate_key_and_tempo(synthetic_song)
         assert isinstance(key, str) and " " in key, key
         root, mode = key.split(" ", 1)
@@ -32,6 +33,7 @@ class TestKeyEstimation:
 class TestChordDetection:
     def test_returns_non_empty_chord_events_in_bounds(self, synthetic_song: Path):
         from backend.ml.chord_detection import detect_chords
+
         events = detect_chords(synthetic_song)
         # We don't require a particular chord to be detected — only that the
         # algorithm completes and returns events with the right shape.
@@ -48,6 +50,7 @@ class TestChordDetection:
 class TestBeatTracking:
     def test_returns_list_of_beat_events_or_empty(self, synthetic_song: Path):
         from backend.ml.beat_tracking import track_beats
+
         beats = track_beats(synthetic_song)
         assert isinstance(beats, list)
         for b in beats[:10]:
@@ -58,6 +61,7 @@ class TestBeatTracking:
 class TestStructureDetection:
     def test_returns_section_list_or_empty(self, synthetic_song: Path):
         from backend.ml.structure_detection import detect_sections
+
         sections = detect_sections(synthetic_song)
         assert isinstance(sections, list)
         # Either empty (algorithm couldn't segment a 6s clip) or sane.
@@ -69,11 +73,13 @@ class TestStructureDetection:
 class TestMLRegistry:
     def test_registered_keys_exist(self):
         from backend.ml import registry
+
         assert "demucs" in registry._builders
         assert "basic_pitch" in registry._builders
 
     def test_get_calls_builder_once(self):
         from backend.ml import registry
+
         calls = {"n": 0}
 
         def _build():
@@ -91,6 +97,7 @@ class TestMLRegistry:
 
     def test_get_unknown_raises(self):
         from backend.ml import registry
+
         with pytest.raises(KeyError):
             registry.get("definitely-not-registered")
 
@@ -98,6 +105,7 @@ class TestMLRegistry:
 class TestAudioValidationNode:
     def test_validate_audio_node_accepts_good_wav(self, synthetic_song: Path):
         from backend.graph.nodes import validate_audio_node
+
         state = {"audio_path": str(synthetic_song), "errors": []}
         result = validate_audio_node(state)
         # Empty dict means "no new errors" — i.e. the audio is fine.
@@ -105,12 +113,14 @@ class TestAudioValidationNode:
 
     def test_validate_audio_node_rejects_missing_file(self):
         from backend.graph.nodes import validate_audio_node
+
         result = validate_audio_node({"audio_path": "/tmp/nope-does-not-exist.wav", "errors": []})
         assert "errors" in result
         assert any("does not exist" in e for e in result["errors"])
 
     def test_validate_audio_node_skips_when_prior_errors(self):
         from backend.graph.nodes import validate_audio_node
+
         # Prior errors short-circuit the node.
         result = validate_audio_node({"audio_path": "/tmp/whatever", "errors": ["prev"]})
         assert result == {}

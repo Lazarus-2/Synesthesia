@@ -19,6 +19,7 @@ When export is disabled the spans still get created (cheap) but nothing
 ships off-box, so calls to :func:`trace` and :func:`tracer` are safe in
 local dev with no setup.
 """
+
 from __future__ import annotations
 
 import logging
@@ -72,6 +73,7 @@ def configure_tracing(service_name: str | None = None) -> None:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
+
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
         logger.info("OTel OTLP exporter -> %s", endpoint)
     else:

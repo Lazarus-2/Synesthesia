@@ -10,6 +10,7 @@ The schema and frontend ribbon already exist
 (:class:`backend.schemas.SongSection`, ``WaveformPlayer.tsx``); this
 module is the missing detection step that fills them in.
 """
+
 from __future__ import annotations
 
 import logging
@@ -81,7 +82,9 @@ def detect_sections(
         for i in range(len(bound_times)):
             start = float(bound_times[i])
             end = float(bound_times[i + 1]) if i + 1 < len(bound_times) else end_time
-            seg_chroma = chroma[:, bounds[i]:bounds[i + 1] if i + 1 < len(bounds) else chroma.shape[1]]
+            seg_chroma = chroma[
+                :, bounds[i] : bounds[i + 1] if i + 1 < len(bounds) else chroma.shape[1]
+            ]
             mean = seg_chroma.mean(axis=1) if seg_chroma.shape[1] > 0 else np.zeros(12)
             segments.append((start, end, mean))
 
@@ -89,6 +92,7 @@ def detect_sections(
         # the labeller can distinguish chorus/verse/other.
         if len(segments) >= 3:
             from numpy.linalg import norm
+
             means = np.array([s[2] for s in segments])
             # Normalize, then cluster by argmax of similarity to centroids.
             normed = means / (norm(means, axis=1, keepdims=True) + 1e-9)
@@ -101,10 +105,13 @@ def detect_sections(
 
         sections: list[SongSection] = []
         for idx, ((start, end, _), lbl) in enumerate(zip(segments, labels)):
-            sections.append(SongSection(
-                name=_label_section(idx, int(lbl), [int(x) for x in labels]),
-                start=start, end=end,
-            ))
+            sections.append(
+                SongSection(
+                    name=_label_section(idx, int(lbl), [int(x) for x in labels]),
+                    start=start,
+                    end=end,
+                )
+            )
         return sections
     except Exception as e:
         logger.warning("structure_detection failed for %s: %s", audio_path, e)

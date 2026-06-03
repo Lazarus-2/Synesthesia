@@ -2,6 +2,7 @@
 Stem separation using Demucs.
 Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 2)
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,9 +18,9 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
     audio_path = Path(audio_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     stem_paths = {stem: out_dir / f"{stem}.wav" for stem in STEM_NAMES}
-    
+
     # Check if already processed
     if all(p.exists() for p in stem_paths.values()):
         logger.info(f"Stems already exist in {out_dir}")
@@ -29,6 +30,7 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
     # process builds the Separator (one-time cost), subsequent calls reuse it.
     try:
         from backend.ml import registry as ml_registry
+
         sep = ml_registry.get("demucs")
     except (ImportError, ModuleNotFoundError):
         logger.warning("demucs not installed, skipping stem separation")
@@ -42,13 +44,14 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
     try:
         # separate_audio_file returns (origin, dict_of_sources)
         _, sources = sep.separate_audio_file(audio_path)
-        
+
         import torchaudio
+
         for stem_name, tensor in sources.items():
             if stem_name in stem_paths:
                 # tensor shape is [channels, samples]
                 torchaudio.save(str(stem_paths[stem_name]), tensor, sep.samplerate)
-                
+
         return stem_paths
     except Exception as e:
         logger.error(f"Demucs failed: {e}")

@@ -17,6 +17,7 @@ Lifecycle
   middleware. Defended at the deploy layer via docker-compose
   ``stop_grace_period`` so Taskiq can finish active jobs cleanly.
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,6 +48,7 @@ broker = (
 async def _on_worker_startup(state: TaskiqState) -> None:
     from backend.observability.logging_config import configure_logging
     from backend.observability.tracing import configure_tracing
+
     configure_logging()
     configure_tracing(service_name="synesthesia-worker")
     logger.info("Taskiq worker started")

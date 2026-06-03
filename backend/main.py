@@ -6,6 +6,7 @@ multipart audio uploads, and AI Assistant routes.
 Run with:
     uvicorn backend.main:app --reload
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,14 +48,14 @@ ALLOWED_AUDIO_EXTENSIONS = frozenset({"mp3", "wav", "m4a", "flac", "ogg", "aac",
 # Used to validate that the uploaded bytes actually look like audio, regardless of
 # the client-supplied Content-Type (which is trivially spoofable).
 _AUDIO_MAGIC_PATTERNS: tuple[tuple[int, bytes], ...] = (
-    (0, b"ID3"),         # MP3 with ID3 tag
-    (0, b"\xff\xfb"),    # MP3 MPEG-1 Layer 3
-    (0, b"\xff\xf3"),    # MP3 MPEG-2 Layer 3
-    (0, b"\xff\xf2"),    # MP3 MPEG-2.5 Layer 3
-    (0, b"RIFF"),        # WAV (also AVI; downstream librosa rejects non-audio RIFFs)
-    (0, b"fLaC"),        # FLAC
-    (0, b"OggS"),        # OGG (Vorbis / Opus)
-    (4, b"ftyp"),        # MP4 / M4A (offset 4)
+    (0, b"ID3"),  # MP3 with ID3 tag
+    (0, b"\xff\xfb"),  # MP3 MPEG-1 Layer 3
+    (0, b"\xff\xf3"),  # MP3 MPEG-2 Layer 3
+    (0, b"\xff\xf2"),  # MP3 MPEG-2.5 Layer 3
+    (0, b"RIFF"),  # WAV (also AVI; downstream librosa rejects non-audio RIFFs)
+    (0, b"fLaC"),  # FLAC
+    (0, b"OggS"),  # OGG (Vorbis / Opus)
+    (4, b"ftyp"),  # MP4 / M4A (offset 4)
 )
 
 
@@ -72,7 +73,14 @@ def _clean_audio_title(audio_path: str | None, youtube_url: str | None) -> str:
     stem = Path(audio_path).stem
     # ``_safe_audio_filename`` prefixes ``{uuid}_`` to avoid collisions —
     # strip the leading uuid + underscore if it looks uuid-shaped.
-    if len(stem) > 37 and stem[8] == "-" and stem[13] == "-" and stem[18] == "-" and stem[23] == "-" and stem[36] == "_":
+    if (
+        len(stem) > 37
+        and stem[8] == "-"
+        and stem[13] == "-"
+        and stem[18] == "-"
+        and stem[23] == "-"
+        and stem[36] == "_"
+    ):
         stem = stem[37:]
     return stem.replace("_", " ").replace("-", " ").strip().title() or "Audio Breakdown"
 
@@ -89,7 +97,7 @@ def _safe_audio_filename(job_id: str, original: str | None) -> str:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported audio extension '.{ext}'. "
-                   f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}.",
+            f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}.",
         )
     return f"{job_id}_{base}"
 
@@ -97,9 +105,10 @@ def _safe_audio_filename(job_id: str, original: str | None) -> str:
 def _is_audio_magic(head: bytes) -> bool:
     """Return True if the byte prefix matches a known audio container signature."""
     for offset, sig in _AUDIO_MAGIC_PATTERNS:
-        if head[offset:offset + len(sig)] == sig:
+        if head[offset : offset + len(sig)] == sig:
             return True
     return False
+
 
 import taskiq_fastapi
 from taskiq import Context, TaskiqDepends
@@ -120,6 +129,7 @@ from backend.worker import broker
 
 taskiq_fastapi.init(broker, "backend.main:app")
 
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Startup/shutdown lifecycle — replaces deprecated @app.on_event."""
@@ -127,11 +137,13 @@ async def lifespan(application: FastAPI):
     # messages land in the same format.
     from backend.observability.logging_config import configure_logging
     from backend.observability.tracing import configure_tracing
+
     configure_logging()
     configure_tracing()
     if not broker.is_worker_process:
         await broker.startup()
     from backend.database import close_mongodb, init_mongodb
+
     await init_mongodb()
     try:
         yield
@@ -139,6 +151,7 @@ async def lifespan(application: FastAPI):
         await close_mongodb()
         if not broker.is_worker_process:
             await broker.shutdown()
+
 
 app = FastAPI(title="Synesthesia API", version="0.1.0", lifespan=lifespan)
 
@@ -155,6 +168,7 @@ app.add_middleware(
 # Standard error envelope (Plan 2 D2)
 # ----------------------------------------------------------------------------
 
+
 class APIError(BaseModel):
     """Uniform error response shape for every non-2xx path.
 
@@ -163,6 +177,7 @@ class APIError(BaseModel):
     list the offending fields). Machine ``code`` is UPPER_SNAKE_CASE so it's
     easy to switch on in client code without parsing free-text messages.
     """
+
     status: Literal["error"] = "error"
     code: str
     message: str
@@ -216,9 +231,7 @@ async def _http_exception_handler(_request: Request, exc: StarletteHTTPException
 
 
 @app.exception_handler(RequestValidationError)
-async def _validation_exception_handler(
-    _request: Request, exc: RequestValidationError
-):
+async def _validation_exception_handler(_request: Request, exc: RequestValidationError):
     return _api_error_response(
         422,
         "Request validation failed",
@@ -232,9 +245,7 @@ async def _generic_exception_handler(_request: Request, _exc: Exception):
     # don't need to format _exc explicitly. The catch-all envelope hides the
     # raw exception text from clients (security: no stack-trace leakage).
     logger.exception("Unhandled exception in request handler")
-    return _api_error_response(
-        500, "An unexpected error occurred. The team has been notified."
-    )
+    return _api_error_response(500, "An unexpected error occurred. The team has been notified.")
 
 
 # ----------------------------------------------------------------------------
@@ -283,8 +294,10 @@ class ChatRequest(BaseModel):
     # spoof a song the user hasn't actually analyzed.
     analysis_job_id: str | None = None
 
+
 class ChatResponse(BaseModel):
     reply: str
+
 
 class UserRequest(BaseModel):
     id: str
@@ -295,6 +308,7 @@ class UserRequest(BaseModel):
 
 class UserPreferences(BaseModel):
     """Persistent personalization defaults (Plan 3 A8)."""
+
     default_instrument: str | None = None
     default_difficulty: str | None = None
     default_capo: int | None = None
@@ -303,6 +317,7 @@ class UserPreferences(BaseModel):
 # ----------------------------------------------------------------------------
 # Auth (Plan 3 A9) — sign-up / login over the JWT skeleton from Plan 2 D4
 # ----------------------------------------------------------------------------
+
 
 class SignUpRequest(BaseModel):
     username: str
@@ -319,6 +334,7 @@ class AuthResponse(BaseModel):
     user_id: str
     username: str
 
+
 @app.get("/health")
 async def health() -> dict:
     """Liveness probe.
@@ -331,7 +347,7 @@ async def health() -> dict:
 
 
 @app.get("/health/ready")
-async def readiness(db = Depends(get_mongodb)) -> JSONResponse:
+async def readiness(db=Depends(get_mongodb)) -> JSONResponse:
     """Readiness probe — pings Mongo and Redis, surfaces per-dependency state.
 
     Returns 200 only when every required dependency is reachable, 503
@@ -347,7 +363,8 @@ async def readiness(db = Depends(get_mongodb)) -> JSONResponse:
     try:
         await db.command("ping")
         checks["mongodb"] = {
-            "ok": True, "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "ok": True,
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
         }
     except Exception as e:
         overall_ok = False
@@ -357,13 +374,19 @@ async def readiness(db = Depends(get_mongodb)) -> JSONResponse:
     t0 = time.perf_counter()
     try:
         from backend.services.cache import cache
+
         if cache.redis_client is None:
-            checks["redis"] = {"ok": False, "error": "no_client", "msg": "Redis fell back to in-memory; counter not shared"}
+            checks["redis"] = {
+                "ok": False,
+                "error": "no_client",
+                "msg": "Redis fell back to in-memory; counter not shared",
+            }
             overall_ok = False
         else:
             cache.redis_client.ping()
             checks["redis"] = {
-                "ok": True, "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+                "ok": True,
+                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
             }
     except Exception as e:
         overall_ok = False
@@ -371,6 +394,7 @@ async def readiness(db = Depends(get_mongodb)) -> JSONResponse:
 
     body = {"status": "ok" if overall_ok else "degraded", "checks": checks}
     return JSONResponse(status_code=200 if overall_ok else 503, content=body)
+
 
 async def _write_dlq(
     db,
@@ -388,15 +412,17 @@ async def _write_dlq(
     a TTL index declared in :func:`backend.database.init_mongodb`.
     """
     try:
-        await db.failed_jobs.insert_one({
-            "job_id": job_id,
-            "payload": payload,
-            "error": repr(error),
-            "error_type": type(error).__name__,
-            "attempts": attempt,
-            "max_attempts": max_attempts,
-            "created_at": datetime.now(UTC),
-        })
+        await db.failed_jobs.insert_one(
+            {
+                "job_id": job_id,
+                "payload": payload,
+                "error": repr(error),
+                "error_type": type(error).__name__,
+                "attempts": attempt,
+                "max_attempts": max_attempts,
+                "created_at": datetime.now(UTC),
+            }
+        )
     except Exception:
         # Last-ditch logging — if even the DLQ write fails, surface it but
         # don't let it mask the original exception that's about to re-raise.
@@ -449,7 +475,9 @@ async def run_analysis_pipeline(
     }
     logger.info(
         "run_analysis_pipeline: job_id=%s attempt=%d/%d",
-        job_id, attempt, max_attempts,
+        job_id,
+        attempt,
+        max_attempts,
     )
 
     job_store = get_job_store()
@@ -465,6 +493,7 @@ async def run_analysis_pipeline(
     # Re-running a completed job is wasted ML/LLM cost. If Mongo already has
     # the analysis document, replay the cached response and return.
     from backend.database import get_mongodb
+
     db = get_mongodb()
     try:
         existing = await db.song_analyses.find_one({"_id": job_id})
@@ -565,16 +594,14 @@ async def run_analysis_pipeline(
             instrument_guides=guides,
             stems=analysis.stems,
         )
-        
+
         write_result = await db.song_analyses.replace_one(
             {"_id": job_id},
             analysis_record.model_dump(by_alias=True),
             upsert=True,
         )
         if not (write_result.matched_count or write_result.upserted_id):
-            logger.error(
-                "Mongo replace_one for job %s reported neither match nor upsert", job_id
-            )
+            logger.error("Mongo replace_one for job %s reported neither match nor upsert", job_id)
 
         # Cache completed analysis response with full analysis data
         done_response = AnalyzeResponse(
@@ -594,7 +621,9 @@ async def run_analysis_pipeline(
         if is_final_attempt:
             logger.error(
                 "run_analysis_pipeline: job_id=%s exhausted retries (attempt %d/%d)",
-                job_id, attempt, max_attempts,
+                job_id,
+                attempt,
+                max_attempts,
             )
             await _write_dlq(
                 db,
@@ -608,6 +637,7 @@ async def run_analysis_pipeline(
         # whether to enqueue another attempt.
         raise
 
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 @limiter.limit(lambda: get_settings().analyze_rate_limit)
 async def analyze(
@@ -617,7 +647,7 @@ async def analyze(
     difficulty: str = Form(default="beginner"),
     user_id: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
-    db = Depends(get_mongodb)
+    db=Depends(get_mongodb),
 ) -> AnalyzeResponse:
     """Kicks off the audio chord and theory analysis pipeline."""
     settings = get_settings()
@@ -634,6 +664,7 @@ async def analyze(
     # consistent whether rejection happens here or in the worker.
     if youtube_url and file is None:
         from backend.graph.nodes import _validate_youtube_url
+
         try:
             _validate_youtube_url(youtube_url)
         except ValueError as e:
@@ -682,7 +713,7 @@ async def analyze(
                     buffer.write(chunk)
                     hasher.update(chunk)
                     if len(head_bytes) < 16:
-                        head_bytes += chunk[:16 - len(head_bytes)]
+                        head_bytes += chunk[: 16 - len(head_bytes)]
 
             # Validate magic bytes — the client-supplied Content-Type is unreliable.
             if not _is_audio_magic(head_bytes):
@@ -728,16 +759,17 @@ async def analyze(
         instrument,
         difficulty,
         user_id,
-        file_hash_val if file else None
+        file_hash_val if file else None,
     )
 
     return response
+
 
 @router.get("/analyze/{job_id}", response_model=AnalyzeResponse)
 async def get_analysis(
     job_id: str,
     instrument: str | None = None,
-    db = Depends(get_mongodb),
+    db=Depends(get_mongodb),
 ) -> AnalyzeResponse:
     """Retrieves the current status or completed result of a song analysis job from MongoDB.
 
@@ -796,7 +828,7 @@ async def get_analysis(
 
 
 @router.post("/auth/signup", response_model=AuthResponse)
-async def signup(req: SignUpRequest, db = Depends(get_mongodb)) -> AuthResponse:
+async def signup(req: SignUpRequest, db=Depends(get_mongodb)) -> AuthResponse:
     """Create a user with a hashed password and return a JWT (Plan 3 A9).
 
     Idempotency: returns 409 if the username is already taken. Note that
@@ -805,6 +837,7 @@ async def signup(req: SignUpRequest, db = Depends(get_mongodb)) -> AuthResponse:
     persistent libraries / preferences.
     """
     from backend.auth import hash_password, issue_token
+
     if not req.username.strip() or len(req.password) < 8:
         raise HTTPException(
             status_code=400,
@@ -813,14 +846,16 @@ async def signup(req: SignUpRequest, db = Depends(get_mongodb)) -> AuthResponse:
     if await db.users.find_one({"username": req.username}):
         raise HTTPException(status_code=409, detail="Username already taken")
     user_id = str(uuid.uuid4())
-    await db.users.insert_one({
-        "_id": user_id,
-        "username": req.username,
-        "instrument": "guitar",
-        "difficulty": "beginner",
-        "password_hash": hash_password(req.password),
-        "created_at": datetime.now(UTC),
-    })
+    await db.users.insert_one(
+        {
+            "_id": user_id,
+            "username": req.username,
+            "instrument": "guitar",
+            "difficulty": "beginner",
+            "password_hash": hash_password(req.password),
+            "created_at": datetime.now(UTC),
+        }
+    )
     try:
         token = issue_token(user_id=user_id, username=req.username)
     except RuntimeError as e:
@@ -831,9 +866,10 @@ async def signup(req: SignUpRequest, db = Depends(get_mongodb)) -> AuthResponse:
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-async def login(req: LoginRequest, db = Depends(get_mongodb)) -> AuthResponse:
+async def login(req: LoginRequest, db=Depends(get_mongodb)) -> AuthResponse:
     """Verify password and return a JWT (Plan 3 A9)."""
     from backend.auth import issue_token, verify_password
+
     user = await db.users.find_one({"username": req.username})
     if not user or not user.get("password_hash"):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -850,6 +886,7 @@ async def login(req: LoginRequest, db = Depends(get_mongodb)) -> AuthResponse:
 async def whoami(request: Request) -> dict:
     """Return the authenticated principal, or ``null`` when anonymous."""
     from backend.auth import current_user
+
     principal = current_user(request)
     if principal is None:
         return {"user": None}
@@ -858,6 +895,7 @@ async def whoami(request: Request) -> dict:
 
 class LibraryEntry(BaseModel):
     """Summary row for the library page (Plan 3 A7)."""
+
     job_id: str
     title: str | None = None
     artist: str | None = None
@@ -880,7 +918,7 @@ async def list_library(
     user_id: str | None = None,
     limit: int = 24,
     offset: int = 0,
-    db = Depends(get_mongodb),
+    db=Depends(get_mongodb),
 ) -> LibraryResponse:
     """List previously-analyzed songs (Plan 3 A7).
 
@@ -891,37 +929,41 @@ async def list_library(
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
     projection = {
-        "_id": 1, "title": 1, "artist": 1, "key": 1,
-        "tempo": 1, "duration": 1, "created_at": 1, "vibe_palette": 1,
+        "_id": 1,
+        "title": 1,
+        "artist": 1,
+        "key": 1,
+        "tempo": 1,
+        "duration": 1,
+        "created_at": 1,
+        "vibe_palette": 1,
     }
     query: dict = {}
     if user_id:
         query["user_id"] = user_id
     total = await db.song_analyses.count_documents(query)
     cursor = (
-        db.song_analyses
-        .find(query, projection)
-        .sort("created_at", -1)
-        .skip(offset)
-        .limit(limit)
+        db.song_analyses.find(query, projection).sort("created_at", -1).skip(offset).limit(limit)
     )
     items: list[LibraryEntry] = []
     async for doc in cursor:
-        items.append(LibraryEntry(
-            job_id=doc["_id"],
-            title=doc.get("title"),
-            artist=doc.get("artist"),
-            key=doc.get("key", "Unknown"),
-            tempo=float(doc.get("tempo", 0.0)),
-            duration=float(doc.get("duration", 0.0)),
-            created_at=doc.get("created_at"),
-            vibe_palette=doc.get("vibe_palette") or [],
-        ))
+        items.append(
+            LibraryEntry(
+                job_id=doc["_id"],
+                title=doc.get("title"),
+                artist=doc.get("artist"),
+                key=doc.get("key", "Unknown"),
+                tempo=float(doc.get("tempo", 0.0)),
+                duration=float(doc.get("duration", 0.0)),
+                created_at=doc.get("created_at"),
+                vibe_palette=doc.get("vibe_palette") or [],
+            )
+        )
     return LibraryResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/share/{job_id}", response_model=AnalyzeResponse)
-async def share_analysis(job_id: str, db = Depends(get_mongodb)) -> AnalyzeResponse:
+async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeResponse:
     """Read-only public view of a completed analysis (Plan 3 B8).
 
     Same shape as ``GET /analyze/{job_id}`` but explicitly read-only,
@@ -934,14 +976,23 @@ async def share_analysis(job_id: str, db = Depends(get_mongodb)) -> AnalyzeRespo
         raise HTTPException(status_code=404, detail=f"Analysis {job_id} not found")
     song = SongAnalysisModel.model_validate(db_record)
     analysis = SongAnalysis(
-        title=song.title, artist=song.artist, duration=song.duration,
-        key=song.key, tempo=song.tempo, time_signature=song.time_signature,
-        chords=song.chords, beats=song.beats, sections=song.sections,
-        roman=song.roman, vibe_palette=song.vibe_palette,
+        title=song.title,
+        artist=song.artist,
+        duration=song.duration,
+        key=song.key,
+        tempo=song.tempo,
+        time_signature=song.time_signature,
+        chords=song.chords,
+        beats=song.beats,
+        sections=song.sections,
+        roman=song.roman,
+        vibe_palette=song.vibe_palette,
         theory_explanation=song.theory_explanation,
     )
     return AnalyzeResponse(
-        job_id=job_id, status="done", analysis=analysis,
+        job_id=job_id,
+        status="done",
+        analysis=analysis,
         instrument_guide=None,
         audio_url=f"/api/v1/audio/{job_id}",
     )
@@ -978,15 +1029,18 @@ async def export_midi(job_id: str, stem: str):
 
     if not out_midi.exists():
         from backend.ml.midi_transcription import transcribe_to_midi
+
         result = await asyncio.to_thread(transcribe_to_midi, source, out_midi)
         if result is None or not out_midi.exists():
             raise HTTPException(
                 status_code=503,
                 detail="MIDI transcription failed (basic-pitch missing or errored). "
-                       "Install with `pip install '.[audio-heavy]'`.",
+                "Install with `pip install '.[audio-heavy]'`.",
             )
     return FileResponse(
-        out_midi, media_type="audio/midi", filename=f"{job_id}_{stem}.mid",
+        out_midi,
+        media_type="audio/midi",
+        filename=f"{job_id}_{stem}.mid",
     )
 
 
@@ -1008,8 +1062,12 @@ async def serve_stem(job_id: str, stem: str):
         src.resolve().relative_to(settings.stems_dir.resolve())
     except ValueError:
         raise HTTPException(status_code=404, detail="Stem path escapes stems dir")
-    return FileResponse(src, media_type="audio/wav", filename=f"{job_id}_{stem}.wav",
-                        headers={"Accept-Ranges": "bytes"})
+    return FileResponse(
+        src,
+        media_type="audio/wav",
+        filename=f"{job_id}_{stem}.wav",
+        headers={"Accept-Ranges": "bytes"},
+    )
 
 
 @router.get("/audio/{job_id}")
@@ -1033,11 +1091,18 @@ async def serve_audio(job_id: str):
     except ValueError:
         raise HTTPException(status_code=404, detail="Audio file path escapes upload dir")
     media_type = {
-        "mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac",
-        "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "opus": "audio/opus",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "flac": "audio/flac",
+        "ogg": "audio/ogg",
+        "m4a": "audio/mp4",
+        "aac": "audio/aac",
+        "opus": "audio/opus",
     }.get(audio_file.suffix.lstrip(".").lower(), "application/octet-stream")
     return FileResponse(
-        audio_file, media_type=media_type, filename=audio_file.name,
+        audio_file,
+        media_type=media_type,
+        filename=audio_file.name,
         headers={"Accept-Ranges": "bytes"},
     )
 
@@ -1091,45 +1156,55 @@ async def get_analysis_progress(job_id: str):
                     yield _sse_frame("done", parsed)
                     return
                 if status == "error":
-                    yield _sse_frame("error", {
-                        "code": parsed.get("code", "ANALYSIS_FAILED"),
-                        "message": parsed.get("message", "Analysis failed"),
-                        "job_id": job_id,
-                    })
+                    yield _sse_frame(
+                        "error",
+                        {
+                            "code": parsed.get("code", "ANALYSIS_FAILED"),
+                            "message": parsed.get("message", "Analysis failed"),
+                            "job_id": job_id,
+                        },
+                    )
                     return
                 yield _sse_frame("chunk", parsed)
 
             if job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S):
-                yield _sse_frame("error", {
-                    "code": "WORKER_STALE",
-                    "message": (
-                        f"Analysis worker has not reported in "
-                        f"{DEFAULT_HEARTBEAT_TIMEOUT_S}s — likely crashed."
-                    ),
-                    "job_id": job_id,
-                })
+                yield _sse_frame(
+                    "error",
+                    {
+                        "code": "WORKER_STALE",
+                        "message": (
+                            f"Analysis worker has not reported in "
+                            f"{DEFAULT_HEARTBEAT_TIMEOUT_S}s — likely crashed."
+                        ),
+                        "job_id": job_id,
+                    },
+                )
                 return
 
             await asyncio.sleep(1.0)
             elapsed += 1
 
-        yield _sse_frame("error", {
-            "code": "JOB_LIFETIME_EXCEEDED",
-            "message": "Analysis exceeded maximum lifetime of 30 minutes.",
-            "job_id": job_id,
-        })
+        yield _sse_frame(
+            "error",
+            {
+                "code": "JOB_LIFETIME_EXCEEDED",
+                "message": "Analysis exceeded maximum lifetime of 30 minutes.",
+                "job_id": job_id,
+            },
+        )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
 @router.post("/user")
-async def create_or_update_user(req: UserRequest, db = Depends(get_mongodb)):
+async def create_or_update_user(req: UserRequest, db=Depends(get_mongodb)):
     """Registers user identity or updates musical preferences in MongoDB."""
     user_dict = {
         "_id": req.id,
         "username": req.username,
         "instrument": req.instrument,
         "difficulty": req.difficulty,
-        "created_at": datetime.now(UTC)
+        "created_at": datetime.now(UTC),
     }
     await db.users.replace_one({"_id": req.id}, user_dict, upsert=True)
     return {
@@ -1137,11 +1212,12 @@ async def create_or_update_user(req: UserRequest, db = Depends(get_mongodb)):
         "username": user_dict["username"],
         "instrument": user_dict["instrument"],
         "difficulty": user_dict["difficulty"],
-        "created_at": user_dict["created_at"].isoformat()
+        "created_at": user_dict["created_at"].isoformat(),
     }
 
+
 @router.get("/user/{user_id}/preferences")
-async def get_user_preferences(user_id: str, db = Depends(get_mongodb)) -> UserPreferences:
+async def get_user_preferences(user_id: str, db=Depends(get_mongodb)) -> UserPreferences:
     """Read the user's persisted analyze/playback defaults (Plan 3 A8)."""
     user = await db.users.find_one({"_id": user_id})
     if not user:
@@ -1155,7 +1231,9 @@ async def get_user_preferences(user_id: str, db = Depends(get_mongodb)) -> UserP
 
 @router.put("/user/{user_id}/preferences", response_model=UserPreferences)
 async def update_user_preferences(
-    user_id: str, prefs: UserPreferences, db = Depends(get_mongodb),
+    user_id: str,
+    prefs: UserPreferences,
+    db=Depends(get_mongodb),
 ) -> UserPreferences:
     """Persist analyze/playback defaults (Plan 3 A8). Upserts the user row."""
     update: dict[str, object] = {"updated_at": datetime.now(UTC)}
@@ -1169,20 +1247,23 @@ async def update_user_preferences(
     # still gets a record.
     await db.users.update_one(
         {"_id": user_id},
-        {"$set": update, "$setOnInsert": {
-            "_id": user_id,
-            "username": f"User-{user_id[:6]}",
-            "instrument": "guitar",
-            "difficulty": "beginner",
-            "created_at": datetime.now(UTC),
-        }},
+        {
+            "$set": update,
+            "$setOnInsert": {
+                "_id": user_id,
+                "username": f"User-{user_id[:6]}",
+                "instrument": "guitar",
+                "difficulty": "beginner",
+                "created_at": datetime.now(UTC),
+            },
+        },
         upsert=True,
     )
     return prefs
 
 
 @router.get("/user/{user_id}")
-async def get_user_profile(user_id: str, db = Depends(get_mongodb)):
+async def get_user_profile(user_id: str, db=Depends(get_mongodb)):
     """Fetches registered profile metadata from MongoDB."""
     user = await db.users.find_one({"_id": user_id})
     if not user:
@@ -1192,15 +1273,18 @@ async def get_user_profile(user_id: str, db = Depends(get_mongodb)):
         "username": user["username"],
         "instrument": user["instrument"],
         "difficulty": user["difficulty"],
-        "created_at": user["created_at"].isoformat() if isinstance(user["created_at"], datetime) else user["created_at"]
+        "created_at": user["created_at"].isoformat()
+        if isinstance(user["created_at"], datetime)
+        else user["created_at"],
     }
+
 
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit(lambda: get_settings().chat_rate_limit)
 async def chat(
     request: Request,
     payload: ChatRequest,
-    db = Depends(get_mongodb),
+    db=Depends(get_mongodb),
 ) -> ChatResponse:
     """Conversational AI assistant. Stores messages and coordinates session caching."""
     # ``request`` is the Starlette Request (used by slowapi's key_func);
@@ -1210,32 +1294,31 @@ async def chat(
     if payload.user_id and payload.session_id:
         user = await db.users.find_one({"_id": payload.user_id})
         if not user:
-            await db.users.insert_one({
-                "_id": payload.user_id,
-                "username": f"Hacker-{payload.user_id[:4]}",
-                "instrument": "guitar",
-                "difficulty": "beginner",
-                "created_at": datetime.now(UTC)
-            })
+            await db.users.insert_one(
+                {
+                    "_id": payload.user_id,
+                    "username": f"Hacker-{payload.user_id[:4]}",
+                    "instrument": "guitar",
+                    "difficulty": "beginner",
+                    "created_at": datetime.now(UTC),
+                }
+            )
 
         session = await db.chat_sessions.find_one({"_id": payload.session_id})
         if not session:
-            await db.chat_sessions.insert_one({
-                "_id": payload.session_id,
-                "user_id": payload.user_id,
-                "messages": [],
-                "created_at": datetime.now(UTC)
-            })
+            await db.chat_sessions.insert_one(
+                {
+                    "_id": payload.session_id,
+                    "user_id": payload.user_id,
+                    "messages": [],
+                    "created_at": datetime.now(UTC),
+                }
+            )
 
         # Save user query
-        user_msg = {
-            "role": "user",
-            "content": payload.message,
-            "timestamp": datetime.now(UTC)
-        }
+        user_msg = {"role": "user", "content": payload.message, "timestamp": datetime.now(UTC)}
         await db.chat_sessions.update_one(
-            {"_id": payload.session_id},
-            {"$push": {"messages": user_msg}}
+            {"_id": payload.session_id}, {"$push": {"messages": user_msg}}
         )
 
     # 2. Look up song context (Plan 3 A4) and invoke the assistant chain.
@@ -1251,14 +1334,9 @@ async def chat(
 
     # 3. Save assistant reply to MongoDB
     if payload.user_id and payload.session_id:
-        assistant_msg = {
-            "role": "assistant",
-            "content": reply,
-            "timestamp": datetime.now(UTC)
-        }
+        assistant_msg = {"role": "assistant", "content": reply, "timestamp": datetime.now(UTC)}
         await db.chat_sessions.update_one(
-            {"_id": payload.session_id},
-            {"$push": {"messages": assistant_msg}}
+            {"_id": payload.session_id}, {"$push": {"messages": assistant_msg}}
         )
 
         # Re-query session messages to form correct history list
@@ -1272,12 +1350,13 @@ async def chat(
 
     return ChatResponse(reply=reply)
 
+
 @router.post("/chat/stream")
 @limiter.limit(lambda: get_settings().chat_rate_limit)
 async def chat_stream(
     request: Request,
     payload: ChatRequest,
-    db = Depends(get_mongodb),
+    db=Depends(get_mongodb),
 ):
     """Conversational AI assistant with SSE streaming response."""
     # ``request`` is the Starlette Request (slowapi key_func reads it).
@@ -1287,55 +1366,58 @@ async def chat_stream(
     if payload.user_id and payload.session_id:
         user = await db.users.find_one({"_id": payload.user_id})
         if not user:
-            await db.users.insert_one({
-                "_id": payload.user_id,
-                "username": f"Hacker-{payload.user_id[:4]}",
-                "instrument": "guitar",
-                "difficulty": "beginner",
-                "created_at": datetime.now(UTC)
-            })
+            await db.users.insert_one(
+                {
+                    "_id": payload.user_id,
+                    "username": f"Hacker-{payload.user_id[:4]}",
+                    "instrument": "guitar",
+                    "difficulty": "beginner",
+                    "created_at": datetime.now(UTC),
+                }
+            )
 
         session = await db.chat_sessions.find_one({"_id": payload.session_id})
         if not session:
-            await db.chat_sessions.insert_one({
-                "_id": payload.session_id,
-                "user_id": payload.user_id,
-                "messages": [],
-                "created_at": datetime.now(UTC)
-            })
+            await db.chat_sessions.insert_one(
+                {
+                    "_id": payload.session_id,
+                    "user_id": payload.user_id,
+                    "messages": [],
+                    "created_at": datetime.now(UTC),
+                }
+            )
 
-        user_msg = {
-            "role": "user",
-            "content": payload.message,
-            "timestamp": datetime.now(UTC)
-        }
+        user_msg = {"role": "user", "content": payload.message, "timestamp": datetime.now(UTC)}
         await db.chat_sessions.update_one(
-            {"_id": payload.session_id},
-            {"$push": {"messages": user_msg}}
+            {"_id": payload.session_id}, {"$push": {"messages": user_msg}}
         )
 
     # Pull song context once before opening the stream so we don't hit the
     # DB on every yielded chunk.
     analysis_doc_stream: dict | None = None
     if payload.analysis_job_id:
-        analysis_doc_stream = await db.song_analyses.find_one(
-            {"_id": payload.analysis_job_id}
-        )
+        analysis_doc_stream = await db.song_analyses.find_one({"_id": payload.analysis_job_id})
 
     async def stream_generator():
         full_reply = ""
         try:
             async for chunk in get_chat_response_stream(
-                payload.message, payload.history, analysis_doc_stream,
+                payload.message,
+                payload.history,
+                analysis_doc_stream,
             ):
                 if chunk:
                     yield _sse_frame("chunk", {"text": chunk})
                     full_reply += chunk
         except Exception as e:
             logger.exception("chat stream failed")
-            yield _sse_frame("error", {
-                "code": "CHAT_STREAM_FAILED", "message": str(e)[:200],
-            })
+            yield _sse_frame(
+                "error",
+                {
+                    "code": "CHAT_STREAM_FAILED",
+                    "message": str(e)[:200],
+                },
+            )
             return
 
         # Save assistant reply to MongoDB after stream completes
@@ -1343,19 +1425,19 @@ async def chat_stream(
             assistant_msg = {
                 "role": "assistant",
                 "content": full_reply,
-                "timestamp": datetime.now(UTC)
+                "timestamp": datetime.now(UTC),
             }
             await db.chat_sessions.update_one(
-                {"_id": payload.session_id},
-                {"$push": {"messages": assistant_msg}}
+                {"_id": payload.session_id}, {"$push": {"messages": assistant_msg}}
             )
 
         yield _sse_frame("done", {"reply_length": len(full_reply)})
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
+
 @router.get("/chat/history/{session_id}")
-async def get_chat_history(session_id: str, db = Depends(get_mongodb)):
+async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
     """Retrieves standard discussion threads from Cache or drops back to MongoDB."""
     cache_key = f"chat:session:{session_id}"
     cached = cache.get(cache_key)
@@ -1366,7 +1448,7 @@ async def get_chat_history(session_id: str, db = Depends(get_mongodb)):
     session_doc = await db.chat_sessions.find_one({"_id": session_id})
     if not session_doc:
         return {"history": []}
-        
+
     messages = session_doc.get("messages", [])
     history_payload = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
 

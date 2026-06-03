@@ -12,6 +12,7 @@ We need three behaviours that the bundled fixtures don't give us cleanly:
   3. A small ``run_report`` helper every test writes one row into; the
      final test (or a teardown hook) materializes the markdown summary.
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -20,8 +21,8 @@ import math
 import os
 import struct
 import wave
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
@@ -55,20 +56,20 @@ _FIXTURE_AUDIO_DIR = _ARTIFACT_DIR / "tmp_audio"
 # the same, so ML detection still gives stable expected outputs.
 
 _TRIADS = {
-    "C":  (261.63, 329.63, 392.00),  # C E G
-    "G":  (392.00, 493.88, 587.33),  # G B D
+    "C": (261.63, 329.63, 392.00),  # C E G
+    "G": (392.00, 493.88, 587.33),  # G B D
     "Am": (440.00, 523.25, 659.26),  # A C E
-    "F":  (349.23, 440.00, 523.25),  # F A C
-    "D":  (293.66, 369.99, 440.00),  # D F# A
+    "F": (349.23, 440.00, 523.25),  # F A C
+    "D": (293.66, 369.99, 440.00),  # D F# A
     "Em": (329.63, 392.00, 493.88),  # E G B
 }
 
 _FIVE_SONGS_PROGRESSIONS = {
-    "round3_song1_c_major.wav":  ["C",  "F",  "G",  "C"],   # I-IV-V-I in C
-    "round3_song2_g_major.wav":  ["G",  "C",  "D",  "G"],   # I-IV-V-I in G
-    "round3_song3_a_minor.wav":  ["Am", "F",  "G",  "Am"],  # i-VI-VII-i in Am
-    "round3_song4_d_major.wav":  ["D",  "G",  "Em", "D"],   # I-IV-ii-I in D
-    "round3_song5_e_minor.wav":  ["Em", "Am", "D",  "G"],   # i-iv-VII-III in Em
+    "round3_song1_c_major.wav": ["C", "F", "G", "C"],  # I-IV-V-I in C
+    "round3_song2_g_major.wav": ["G", "C", "D", "G"],  # I-IV-V-I in G
+    "round3_song3_a_minor.wav": ["Am", "F", "G", "Am"],  # i-VI-VII-i in Am
+    "round3_song4_d_major.wav": ["D", "G", "Em", "D"],  # I-IV-ii-I in D
+    "round3_song5_e_minor.wav": ["Em", "Am", "D", "G"],  # i-iv-VII-III in Em
 }
 
 
@@ -129,6 +130,7 @@ def _regen_session_wavs():
 # Shared run_report.md state
 # ----------------------------------------------------------------------------
 
+
 class _RunReport:
     """Accumulates rows across the test session, writes a single Markdown
     file at the end. Tests call ``add_row(...)`` with whatever they want
@@ -138,13 +140,13 @@ class _RunReport:
         self.rows: list[dict] = []
 
     def add_row(self, **kwargs):
-        kwargs.setdefault("ts", _dt.datetime.now(_dt.timezone.utc).isoformat())
+        kwargs.setdefault("ts", _dt.datetime.now(_dt.UTC).isoformat())
         self.rows.append(kwargs)
 
     def materialize(self):
         _ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
         lines = [
-            f"# Synesthesia E2E browser run — {_dt.datetime.now(_dt.timezone.utc).isoformat()}",
+            f"# Synesthesia E2E browser run — {_dt.datetime.now(_dt.UTC).isoformat()}",
             "",
             "Headless Chromium driven by Playwright as the Antigravity substitute.",
             f"Frontend: `{_FRONTEND_URL}`  ·  Backend: `{_API_URL}`",
@@ -160,7 +162,9 @@ class _RunReport:
             lines.append(f"### {test}")
             lines.append("")
             for r in rs:
-                pretty = json.dumps({k: v for k, v in r.items() if k not in {"test"}}, default=str, indent=None)
+                pretty = json.dumps(
+                    {k: v for k, v in r.items() if k not in {"test"}}, default=str, indent=None
+                )
                 lines.append(f"- {pretty}")
             lines.append("")
         _REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
@@ -176,6 +180,7 @@ def run_report() -> Iterator[_RunReport]:
 # ----------------------------------------------------------------------------
 # Browser / context / page fixtures
 # ----------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def playwright_instance():
@@ -223,13 +228,16 @@ def page(context: BrowserContext, request, run_report: _RunReport) -> Iterator[P
             # Filter the well-known dev-server noise so we don't false-fire
             # on Next.js fast refresh chatter.
             text = msg.text
-            if any(s in text for s in (
-                "[Fast Refresh]",
-                "[HMR]",
-                "ServiceWorker",
-                # Next.js fires this when an <a> upgrades to <Link> during prerender — harmless.
-                "Hydration failed because the server rendered HTML didn't match the client",
-            )):
+            if any(
+                s in text
+                for s in (
+                    "[Fast Refresh]",
+                    "[HMR]",
+                    "ServiceWorker",
+                    # Next.js fires this when an <a> upgrades to <Link> during prerender — harmless.
+                    "Hydration failed because the server rendered HTML didn't match the client",
+                )
+            ):
                 return
             console_errors.append(text)
 
@@ -246,6 +254,7 @@ def page(context: BrowserContext, request, run_report: _RunReport) -> Iterator[P
 # ----------------------------------------------------------------------------
 # Screenshot-on-failure hook
 # ----------------------------------------------------------------------------
+
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item, call):
@@ -267,6 +276,7 @@ def pytest_runtest_makereport(item, call):
 # ----------------------------------------------------------------------------
 # Useful constants for tests
 # ----------------------------------------------------------------------------
+
 
 @pytest.fixture
 def frontend_url() -> str:

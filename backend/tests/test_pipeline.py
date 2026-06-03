@@ -6,6 +6,7 @@ Vault refs:
 
 These tests use a short test_song.mp3 you place in tests/audio/.
 """
+
 from pathlib import Path
 
 import pytest
@@ -32,21 +33,23 @@ async def test_pipeline_produces_chords():
 
 from backend.graph.nodes import should_retry
 
+
 def test_should_retry_logic():
     """Test conditional edge routing based on errors and retries."""
     assert should_retry({"errors": ["Audio error"], "retries": 1}) == "retry"
     assert should_retry({"errors": ["Audio error"], "retries": 3}) == "fail"
     assert should_retry({"errors": [], "retries": 0}) == "ok"
 
+
 @pytest.mark.asyncio
 async def test_checkpointing_resume():
     """Test memory saver checkpointing."""
     graph = get_graph()
     config = {"configurable": {"thread_id": "checkpoint-test"}}
-    
+
     # Push an initial state into the graph's memory saver manually
     graph.update_state(config, {"retries": 2, "errors": []})
-    
+
     # Retrieve the state to ensure checkpointing works
     state = graph.get_state(config)
     assert state.values["retries"] == 2

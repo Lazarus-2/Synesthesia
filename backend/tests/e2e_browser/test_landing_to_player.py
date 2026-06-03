@@ -13,6 +13,7 @@ The six tests below collectively cover the user-visible surface:
 Each test writes a row into the session-scoped ``run_report`` fixture so
 the final ``run_report.md`` materializes the full record.
 """
+
 from __future__ import annotations
 
 import time
@@ -21,17 +22,22 @@ from pathlib import Path
 
 from playwright.sync_api import Page, expect
 
-
 # ----------------------------------------------------------------------------
 # 1. Landing page
 # ----------------------------------------------------------------------------
 
+
 def test_landing_loads_and_sample_cards_link(
-    page: Page, frontend_url: str, screenshot_dir: Path, run_report,
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    run_report,
 ):
     """Open /, assert hero + three sample-card links, click one."""
     page.goto(frontend_url, wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="Hear any song.", exact=False)).to_be_visible(timeout=10_000)
+    expect(page.get_by_role("heading", name="Hear any song.", exact=False)).to_be_visible(
+        timeout=10_000
+    )
     expect(page.get_by_text("Drag & Drop Audio")).to_be_visible()
     expect(page.get_by_text("Try a Sample Analysis")).to_be_visible()
 
@@ -64,8 +70,12 @@ def test_landing_loads_and_sample_cards_link(
 # 2. Share page direct
 # ----------------------------------------------------------------------------
 
+
 def test_share_page_renders_full_breakdown(
-    page: Page, frontend_url: str, screenshot_dir: Path, run_report,
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    run_report,
 ):
     """Direct /s/sample-blackbird hit — assert key + bpm + chord chips."""
     page.goto(f"{frontend_url}/s/sample-blackbird", wait_until="domcontentloaded")
@@ -78,8 +88,9 @@ def test_share_page_renders_full_breakdown(
     # Chord chips — the seeded record has 6 chord events; we assert ≥ 4 spans
     # whose colored background is set from the Scriabin palette (inline style).
     chips = page.locator("section >> nth=2 >> span").all()
-    visible_chord_chips = [c for c in chips if (c.inner_text() or "").strip()
-                           in {"G", "Am7", "G/B", "C", "D7"}]
+    visible_chord_chips = [
+        c for c in chips if (c.inner_text() or "").strip() in {"G", "Am7", "G/B", "C", "D7"}
+    ]
     assert len(visible_chord_chips) >= 4, (
         f"expected ≥4 chord chips on share page, got {len(visible_chord_chips)}: "
         f"{[c.inner_text() for c in visible_chord_chips]}"
@@ -98,6 +109,7 @@ def test_share_page_renders_full_breakdown(
 # ----------------------------------------------------------------------------
 # 3. Upload → analyzing → player view (one song)
 # ----------------------------------------------------------------------------
+
 
 def _wait_for_player_view(page: Page, timeout_s: int = 90):
     """Wait until the analyzing overlay disappears and the player tab shows."""
@@ -120,12 +132,17 @@ def _wait_for_player_view(page: Page, timeout_s: int = 90):
 
 
 def test_upload_drag_drop_runs_full_pipeline(
-    page: Page, frontend_url: str, screenshot_dir: Path,
-    fixture_audio_dir: Path, run_report,
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    fixture_audio_dir: Path,
+    run_report,
 ):
     """Drop one synth WAV via the hidden file input; wait for player view."""
     page.goto(frontend_url, wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="Hear any song.", exact=False)).to_be_visible(timeout=10_000)
+    expect(page.get_by_role("heading", name="Hear any song.", exact=False)).to_be_visible(
+        timeout=10_000
+    )
 
     wav = fixture_audio_dir / "round3_song1_c_major.wav"
     assert wav.exists(), f"test WAV missing: {wav}"
@@ -159,8 +176,12 @@ def test_upload_drag_drop_runs_full_pipeline(
 # 4. Library
 # ----------------------------------------------------------------------------
 
+
 def test_library_page_lists_entries(
-    page: Page, frontend_url: str, screenshot_dir: Path, run_report,
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    run_report,
 ):
     """Open /library, assert at least 6 entries and click into one."""
     page.goto(f"{frontend_url}/library", wait_until="domcontentloaded")
@@ -197,8 +218,12 @@ def test_library_page_lists_entries(
 # 5. Auth signup → library → reload still authed
 # ----------------------------------------------------------------------------
 
+
 def test_auth_signup_login_logout(
-    page: Page, frontend_url: str, screenshot_dir: Path, run_report,
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    run_report,
 ):
     """Sign up a fresh user, verify localStorage token, then login round-trip."""
     username = f"e2e_user_{uuid.uuid4().hex[:6]}"
@@ -230,7 +255,9 @@ def test_auth_signup_login_logout(
 
     # ---- Re-login round-trip via /login
     # First clear storage to simulate logout.
-    page.evaluate("() => { localStorage.removeItem('synesthesia.auth.token'); localStorage.removeItem('synesthesia.auth.user'); }")
+    page.evaluate(
+        "() => { localStorage.removeItem('synesthesia.auth.token'); localStorage.removeItem('synesthesia.auth.user'); }"
+    )
     page.goto(f"{frontend_url}/login", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Welcome back")).to_be_visible(timeout=10_000)
     page.fill('input[autocomplete="username"]', username)
@@ -258,17 +285,21 @@ def test_auth_signup_login_logout(
 
 # Each tuple: (filename, friendly name, expected detected key family)
 _FIVE_SONGS = [
-    ("round3_song1_c_major.wav", "Sunrise In C v2",  "C major"),
-    ("round3_song2_g_major.wav", "Highway G v2",     "G major"),
+    ("round3_song1_c_major.wav", "Sunrise In C v2", "C major"),
+    ("round3_song2_g_major.wav", "Highway G v2", "G major"),
     ("round3_song3_a_minor.wav", "Midnight Lullaby v2", "C major"),  # relative-major ambiguity OK
-    ("round3_song4_d_major.wav", "Open Road v2",     "D major"),
-    ("round3_song5_e_minor.wav", "Cold November v2", "G major"),     # relative-major
+    ("round3_song4_d_major.wav", "Open Road v2", "D major"),
+    ("round3_song5_e_minor.wav", "Cold November v2", "G major"),  # relative-major
 ]
 
 
 def test_chord_breakdown_e2e_five_songs(
-    browser, frontend_url: str, api_url: str,
-    screenshot_dir: Path, fixture_audio_dir: Path, run_report,
+    browser,
+    frontend_url: str,
+    api_url: str,
+    screenshot_dir: Path,
+    fixture_audio_dir: Path,
+    run_report,
 ):
     """For each of 5 synth WAVs: drive the UI through analysis to completion,
     then visit /s/{job_id} and assert the breakdown rendered with chord chips.
@@ -340,32 +371,38 @@ def test_chord_breakdown_e2e_five_songs(
             share_page = ctx.new_page()
             share_page.goto(f"{frontend_url}/s/{job_id}", wait_until="domcontentloaded")
             share_page.wait_for_selector("text=BPM", timeout=15_000)
-            step_share = screenshot_dir / f"06_song{idx}_step3_share_{filename.replace('.wav','')}.png"
+            step_share = (
+                screenshot_dir / f"06_song{idx}_step3_share_{filename.replace('.wav', '')}.png"
+            )
             share_page.screenshot(path=str(step_share), full_page=True)
 
             # Read the resulting analysis via the API and assert.
             with urllib.request.urlopen(f"{api_url}/api/v1/share/{job_id}") as r:
                 doc = json.load(r)
-            a = (doc.get("analysis") or {})
+            a = doc.get("analysis") or {}
             chords = a.get("chords") or []
 
             assert len(chords) >= 4, f"song {idx} ({friendly}): only {len(chords)} chords"
             assert a.get("key"), f"song {idx} ({friendly}): no key detected"
 
-            completed_rows.append({
-                "song_index": idx,
-                "friendly_name": friendly,
-                "job_id": job_id,
-                "detected_key": a.get("key"),
-                "detected_tempo": a.get("tempo"),
-                "n_chords": len(chords),
-                "chord_root_seq": [c["chord"] for c in chords],
-                "roman": (a.get("roman") or {}).get("progression"),
-                "title_in_db": a.get("title"),
-                "step1_landing_png": str(step_landing.relative_to(screenshot_dir.parent.parent)),
-                "step2_player_png": str(step_player.relative_to(screenshot_dir.parent.parent)),
-                "step3_share_png": str(step_share.relative_to(screenshot_dir.parent.parent)),
-            })
+            completed_rows.append(
+                {
+                    "song_index": idx,
+                    "friendly_name": friendly,
+                    "job_id": job_id,
+                    "detected_key": a.get("key"),
+                    "detected_tempo": a.get("tempo"),
+                    "n_chords": len(chords),
+                    "chord_root_seq": [c["chord"] for c in chords],
+                    "roman": (a.get("roman") or {}).get("progression"),
+                    "title_in_db": a.get("title"),
+                    "step1_landing_png": str(
+                        step_landing.relative_to(screenshot_dir.parent.parent)
+                    ),
+                    "step2_player_png": str(step_player.relative_to(screenshot_dir.parent.parent)),
+                    "step3_share_png": str(step_share.relative_to(screenshot_dir.parent.parent)),
+                }
+            )
         finally:
             ctx.close()
 
@@ -377,6 +414,5 @@ def test_chord_breakdown_e2e_five_songs(
     # five distinct job_ids back from the /analyze endpoint.
     job_ids = {r["job_id"] for r in completed_rows}
     assert len(job_ids) == 5, (
-        f"expected 5 distinct job_ids (no dedup short-circuit), "
-        f"got {len(job_ids)}: {job_ids}"
+        f"expected 5 distinct job_ids (no dedup short-circuit), got {len(job_ids)}: {job_ids}"
     )

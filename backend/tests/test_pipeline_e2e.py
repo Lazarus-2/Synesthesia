@@ -7,6 +7,7 @@ don't want to depend on a live Ollama for CI; the deterministic ML nodes
 (features, roman, similarity, structure) still run for real against the
 synthetic-audio fixture from :mod:`tests.conftest`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,6 +30,7 @@ def _build_graph_no_llm():
     from langgraph.checkpoint.memory import MemorySaver
 
     from backend.graph.graph import build_graph
+
     return build_graph(MemorySaver())
 
 
@@ -39,14 +41,21 @@ class TestFullPipelineWithSyntheticAudio:
     def _stub_llm_chains(self):
         """Force theory + instrument LLM chains to raise so the node catch
         clauses run. This keeps the test offline-deterministic."""
-        with patch("backend.chains.theory_chain.build_theory_chain",
-                   side_effect=RuntimeError("LLM stubbed for test")), \
-             patch("backend.chains.instrument_chain.build_instrument_chain",
-                   side_effect=RuntimeError("LLM stubbed for test")):
+        with (
+            patch(
+                "backend.chains.theory_chain.build_theory_chain",
+                side_effect=RuntimeError("LLM stubbed for test"),
+            ),
+            patch(
+                "backend.chains.instrument_chain.build_instrument_chain",
+                side_effect=RuntimeError("LLM stubbed for test"),
+            ),
+        ):
             yield
 
     def test_synthetic_audio_produces_analysis_with_chords_and_key(
-        self, synthetic_song: Path,
+        self,
+        synthetic_song: Path,
     ):
         """A clean run with valid audio should populate key/tempo/chords/roman."""
         graph = _build_graph_no_llm()
@@ -72,9 +81,7 @@ class TestFullPipelineWithSyntheticAudio:
         result = asyncio.run(run())
 
         # Pipeline reached the end without errors.
-        assert not result.get("errors"), (
-            f"unexpected pipeline errors: {result.get('errors')}"
-        )
+        assert not result.get("errors"), f"unexpected pipeline errors: {result.get('errors')}"
 
         # Features ran: we got a key/tempo and at least some chord events.
         assert "key" in result and result["key"], "key estimation should populate"
@@ -107,7 +114,8 @@ class TestFullPipelineWithSyntheticAudio:
         assert isinstance(result.get("stems", {}), dict)
 
     def test_synthetic_audio_run_is_bounded_in_steps(
-        self, synthetic_song: Path,
+        self,
+        synthetic_song: Path,
     ):
         """A clean run must not approach LangGraph's recursion limit.
 
@@ -121,8 +129,10 @@ class TestFullPipelineWithSyntheticAudio:
             return await graph.ainvoke(
                 {
                     "audio_path": str(synthetic_song),
-                    "errors": [], "retries": 0,
-                    "instrument": "guitar", "difficulty": "beginner",
+                    "errors": [],
+                    "retries": 0,
+                    "instrument": "guitar",
+                    "difficulty": "beginner",
                 },
                 config={
                     "configurable": {"thread_id": "e2e-bounded"},

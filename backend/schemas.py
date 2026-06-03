@@ -7,6 +7,7 @@ Vault refs:
 
 You will add/refine fields as you progress. Start with ChordEvent + SongAnalysis.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -17,8 +18,10 @@ from pydantic import BaseModel, Field
 # Core music primitives -- Module 1
 # =============================================================================
 
+
 class ChordEvent(BaseModel):
     """A single chord at a point in time."""
+
     start: float = Field(description="Start time in seconds")
     end: float = Field(description="End time in seconds")
     chord: str = Field(description="Chord symbol, e.g. 'Cmaj7', 'Am', 'G/B'")
@@ -33,6 +36,7 @@ class BeatEvent(BaseModel):
 
 class SongSection(BaseModel):
     """Intro, verse, chorus, bridge, outro, etc."""
+
     name: str
     start: float
     end: float
@@ -42,15 +46,20 @@ class SongSection(BaseModel):
 # Analysis output -- Module 1/3
 # =============================================================================
 
+
 class RomanAnalysis(BaseModel):
     """Roman-numeral analysis of the progression."""
+
     key: str
     progression: list[str] = Field(description="e.g. ['I', 'V', 'vi', 'IV']")
-    function: list[str] = Field(description="e.g. ['tonic', 'dominant', 'submediant', 'subdominant']")
+    function: list[str] = Field(
+        description="e.g. ['tonic', 'dominant', 'submediant', 'subdominant']"
+    )
 
 
 class SongAnalysis(BaseModel):
     """Top-level result returned to the client."""
+
     title: str | None = None
     artist: str | None = None
     duration: float
@@ -64,7 +73,10 @@ class SongAnalysis(BaseModel):
     sections: list[SongSection] = []
 
     roman: RomanAnalysis | None = None
-    vibe_palette: list[str] = Field(default_factory=list, description="Synesthetic color palette representing the song's key/vibe")
+    vibe_palette: list[str] = Field(
+        default_factory=list,
+        description="Synesthetic color palette representing the song's key/vibe",
+    )
 
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = Field(default_factory=dict)
@@ -85,6 +97,7 @@ Difficulty = Literal["beginner", "intermediate", "advanced"]
 
 class ChordDiagram(BaseModel):
     """One chord shape for one instrument."""
+
     chord: str
     instrument: Instrument
     # Guitar: list of 6 fret numbers (low-E to high-E); -1 = mute, 0 = open
@@ -108,8 +121,10 @@ class InstrumentGuide(BaseModel):
 # User & session -- Module 2/4
 # =============================================================================
 
+
 class UserProfile(BaseModel):
     """Semantic memory for personalization. Module 2 Lesson 4."""
+
     user_id: str
     instrument: Instrument = "guitar"
     skill_level: Difficulty = "beginner"
@@ -122,8 +137,10 @@ class UserProfile(BaseModel):
 # API request/response -- Module 5
 # =============================================================================
 
+
 class AnalyzeRequest(BaseModel):
     """Client uploads or pastes URL."""
+
     youtube_url: str | None = None
     instrument: Instrument = "guitar"
     difficulty: Difficulty = "beginner"

@@ -18,6 +18,7 @@ Deferred to its own session:
   - Refresh-token rotation
   - Role-based access control (single ``user_id`` claim is enough for MVP)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,7 @@ _BEARER_PREFIX = "Bearer "
 
 class UserPrincipal(BaseModel):
     """The authenticated caller. Returned by :func:`current_user`."""
+
     user_id: str
     username: str | None = None
 
@@ -54,8 +56,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ---- JWT -------------------------------------------------------------------
-def issue_token(*, user_id: str, username: str | None = None,
-                expires_minutes: int | None = None) -> str:
+def issue_token(
+    *, user_id: str, username: str | None = None, expires_minutes: int | None = None
+) -> str:
     """Sign and return a JWT for the given user."""
     s = get_settings()
     if not s.auth_secret_key:
@@ -84,9 +87,7 @@ def decode_token(token: str) -> UserPrincipal:
     if not s.auth_secret_key:
         raise HTTPException(status_code=401, detail="Authentication is not configured")
     try:
-        payload = jwt.decode(
-            token, s.auth_secret_key, algorithms=[s.auth_jwt_algorithm]
-        )
+        payload = jwt.decode(token, s.auth_secret_key, algorithms=[s.auth_jwt_algorithm])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
@@ -102,7 +103,7 @@ def _extract_bearer(request: Request) -> str | None:
     header = request.headers.get("authorization")
     if not header or not header.startswith(_BEARER_PREFIX):
         return None
-    token = header[len(_BEARER_PREFIX):].strip()
+    token = header[len(_BEARER_PREFIX) :].strip()
     return token or None
 
 

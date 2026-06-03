@@ -2,6 +2,7 @@
 LangGraph shared state.
 Vault ref: 04-LangGraph-Core/02-State-Nodes-Edges.md
 """
+
 from __future__ import annotations
 
 from typing import Annotated, TypedDict

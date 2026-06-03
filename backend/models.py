@@ -7,6 +7,7 @@ from backend.schemas import BeatEvent, ChordEvent, InstrumentGuide, RomanAnalysi
 
 class User(BaseModel):
     """User profile mapping metadata, instruments, and skill levels."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(alias="_id")
@@ -25,14 +26,18 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = None
 
+
 class ChatMessage(BaseModel):
     """Individual conversation message block within a session."""
+
     role: str  # "user" or "assistant"
     content: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+
 class ChatSession(BaseModel):
     """Chat session header grouping conversational transcripts."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(alias="_id")
@@ -40,26 +45,28 @@ class ChatSession(BaseModel):
     messages: list[ChatMessage] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+
 class SongAnalysisModel(BaseModel):
     """Song analyzer cache document in MongoDB."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(alias="_id")  # Unique hash or YouTube ID
-    file_hash: str | None = None # For deduplication
+    file_hash: str | None = None  # For deduplication
     title: str | None = None
     artist: str | None = None
     duration: float
     key: str
     tempo: float
     time_signature: str = "4/4"
-    
+
     # Native MongoDB queryable sub-documents
     chords: list[ChordEvent] = []
     beats: list[BeatEvent] = []
     sections: list[SongSection] = []
     roman: RomanAnalysis | None = None
     vibe_palette: list[str] = []
-    
+
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = {}
     stems: dict[str, str] = {}

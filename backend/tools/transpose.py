@@ -2,6 +2,7 @@
 Transpose a chord progression by N semitones.
 Vault ref: 03-LangChain-Core/04-Tools-Agents.md
 """
+
 from __future__ import annotations
 
 from langchain_core.tools import tool

@@ -2,6 +2,7 @@
 Beat tracking with madmom. Returns beat times + downbeats for measure detection.
 Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 1)
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +19,7 @@ def track_beats(audio_path: str | Path) -> list[BeatEvent]:
     try:
         # Try to use madmom if installed
         from madmom.features.beats import BeatTrackingProcessor, RNNBeatProcessor
+
         rnn = RNNBeatProcessor()
         tracker = BeatTrackingProcessor(fps=100)
         activations = rnn(str(audio_path))
@@ -26,6 +28,7 @@ def track_beats(audio_path: str | Path) -> list[BeatEvent]:
     except ImportError:
         # Robust fallback using librosa
         import librosa
+
         try:
             y, sr = librosa.load(str(audio_path), sr=22050, duration=MAX_AUDIO_DURATION_S)
             onset_env = librosa.onset.onset_strength(y=y, sr=sr)

@@ -18,6 +18,7 @@ counter when one is available) instead of being invisible. Operators
 currently can't tell the difference between a "primary worked" and
 "fallback rescued us" path.
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,8 +48,10 @@ def reset_fallback_stats() -> None:
 
 
 def _wrap_with_observable_fallback(
-    primary: BaseChatModel, fallback: BaseChatModel,
-    primary_name: str, fallback_name: str,
+    primary: BaseChatModel,
+    fallback: BaseChatModel,
+    primary_name: str,
+    fallback_name: str,
 ) -> Any:
     """Compose primary + fallback so each fallback activation is logged.
 
@@ -59,12 +62,16 @@ def _wrap_with_observable_fallback(
     that wrapped primary into ``.with_fallbacks([fallback])`` so the normal
     routing kicks in.
     """
+
     def _on_primary_error(exc: BaseException) -> None:
         key = f"{primary_name}->{fallback_name}"
         _fallback_activation_count[key] = _fallback_activation_count.get(key, 0) + 1
         logger.warning(
             "LLM fallback activated: primary=%s fallback=%s reason=%s message=%r",
-            primary_name, fallback_name, type(exc).__name__, str(exc)[:200],
+            primary_name,
+            fallback_name,
+            type(exc).__name__,
+            str(exc)[:200],
         )
 
     async def _ainvoke_with_logging(inp, *, _primary=primary):
@@ -84,14 +91,15 @@ def _wrap_with_observable_fallback(
     logged_primary = RunnableLambda(_invoke_with_logging, afunc=_ainvoke_with_logging)
     return logged_primary.with_fallbacks([fallback])
 
+
 # Provider → default model mapping (May 2026)
 _PROVIDER_DEFAULTS: dict[str, str] = {
-    "openai":     "gpt-5.3-instant",
-    "anthropic":  "claude-sonnet-4-20250514",
-    "gemini":     "gemini-3.1-flash",
-    "groq":       "llama-3.3-70b-versatile",
+    "openai": "gpt-5.3-instant",
+    "anthropic": "claude-sonnet-4-20250514",
+    "gemini": "gemini-3.1-flash",
+    "groq": "llama-3.3-70b-versatile",
     "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
-    "ollama":     "qwen3:8b",
+    "ollama": "qwen3:8b",
 }
 
 
@@ -112,10 +120,10 @@ def _build_provider_llm(
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI
+
         if not api_key:
             raise ValueError(
-                "OPENAI_API_KEY is required when LLM_PROVIDER=openai. "
-                "Set it in your .env file."
+                "OPENAI_API_KEY is required when LLM_PROVIDER=openai. Set it in your .env file."
             )
         return ChatOpenAI(
             model=resolved_model,
@@ -125,6 +133,7 @@ def _build_provider_llm(
 
     elif provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
+
         if not api_key:
             raise ValueError(
                 "ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic. "
@@ -138,10 +147,10 @@ def _build_provider_llm(
 
     elif provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
+
         if not api_key:
             raise ValueError(
-                "GEMINI_API_KEY is required when LLM_PROVIDER=gemini. "
-                "Set it in your .env file."
+                "GEMINI_API_KEY is required when LLM_PROVIDER=gemini. Set it in your .env file."
             )
         return ChatGoogleGenerativeAI(
             model=resolved_model,
@@ -151,10 +160,10 @@ def _build_provider_llm(
 
     elif provider == "groq":
         from langchain_openai import ChatOpenAI
+
         if not api_key:
             raise ValueError(
-                "GROQ_API_KEY is required when LLM_PROVIDER=groq. "
-                "Set it in your .env file."
+                "GROQ_API_KEY is required when LLM_PROVIDER=groq. Set it in your .env file."
             )
         return ChatOpenAI(
             model=resolved_model,
@@ -165,6 +174,7 @@ def _build_provider_llm(
 
     elif provider == "openrouter":
         from langchain_openai import ChatOpenAI
+
         if not api_key:
             raise ValueError(
                 "OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter. "
@@ -179,6 +189,7 @@ def _build_provider_llm(
 
     elif provider == "ollama":
         from langchain_openai import ChatOpenAI
+
         return ChatOpenAI(
             model=resolved_model,
             temperature=temperature,
@@ -237,8 +248,11 @@ def build_llm(temperature: float = 0.2) -> BaseChatModel:
     # The wrapper logs every fallback activation (Plan 2 B5).
     fallback_provider = (s.llm_fallback_provider or "").lower()
     if fallback_provider and fallback_provider != provider:
-        logger.info("Fallback configured: provider=%s, model=%s",
-                     fallback_provider, s.llm_fallback_model or "(default)")
+        logger.info(
+            "Fallback configured: provider=%s, model=%s",
+            fallback_provider,
+            s.llm_fallback_model or "(default)",
+        )
         fallback = _build_provider_llm(
             provider=fallback_provider,
             model=s.llm_fallback_model,
@@ -246,7 +260,8 @@ def build_llm(temperature: float = 0.2) -> BaseChatModel:
             api_key=_get_api_key(fallback_provider),
         )
         return _wrap_with_observable_fallback(
-            primary, fallback,
+            primary,
+            fallback,
             primary_name=provider,
             fallback_name=fallback_provider,
         )

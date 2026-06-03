@@ -19,6 +19,7 @@ Vault refs:
   - 04-LangGraph-Core/03-Routing-Retries-Recovery.md
   - 04-LangGraph-Core/04-Checkpoints-Human-In-The-Loop.md
 """
+
 from __future__ import annotations
 
 import logging
@@ -127,9 +128,7 @@ def _build_mongo_checkpointer():
     s = get_settings()
     client = MongoClient(s.mongo_uri)
     saver = MongoDBSaver(client, db_name=s.mongo_db_name)
-    logger.info(
-        "LangGraph checkpointer: MongoDBSaver(db=%s)", s.mongo_db_name
-    )
+    logger.info("LangGraph checkpointer: MongoDBSaver(db=%s)", s.mongo_db_name)
     return saver
 
 

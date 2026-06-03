@@ -2,6 +2,7 @@
 
 Compat shim; see ``backend/prompts/registry.py``.
 """
+
 from __future__ import annotations
 
 from backend.prompts.registry import load_template

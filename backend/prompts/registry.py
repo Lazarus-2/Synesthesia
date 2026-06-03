@@ -28,6 +28,7 @@ YAML schema::
       - role: human
         content: "{message}"
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,7 @@ def _resolve_path(name: str, version: str) -> Path:
         # in zero-padded form (v01..v99); we deliberately use this convention.
         candidates = sorted(p for p in _TEMPLATES_DIR.iterdir() if p.is_dir())
         if not candidates:
-            raise FileNotFoundError(
-                f"No prompt template versions found under {_TEMPLATES_DIR}"
-            )
+            raise FileNotFoundError(f"No prompt template versions found under {_TEMPLATES_DIR}")
         version_dir = candidates[-1]
     else:
         version_dir = _TEMPLATES_DIR / version
@@ -97,7 +96,9 @@ def load_template(name: str, version: str = "latest") -> ChatPromptTemplate:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     logger.info(
         "loaded prompt template: name=%s version=%s file=%s",
-        raw.get("name", name), raw.get("version", version), path,
+        raw.get("name", name),
+        raw.get("version", version),
+        path,
     )
     return _build_template(raw)
 

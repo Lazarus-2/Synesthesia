@@ -16,6 +16,7 @@ These tests exercise the routing predicates and a minimal compiled graph
   - A genuine features error retries at most twice.
   - A clean run completes without entering retry logic.
 """
+
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
@@ -71,15 +72,18 @@ class TestIngestErrorRouting:
 
         g.add_edge(START, "ingest")
         g.add_conditional_edges(
-            "ingest", has_errors_route,
+            "ingest",
+            has_errors_route,
             {"fail": END, "ok": "validate_audio"},
         )
         g.add_conditional_edges(
-            "validate_audio", has_errors_route,
+            "validate_audio",
+            has_errors_route,
             {"fail": END, "ok": "features"},
         )
         g.add_conditional_edges(
-            "features", should_retry,
+            "features",
+            should_retry,
             {"retry": "features", "fail": END, "ok": "roman"},
         )
         g.add_edge("roman", END)
@@ -115,11 +119,13 @@ class TestValidateErrorRouting:
         g.add_node("features", features_no_op)
         g.add_edge(START, "ingest")
         g.add_conditional_edges(
-            "ingest", has_errors_route,
+            "ingest",
+            has_errors_route,
             {"fail": END, "ok": "validate_audio"},
         )
         g.add_conditional_edges(
-            "validate_audio", has_errors_route,
+            "validate_audio",
+            has_errors_route,
             {"fail": END, "ok": "features"},
         )
         g.add_edge("features", END)
@@ -145,6 +151,7 @@ class TestProductionGraphTerminatesOnBadInput:
         from langgraph.checkpoint.memory import MemorySaver
 
         from backend.graph.graph import build_graph
+
         return build_graph(MemorySaver())
 
     def test_local_path_typed_as_url_terminates_fast(self):
@@ -217,8 +224,7 @@ class TestProductionGraphTerminatesOnBadInput:
 
         result = asyncio.run(run())
         assert result.get("errors"), "expected errors from missing file"
-        assert any("Audio file not found" in e or "validate_audio" in e
-                    for e in result["errors"])
+        assert any("Audio file not found" in e or "validate_audio" in e for e in result["errors"])
 
 
 class TestFeaturesRetryStillBounded:
@@ -242,15 +248,18 @@ class TestFeaturesRetryStillBounded:
         g.add_node("features", features_always_fails)
         g.add_edge(START, "ingest")
         g.add_conditional_edges(
-            "ingest", has_errors_route,
+            "ingest",
+            has_errors_route,
             {"fail": END, "ok": "validate_audio"},
         )
         g.add_conditional_edges(
-            "validate_audio", has_errors_route,
+            "validate_audio",
+            has_errors_route,
             {"fail": END, "ok": "features"},
         )
         g.add_conditional_edges(
-            "features", should_retry,
+            "features",
+            should_retry,
             {"retry": "features", "fail": END, "ok": END},
         )
         graph = g.compile()

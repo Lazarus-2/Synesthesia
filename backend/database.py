@@ -8,6 +8,7 @@ Previously this module had a lazy-init path with module-level globals mutated
 on first request, which raced under concurrent first-request load and could
 create multiple Motor clients.
 """
+
 from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -78,9 +79,7 @@ def get_mongodb() -> AsyncIOMotorDatabase:
     (i.e. outside the FastAPI lifespan).
     """
     if _db is None:
-        raise RuntimeError(
-            "MongoDB not initialized. Did the FastAPI lifespan hook run?"
-        )
+        raise RuntimeError("MongoDB not initialized. Did the FastAPI lifespan hook run?")
     return _db
 
 

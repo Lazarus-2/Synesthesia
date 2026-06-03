@@ -2,7 +2,6 @@
 Unit tests for the deterministic music-theory tools.
 Vault ref: 03-LangChain-Core/05-Testing-Debugging-LangChain.md
 """
-import pytest
 
 from backend.tools.capo import suggest_capo
 from backend.tools.transpose import transpose_chord, transpose_progression
@@ -23,9 +22,7 @@ class TestTranspose:
         assert transpose_chord("Bb", 0) == "A#"
 
     def test_progression_preserves_order(self):
-        out = transpose_progression.invoke(
-            {"chords": ["C", "G", "Am", "F"], "semitones": 2}
-        )
+        out = transpose_progression.invoke({"chords": ["C", "G", "Am", "F"], "semitones": 2})
         assert out == ["D", "A", "Bm", "G"]
 
 
@@ -44,6 +41,7 @@ class TestCapo:
 
 from backend.tools.voicings import get_chord_diagrams
 
+
 class TestChordDiagrams:
     def test_get_chord_diagrams_guitar(self):
         diagrams = get_chord_diagrams(["C", "Am", "G7"], instrument="guitar")
@@ -51,17 +49,17 @@ class TestChordDiagrams:
         # Ensure fallback happens for Am and shape works for C
         assert diagrams[0].chord == "C"
         assert diagrams[0].instrument == "guitar"
-        
+
     def test_get_chord_diagrams_bass(self):
         diagrams = get_chord_diagrams(["C", "G"], instrument="bass")
         assert len(diagrams) == 2
         assert diagrams[0].instrument == "bass"
-        
+
     def test_get_chord_diagrams_ukulele(self):
         diagrams = get_chord_diagrams(["C", "Em"], instrument="ukulele")
         assert len(diagrams) == 2
         assert diagrams[0].instrument == "ukulele"
-        
+
     def test_guardrails_malformed_input(self):
         # Should gracefully fallback or ignore
         diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")

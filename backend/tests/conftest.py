@@ -11,13 +11,14 @@ deterministic short WAV from a known chord progression so:
 Heavier-weight fixtures (mock Mongo, mock JobStore, dependency overrides)
 live here too so each test file doesn't re-implement them.
 """
+
 from __future__ import annotations
 
 import math
 import struct
 import wave
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -96,6 +97,7 @@ def synthetic_song(tmp_path_factory: pytest.TempPathFactory) -> Path:
 # DB / auth helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_mongo() -> MagicMock:
     """In-memory async-Mongo stub.
@@ -119,9 +121,11 @@ def mock_mongo() -> MagicMock:
         chain.sort.return_value = chain
         chain.skip.return_value = chain
         chain.limit.return_value = chain
+
         async def _aiter():
             return
             yield  # never reached, makes this an async generator
+
         chain.__aiter__ = lambda self=chain: _aiter()
         c.find = MagicMock(return_value=chain)
     return db
@@ -136,13 +140,16 @@ def api_client(mock_mongo):
     client; teardown clears dependency overrides.
     """
     import logging
+
     logging.getLogger().setLevel(logging.CRITICAL)
     import backend.database as _dbmod
+
     _dbmod._db = object()
 
     from fastapi.testclient import TestClient
-    from backend.main import app
+
     from backend.database import get_mongodb
+    from backend.main import app
 
     app.dependency_overrides[get_mongodb] = lambda: mock_mongo
     try:
@@ -155,5 +162,6 @@ def api_client(mock_mongo):
 def _quiet_logs(caplog) -> Iterator[None]:
     """Stop the JSON formatter from spamming test output with cache-init lines."""
     import logging
+
     logging.getLogger("backend").setLevel(logging.WARNING)
     yield

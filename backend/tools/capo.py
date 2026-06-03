@@ -2,6 +2,7 @@
 Suggest a capo position that turns tricky chords into easy open-string chords.
 Vault ref: 03-LangChain-Core/04-Tools-Agents.md
 """
+
 from __future__ import annotations
 
 from langchain_core.tools import tool

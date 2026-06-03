@@ -2,6 +2,7 @@
 LangChain chatbot coordinator for the AURA music/site guide assistant.
 Vault ref: 03-LangChain-Core/02-Models-Prompts-LCEL.md
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,8 +30,9 @@ def _format_analysis_context(analysis: dict[str, Any] | None) -> str | None:
     key = analysis.get("key") or "Unknown"
     tempo = analysis.get("tempo")
     chords = analysis.get("chords") or []
-    chord_names = [c.get("chord") if isinstance(c, dict) else getattr(c, "chord", "?")
-                   for c in chords[:16]]
+    chord_names = [
+        c.get("chord") if isinstance(c, dict) else getattr(c, "chord", "?") for c in chords[:16]
+    ]
     roman_obj = analysis.get("roman")
     roman_progression: list[str] = []
     if isinstance(roman_obj, dict):
@@ -46,11 +48,11 @@ def _format_analysis_context(analysis: dict[str, Any] | None) -> str | None:
     if tempo is not None:
         lines.append(f"- Tempo: {float(tempo):.0f} BPM")
     if chord_names:
-        lines.append(f"- Progression (first {len(chord_names)}): "
-                     + " → ".join(str(c) for c in chord_names))
+        lines.append(
+            f"- Progression (first {len(chord_names)}): " + " → ".join(str(c) for c in chord_names)
+        )
     if roman_progression:
-        lines.append("- Roman numerals: "
-                     + " → ".join(roman_progression[:16]))
+        lines.append("- Roman numerals: " + " → ".join(roman_progression[:16]))
     title = analysis.get("title")
     if title:
         lines.append(f"- Title: {title}")
@@ -105,6 +107,7 @@ def get_chat_response(
     song instead of giving generic theory answers (Plan 3 A4).
     """
     from langchain_core.output_parsers import StrOutputParser
+
     langchain_messages = _build_history(history, analysis=analysis)
     try:
         llm = build_llm(temperature=0.7)
@@ -122,13 +125,12 @@ async def get_chat_response_stream(
 ) -> AsyncGenerator[str, None]:
     """Streaming version of :func:`get_chat_response` for SSE."""
     from langchain_core.output_parsers import StrOutputParser
+
     langchain_messages = _build_history(history, analysis=analysis)
     try:
         llm = build_llm(temperature=0.7)
         chain = chat_prompt | llm | StrOutputParser()
-        async for chunk in chain.astream(
-            {"message": message, "history": langchain_messages}
-        ):
+        async for chunk in chain.astream({"message": message, "history": langchain_messages}):
             yield chunk
     except Exception as e:
         logger.warning("Chat LLM stream failed: %s", e, exc_info=True)

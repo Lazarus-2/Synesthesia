@@ -10,6 +10,7 @@ The frontend's ``npm run codegen`` script then runs ``openapi-typescript``
 against that file to produce a TS types module. Decoupling the dump from
 the codegen lets us regenerate types in CI without spinning up the API.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,7 +32,8 @@ from backend.main import app  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=Path("frontend/web/src/types/openapi.json"),
     )

@@ -2,6 +2,7 @@
 Synesthesia Color Engine: Scriabin Circle of Fifths music-to-color mapping.
 Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 5)
 """
+
 from __future__ import annotations
 
 import colorsys
@@ -9,18 +10,18 @@ import re
 
 # Base Scriabin Circle of Fifths mapping for note pitch classes
 SCRIABIN_COLORS = {
-    "C": "#FF0000",      # Red
-    "G": "#FF7F00",      # Orange
-    "D": "#FFFF00",      # Yellow
-    "A": "#00FF00",      # Green
-    "E": "#00BFFF",      # Sky Blue (Moonshine)
-    "B": "#0000FF",      # Blue
-    "F#": "#4B0082",     # Violet-Blue / Indigo
-    "C#": "#8B00FF",     # Violet / Purple
-    "G#": "#D8BFD8",     # Purple / Lilac / Thistle
-    "D#": "#FFC0CB",     # Pink / Flesh
-    "A#": "#708090",     # Steel Gray
-    "F": "#8B0000",      # Deep Red
+    "C": "#FF0000",  # Red
+    "G": "#FF7F00",  # Orange
+    "D": "#FFFF00",  # Yellow
+    "A": "#00FF00",  # Green
+    "E": "#00BFFF",  # Sky Blue (Moonshine)
+    "B": "#0000FF",  # Blue
+    "F#": "#4B0082",  # Violet-Blue / Indigo
+    "C#": "#8B00FF",  # Violet / Purple
+    "G#": "#D8BFD8",  # Purple / Lilac / Thistle
+    "D#": "#FFC0CB",  # Pink / Flesh
+    "A#": "#708090",  # Steel Gray
+    "F": "#8B0000",  # Deep Red
 }
 
 # Enharmonic normalization
@@ -36,7 +37,7 @@ ENHARMONICS = {
 def hex_to_hls(hex_str: str) -> tuple[float, float, float]:
     """Convert hex color string like '#FF0000' to HLS coordinates (0-1)."""
     hex_str = hex_str.lstrip("#")
-    r, g, b = tuple(int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    r, g, b = tuple(int(hex_str[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
     return colorsys.rgb_to_hls(r, g, b)
 
 
@@ -85,7 +86,7 @@ def get_chord_color(chord_symbol: str) -> str:
         if norm_root in ("C", "G", "D", "A"):
             h = (h + 0.05) % 1.0  # Shift toward green/blue
         lt = max(0.15, lt * 0.5)  # Darker
-        s = max(0.2, s * 0.6)     # Less saturated
+        s = max(0.2, s * 0.6)  # Less saturated
     elif "7" in suffix_lower:
         # Dominant 7th -> highly saturated neon fluorescent boost
         s = min(1.0, s * 1.3)

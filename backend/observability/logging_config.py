@@ -19,6 +19,7 @@ Call :func:`configure_logging` exactly once at process start — currently
 from the FastAPI ``lifespan`` and the Taskiq worker (so both API and worker
 agree on the format).
 """
+
 from __future__ import annotations
 
 import json
@@ -30,12 +31,31 @@ from datetime import UTC, datetime
 # Reserved attribute names that ``logging.LogRecord`` carries unconditionally —
 # we don't want to clutter every output line with them, but we *do* want any
 # custom ``extra={...}`` fields the caller passed.
-_RECORD_RESERVED = frozenset({
-    "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-    "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-    "created", "msecs", "relativeCreated", "thread", "threadName",
-    "processName", "process", "taskName",
-})
+_RECORD_RESERVED = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "taskName",
+    }
+)
 
 
 class JSONFormatter(logging.Formatter):
@@ -71,11 +91,13 @@ def configure_logging(level: str | None = None) -> None:
     """
     root = logging.getLogger()
     # Idempotent: if we've already attached a JSONFormatter, no-op.
-    if any(isinstance(h, logging.StreamHandler) and
-           isinstance(h.formatter, JSONFormatter) for h in root.handlers):
+    if any(
+        isinstance(h, logging.StreamHandler) and isinstance(h.formatter, JSONFormatter)
+        for h in root.handlers
+    ):
         return
 
-    use_json = (os.getenv("LOG_FORMAT", "json").lower() == "json")
+    use_json = os.getenv("LOG_FORMAT", "json").lower() == "json"
     handler = logging.StreamHandler(sys.stdout)
     if use_json:
         handler.setFormatter(JSONFormatter())

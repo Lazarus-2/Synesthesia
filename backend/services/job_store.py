@@ -25,6 +25,7 @@ Lifecycle
 The ``JobStore`` is process-shared, not per-request — get the singleton
 via :func:`get_job_store`.
 """
+
 from __future__ import annotations
 
 import json
@@ -62,9 +63,7 @@ class JobStore(Protocol):
     def set_progress(self, job_id: str, payload: dict) -> None: ...
     def get_progress(self, job_id: str) -> dict | None: ...
     def heartbeat(self, job_id: str) -> None: ...
-    def is_stale(
-        self, job_id: str, *, timeout_s: int = DEFAULT_HEARTBEAT_TIMEOUT_S
-    ) -> bool: ...
+    def is_stale(self, job_id: str, *, timeout_s: int = DEFAULT_HEARTBEAT_TIMEOUT_S) -> bool: ...
     def cache_response(self, job_id: str, response_json: str) -> None: ...
     def get_cached_response(self, job_id: str) -> str | None: ...
 
@@ -86,8 +85,7 @@ class HybridJobStore:
     """
 
     def set_progress(self, job_id: str, payload: dict) -> None:
-        cache.set(_progress_key(job_id), json.dumps(payload),
-                  ttl_seconds=DEFAULT_PROGRESS_TTL_S)
+        cache.set(_progress_key(job_id), json.dumps(payload), ttl_seconds=DEFAULT_PROGRESS_TTL_S)
         # Every progress write is itself a heartbeat — the worker is alive.
         self.heartbeat(job_id)
 
@@ -102,12 +100,9 @@ class HybridJobStore:
             return None
 
     def heartbeat(self, job_id: str) -> None:
-        cache.set(_heartbeat_key(job_id), str(time.time()),
-                  ttl_seconds=DEFAULT_PROGRESS_TTL_S)
+        cache.set(_heartbeat_key(job_id), str(time.time()), ttl_seconds=DEFAULT_PROGRESS_TTL_S)
 
-    def is_stale(
-        self, job_id: str, *, timeout_s: int = DEFAULT_HEARTBEAT_TIMEOUT_S
-    ) -> bool:
+    def is_stale(self, job_id: str, *, timeout_s: int = DEFAULT_HEARTBEAT_TIMEOUT_S) -> bool:
         raw = cache.get(_heartbeat_key(job_id))
         if not raw:
             # No heartbeat yet → not stale, just not started. The endpoint's
@@ -120,8 +115,7 @@ class HybridJobStore:
         return (time.time() - last) > timeout_s
 
     def cache_response(self, job_id: str, response_json: str) -> None:
-        cache.set(_progress_key(job_id), response_json,
-                  ttl_seconds=DEFAULT_PROGRESS_TTL_S)
+        cache.set(_progress_key(job_id), response_json, ttl_seconds=DEFAULT_PROGRESS_TTL_S)
 
     def get_cached_response(self, job_id: str) -> str | None:
         return cache.get(_progress_key(job_id))

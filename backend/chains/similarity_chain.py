@@ -4,6 +4,7 @@ Vault refs:
   - 02-LLM-Architecture/02-RAG-Architecture.md
   - 03-LangChain-Core/03-Retrieval-Chains.md
 """
+
 from __future__ import annotations
 
 import json
@@ -72,7 +73,8 @@ def embed_progression(chords: list[str]) -> list[float]:
 
 
 def embed_progression_v2(
-    chords: list[str], key: str | None = None,
+    chords: list[str],
+    key: str | None = None,
 ) -> list[float]:
     """Sequence- and key-aware progression embedding (Plan 3 A6).
 
@@ -89,9 +91,9 @@ def embed_progression_v2(
     Returns a 36-D vector: ``[ pitch_class_12, transition_12, qualities_12 ]``
     laid out so cosine similarity is well-defined.
     """
-    pc = [0.0] * 12          # pitch-class counts (rotated)
-    transitions = [0.0] * 12 # interval-from-previous-root (rotated)
-    qualities = [0.0] * 12   # quality features: minor/seventh by root class
+    pc = [0.0] * 12  # pitch-class counts (rotated)
+    transitions = [0.0] * 12  # interval-from-previous-root (rotated)
+    qualities = [0.0] * 12  # quality features: minor/seventh by root class
 
     if not chords:
         return pc + transitions + qualities
@@ -101,9 +103,10 @@ def embed_progression_v2(
     key_offset = 0
     if key:
         key_root = key.strip().split()[0]
-        key_root_norm = _FLATS.get(key_root, key_root.replace("b", "")
-                                   if len(key_root) > 1 and key_root[1] == "b"
-                                   else key_root)
+        key_root_norm = _FLATS.get(
+            key_root,
+            key_root.replace("b", "") if len(key_root) > 1 and key_root[1] == "b" else key_root,
+        )
         if key_root_norm in _NOTE_TO_IDX:
             key_offset = _NOTE_TO_IDX[key_root_norm]
 
@@ -118,7 +121,7 @@ def embed_progression_v2(
         pc[idx] += 1.0
         if is_minor:
             pc[(idx + 3) % 12] += 0.5
-            qualities[idx] += 0.7   # minor-quality marker on the rotated root
+            qualities[idx] += 0.7  # minor-quality marker on the rotated root
         else:
             pc[(idx + 4) % 12] += 0.5
         pc[(idx + 7) % 12] += 0.5
@@ -142,12 +145,17 @@ def embed_progression_v2(
 # Module-level cache of seed songs (re-read every call previously).
 _GOLDEN_SONGS: list[dict] | None = None
 _DEFAULT_SEED_SONGS: list[dict] = [
-    {"title": "Let It Be", "artist": "The Beatles",
-     "expected_progression": ["C", "G", "Am", "F"]},
-    {"title": "Wonderwall", "artist": "Oasis",
-     "expected_progression": ["Em7", "G", "Dsus4", "A7sus4"]},
-    {"title": "Autumn Leaves", "artist": "Various",
-     "expected_progression": ["Cm7", "F7", "BbMaj7", "EbMaj7"]},
+    {"title": "Let It Be", "artist": "The Beatles", "expected_progression": ["C", "G", "Am", "F"]},
+    {
+        "title": "Wonderwall",
+        "artist": "Oasis",
+        "expected_progression": ["Em7", "G", "Dsus4", "A7sus4"],
+    },
+    {
+        "title": "Autumn Leaves",
+        "artist": "Various",
+        "expected_progression": ["Cm7", "F7", "BbMaj7", "EbMaj7"],
+    },
 ]
 
 
@@ -175,7 +183,9 @@ def _load_golden_songs() -> list[dict]:
 
 
 def find_similar(
-    chords: list[str], k: int = 5, key: str | None = None,
+    chords: list[str],
+    k: int = 5,
+    key: str | None = None,
 ) -> list[dict]:
     """Return top-k similar songs using the v2 sequence-aware embedding.
 
@@ -201,16 +211,16 @@ def find_similar(
             nq = float(np.linalg.norm(query_vec))
             nc = float(np.linalg.norm(cand_vec))
             score = (dot / (nq * nc)) if (nq > 0 and nc > 0) else 0.0
-            results.append({
-                "title": s.get("title", "Unknown"),
-                "artist": s.get("artist", "Unknown"),
-                "progression": prog,
-                "score": float(score),
-            })
+            results.append(
+                {
+                    "title": s.get("title", "Unknown"),
+                    "artist": s.get("artist", "Unknown"),
+                    "progression": prog,
+                    "score": float(score),
+                }
+            )
     except (ValueError, np.linalg.LinAlgError) as e:
-        logger.warning(
-            "Sequence-aware similarity failed; falling back to Jaccard: %s", e
-        )
+        logger.warning("Sequence-aware similarity failed; falling back to Jaccard: %s", e)
         query_set = set(chords)
         results.clear()
         for s in songs:
@@ -221,12 +231,14 @@ def find_similar(
             inter = query_set.intersection(cand_set)
             union = query_set.union(cand_set)
             score = float(len(inter) / len(union)) if union else 0.0
-            results.append({
-                "title": s.get("title", "Unknown"),
-                "artist": s.get("artist", "Unknown"),
-                "progression": prog,
-                "score": score,
-            })
+            results.append(
+                {
+                    "title": s.get("title", "Unknown"),
+                    "artist": s.get("artist", "Unknown"),
+                    "progression": prog,
+                    "score": score,
+                }
+            )
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:k]
@@ -238,6 +250,5 @@ def build_similarity_chain() -> Runnable:
     Input dict shape: ``{"chords": list[str], "key": str | None, "k": int}``.
     """
     from langchain_core.runnables import RunnableLambda
-    return RunnableLambda(
-        lambda x: find_similar(x["chords"], k=x.get("k", 5), key=x.get("key"))
-    )
+
+    return RunnableLambda(lambda x: find_similar(x["chords"], k=x.get("k", 5), key=x.get("key")))
