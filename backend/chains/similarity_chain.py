@@ -157,7 +157,8 @@ def _load_golden_songs() -> list[dict]:
     if _GOLDEN_SONGS is not None:
         return _GOLDEN_SONGS
 
-    golden_path = Path(__file__).parent.parent.parent / "tests" / "golden_songs.json"
+    # backend/chains/similarity_chain.py → backend/ → backend/tests/golden_songs.json
+    golden_path = Path(__file__).parent.parent / "tests" / "golden_songs.json"
     if golden_path.exists():
         try:
             with golden_path.open("r") as f:

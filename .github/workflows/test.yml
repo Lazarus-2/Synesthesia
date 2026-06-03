@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: backend/requirements.txt
 
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
@@ -54,7 +54,9 @@ jobs:
           python -m pip install --upgrade pip
           # Skip the heavy demucs / basic-pitch installs — they're optional
           # extras and the unit tests don't exercise them.
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
+          # Editable install so ``import backend`` resolves cleanly under pytest.
+          pip install -e ./backend
 
       - name: Pytest
-        run: pytest tests/test_tools.py tests/test_db_cache.py -v --tb=short
+        run: pytest backend/tests/test_tools.py backend/tests/test_db_cache.py -v --tb=short

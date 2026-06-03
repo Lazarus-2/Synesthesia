@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "openapi:dump": "(cd ../.. && python scripts/dump_openapi.py -o frontend/web/src/types/openapi.json)",
+    "openapi:dump": "(cd ../.. && python backend/scripts/dump_openapi.py -o frontend/web/src/types/openapi.json)",
     "openapi:codegen": "openapi-typescript src/types/openapi.json -o src/types/api.gen.ts",
     "codegen": "npm run openapi:dump && npm run openapi:codegen"
   },

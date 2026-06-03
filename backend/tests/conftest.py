@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import math
 import struct
-import sys
 import wave
 from pathlib import Path
 from typing import Iterator
@@ -23,10 +22,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-# Make ``backend`` importable when pytest is invoked from the project root.
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+# ``backend`` is importable via the editable install (pip install -e .) — no
+# sys.path shim needed.
 
 
 # ---------------------------------------------------------------------------

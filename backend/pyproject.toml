@@ -110,9 +110,15 @@ dev = [
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# pyproject.toml now lives in backend/. ``where = [".."]`` makes setuptools
+# search the repo root (parent of backend/) so it discovers the existing
+# ``backend`` package without renaming the namespace. ``pip install -e .``
+# run from inside backend/ wires up backend.X imports as before; the move
+# is purely organisational.
 [tool.setuptools.packages.find]
+where = [".."]
 include = ["backend*"]
-exclude = ["tests*", "frontend*", "storage*", "scripts*"]
+exclude = ["backend.tests*", "backend.scripts*", "frontend*", "storage*"]
 
 
 # ============================================================================
@@ -122,8 +128,14 @@ exclude = ["tests*", "frontend*", "storage*", "scripts*"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Paths are interpreted relative to the working dir at invocation time. Ruff
+# is invoked either from the repo root (``ruff check backend/``) or from
+# inside backend/ (``cd backend && ruff check .``); ``.venv`` covers both
+# the old root-level and new backend-local venvs.
 extend-exclude = [
     ".venv",
+    "../frontend/",
+    "../storage/",
     "frontend/",
     "storage/",
 ]
@@ -169,6 +181,8 @@ follow_imports = "silent"
 #   - backend/services/cache.py — Awaitable[str|None] / sync return-type mix
 #   - backend/chains/llm_factory.py — LangChain api_key annotation expects
 #     SecretStr but accepts str at runtime; needs explicit SecretStr wrapping
+# Paths below are resolved against mypy's cwd (NOT the config-file parent).
+# Always invoke from the repo root: ``mypy --config-file backend/pyproject.toml``.
 files = [
     "backend/config.py",
     "backend/database.py",

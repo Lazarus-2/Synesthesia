@@ -2,7 +2,7 @@
 # Drive the live browser E2E suite end-to-end.
 #
 # Assumes:
-#   - .venv/ has playwright + pytest-playwright installed
+#   - backend/.venv/ has playwright + pytest-playwright installed
 #   - chromium has been pulled (playwright install chromium)
 #   - Mongo + Redis are reachable on localhost
 #
@@ -12,12 +12,10 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# This script lives at backend/tests/e2e_browser/run_e2e.sh — three ``..``
+# hops land on the repo root.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
-
-started_uvicorn=0
-started_worker=0
-started_frontend=0
 
 ensure_uvicorn() {
     if curl -fsS -m 3 http://localhost:8000/health >/dev/null 2>&1; then
@@ -26,9 +24,8 @@ ensure_uvicorn() {
     fi
     echo "[start] uvicorn"
     mkdir -p logs
-    nohup .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --log-level warning >logs/uvicorn.log 2>&1 &
+    nohup backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --log-level warning >logs/uvicorn.log 2>&1 &
     disown
-    started_uvicorn=1
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
         if curl -fsS -m 2 http://localhost:8000/health >/dev/null 2>&1; then
@@ -43,9 +40,8 @@ ensure_worker() {
         echo "[ok] taskiq worker already running"; return
     fi
     echo "[start] taskiq worker"
-    nohup .venv/bin/taskiq worker backend.worker:broker backend.main --workers 1 >logs/worker.log 2>&1 &
+    nohup backend/.venv/bin/taskiq worker backend.worker:broker backend.main --workers 1 >logs/worker.log 2>&1 &
     disown
-    started_worker=1
     sleep 3
 }
 
@@ -56,7 +52,6 @@ ensure_frontend() {
     echo "[start] next dev"
     (cd frontend/web && nohup npm run dev >../../logs/frontend.log 2>&1 &)
     disown
-    started_frontend=1
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
         code=$(curl -fsS -m 2 -o /dev/null -w "%{http_code}" http://localhost:3000/ || echo 000)
@@ -67,7 +62,7 @@ ensure_frontend() {
 
 seed_samples() {
     echo "[seed] sample-* analyses"
-    .venv/bin/python scripts/seed_samples.py | tail -3
+    backend/.venv/bin/python backend/scripts/seed_samples.py | tail -3
 }
 
 ensure_uvicorn
@@ -75,12 +70,12 @@ ensure_worker
 ensure_frontend
 seed_samples
 
-echo "==> running tests/e2e_browser/"
-.venv/bin/pytest tests/e2e_browser/ -v --tb=short --capture=no
+echo "==> running backend/tests/e2e_browser/"
+backend/.venv/bin/pytest backend/tests/e2e_browser/ -v --tb=short --capture=no
 status=$?
 
 echo
-echo "report: tests/e2e_browser/artifacts/run_report.md"
-echo "screens: tests/e2e_browser/artifacts/screenshots/"
-echo "videos:  tests/e2e_browser/artifacts/video/"
+echo "report: backend/tests/e2e_browser/artifacts/run_report.md"
+echo "screens: backend/tests/e2e_browser/artifacts/screenshots/"
+echo "videos:  backend/tests/e2e_browser/artifacts/video/"
 exit "$status"

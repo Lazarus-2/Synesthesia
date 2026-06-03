@@ -8,12 +8,13 @@ Synesthesia (formerly "SoundBreak") is a music-analysis + education platform. A 
 
 ## Commands
 
-Backend (Python 3.12, venv assumed):
+Backend (Python 3.12; venv lives at `backend/.venv/`):
 
 ```bash
-pip install -r requirements.txt               # heavy — librosa, madmom, demucs, basic-pitch
-uvicorn backend.main:app --reload             # API on :8000
-taskiq worker backend.worker:broker backend.main   # background analysis worker (needs Redis)
+pip install -r backend/requirements.txt          # heavy — librosa, madmom, demucs, basic-pitch
+pip install -e ./backend                          # editable install so ``import backend`` works
+uvicorn backend.main:app --reload                 # API on :8000
+taskiq worker backend.worker:broker backend.main  # background analysis worker (needs Redis)
 ```
 
 Full stack (canonical):
@@ -24,16 +25,16 @@ docker-compose up -d   # mongo (replica set rs0), redis, api:8000, worker
 
 MongoDB **must** run as a replica set — Taskiq transactions require it. The `mongodb-setup` service in `docker-compose.yml` initiates `rs0` automatically; for a local non-docker mongo you must `rs.initiate()` manually.
 
-Tests (pytest, no `conftest.py`):
+Tests live under `backend/tests/`:
 
 ```bash
-pytest tests/                                  # all
-pytest tests/test_tools.py                     # one file
-pytest tests/test_tools.py::TestTranspose -v   # one class/test
-python -m tests.eval_runner                    # golden-songs eval harness
+pytest backend/tests/                                  # all
+pytest backend/tests/test_tools.py                     # one file
+pytest backend/tests/test_tools.py::TestTranspose -v   # one class/test
+python -m backend.tests.eval_runner                    # golden-songs eval harness
 ```
 
-`tests/test_pipeline.py` needs `tests/audio/test_song.mp3` to exist; it is skipped otherwise.
+`backend/tests/test_pipeline.py` needs `backend/tests/audio/test_song.mp3` to exist; it is skipped otherwise.
 
 Frontend (Next.js 16 — see warning below):
 
@@ -67,7 +68,7 @@ State shape lives in `backend/graph/state.py` (`AnalysisState` TypedDict). Check
 Chains compose LLM + prompt + parser:
 - `theory_chain.py` — text explanation (StrOutputParser)
 - `instrument_chain.py` — uses `.with_structured_output(LLMInstrumentTips)`; merges LLM tips with deterministic chord diagrams from `tools/voicings.py` in parallel
-- `similarity_chain.py` — no LLM; pure 12-D chromagram cosine similarity against `tests/golden_songs.json`
+- `similarity_chain.py` — no LLM; pure 12-D chromagram cosine similarity against `backend/tests/golden_songs.json`
 - `chat_chain.py` — has an explicit offline-fallback branch that returns hardcoded Scriabin color guidance if no LLM is reachable
 
 ### Deterministic tools vs. LLM output

@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: backend/requirements.txt
 
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libsndfile1
@@ -43,10 +43,11 @@ jobs:
       - name: Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
+          pip install -e ./backend
 
       - name: Run eval harness
-        run: python -m tests.eval_runner
+        run: python -m backend.tests.eval_runner
         # Plan 3 D6 follow-up: parse the score, compare against a stored
         # baseline, fail if accuracy drops > 5%, and post a comment on the
         # triggering PR with the delta.

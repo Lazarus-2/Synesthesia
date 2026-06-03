@@ -26,16 +26,19 @@ from typing import Iterator
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-# All paths are relative to the repo root so they survive ``cd`` from CLI.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_ARTIFACT_DIR = _REPO_ROOT / "tests" / "e2e_browser" / "artifacts"
+# After the Python-into-backend/ refactor, this file lives at
+# ``backend/tests/e2e_browser/conftest.py`` — three ``parent`` hops up
+# lands on the repo root. Artifacts and fixture WAVs live next to the
+# tests so the e2e tree is self-contained and easy to wipe.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts"
 _SCREENSHOT_DIR = _ARTIFACT_DIR / "screenshots"
 _VIDEO_DIR = _ARTIFACT_DIR / "video"
 _REPORT_PATH = _ARTIFACT_DIR / "run_report.md"
 
 _FRONTEND_URL = os.environ.get("E2E_FRONTEND_URL", "http://localhost:3000")
 _API_URL = os.environ.get("E2E_API_URL", "http://localhost:8000")
-_FIXTURE_AUDIO_DIR = _REPO_ROOT / "tmp_audio"
+_FIXTURE_AUDIO_DIR = _ARTIFACT_DIR / "tmp_audio"
 
 
 # ----------------------------------------------------------------------------

@@ -14,12 +14,12 @@ discussion lives in [docs/architecture.md](docs/architecture.md).
 ## Quick start (local, no Docker)
 
 ```bash
-# Python 3.12
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+# Python 3.12 — venv lives at backend/.venv after the layout refactor
+python -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install -e ./backend[dev]
 # Optionally pull the heavy ML deps:
-#   pip install -e ".[dev,audio-heavy,providers]"
+#   pip install -e "./backend[dev,audio-heavy,providers]"
 
 cp .env.example .env
 # Edit .env — at minimum set LLM_PROVIDER (default ``ollama``).
@@ -74,11 +74,11 @@ Key env vars: `LLM_PROVIDER`, `MODEL_NAME`, `LLM_FALLBACK_PROVIDER`,
 ## Test, lint, type-check
 
 ```bash
-pytest                                  # ~60+ tests, no Mongo required
-pytest tests/test_ml.py -v              # ML wrappers against synthetic audio
-ruff check backend/                     # style + bug rules
-mypy --config-file pyproject.toml       # strict-first scope
-cd frontend/web && npm run lint         # ESLint + react-hooks rules
+pytest backend/tests/                          # ~60+ tests, no Mongo required
+pytest backend/tests/test_ml.py -v             # ML wrappers against synthetic audio
+ruff check backend/                            # style + bug rules
+mypy --config-file backend/pyproject.toml      # strict-first scope
+cd frontend/web && npm run lint                # ESLint + react-hooks rules
 ```
 
 The OpenAPI spec doubles as the TypeScript source of truth:

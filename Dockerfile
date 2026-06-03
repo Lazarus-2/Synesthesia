@@ -32,7 +32,8 @@ WORKDIR /build
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements.txt .
+# Python tooling lives under backend/ after the layout refactor.
+COPY backend/requirements.txt .
 RUN pip install --upgrade pip setuptools wheel \
  && pip install -r requirements.txt
 
@@ -62,6 +63,10 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY --chown=app:app . .
+
+# Editable install so ``import backend.X`` resolves at runtime regardless
+# of the Python entry point's cwd.
+RUN /opt/venv/bin/pip install -e /app/backend
 
 RUN mkdir -p /app/storage/uploads /app/storage/stems \
  && chown -R app:app /app/storage
@@ -103,6 +108,10 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY --chown=app:app . .
+
+# Editable install so ``import backend.X`` resolves at runtime regardless
+# of the Python entry point's cwd.
+RUN /opt/venv/bin/pip install -e /app/backend
 
 RUN mkdir -p /app/storage/uploads /app/storage/stems \
  && chown -R app:app /app/storage

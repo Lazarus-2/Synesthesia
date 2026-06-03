@@ -2,7 +2,7 @@
 
 Run from the project root:
 
-    python scripts/dump_openapi.py [--output PATH]
+    python backend/scripts/dump_openapi.py [--output PATH]
 
 Default output: ``frontend/web/src/types/openapi.json``.
 
@@ -18,12 +18,7 @@ import logging
 import sys
 from pathlib import Path
 
-# Make ``backend`` importable when invoked from the project root, regardless
-# of how the user launched Python (``python scripts/foo.py`` vs ``-m``).
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
+# ``backend`` is importable via the editable install (pip install -e .).
 # Quiet noisy startup logs so the dump output isn't muddied.
 logging.disable(logging.CRITICAL)
 
