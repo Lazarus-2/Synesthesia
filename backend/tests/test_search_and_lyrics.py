@@ -7,8 +7,6 @@ merged-dedupe logic across Deezer + MusicBrainz.
 
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 
@@ -126,10 +124,25 @@ async def test_search_musicbrainz_happy_path(monkeypatch):
 @pytest.mark.asyncio
 async def test_merged_search_dedupes_by_title_artist(monkeypatch):
     async def fake_deezer(q, limit=10):
-        return [{"source": "deezer", "title": "Blackbird", "artist": "The Beatles", "image_url": "x.jpg"}]
+        return [
+            {
+                "source": "deezer",
+                "title": "Blackbird",
+                "artist": "The Beatles",
+                "image_url": "x.jpg",
+            }
+        ]
 
     async def fake_mb(q, limit=10):
-        return [{"source": "musicbrainz", "title": "blackbird", "artist": "the beatles", "mbid": "abc", "year": "1968"}]
+        return [
+            {
+                "source": "musicbrainz",
+                "title": "blackbird",
+                "artist": "the beatles",
+                "mbid": "abc",
+                "year": "1968",
+            }
+        ]
 
     monkeypatch.setattr(search, "search_deezer", fake_deezer)
     monkeypatch.setattr(search, "search_musicbrainz", fake_mb)

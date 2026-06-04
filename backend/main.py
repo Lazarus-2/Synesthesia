@@ -985,9 +985,7 @@ async def search_tracks(request: Request, q: str, limit: int = 10) -> dict:
     limits we should respect.
     """
     if not q or len(q) > 200:
-        raise HTTPException(
-            status_code=400, detail="Query must be 1-200 characters"
-        )
+        raise HTTPException(status_code=400, detail="Query must be 1-200 characters")
     limit = max(1, min(limit, 25))
 
     import json as _json
@@ -1021,9 +1019,7 @@ async def get_lyrics(
     covers and live versions.
     """
     if not track_name or not artist_name:
-        raise HTTPException(
-            status_code=400, detail="track_name and artist_name are required"
-        )
+        raise HTTPException(status_code=400, detail="track_name and artist_name are required")
 
     import json as _json
 

@@ -145,5 +145,7 @@ async def merged_search(q: str, limit: int = 10) -> list[dict[str, Any]]:
             for f in ("mbid", "year"):
                 if not existing.get(f) and item.get(f):
                     existing[f] = item[f]
-            existing["sources"] = sorted({existing.get("source", ""), item.get("source", "")} - {""})
+            existing["sources"] = sorted(
+                {existing.get("source", ""), item.get("source", "")} - {""}
+            )
     return list(by_key.values())[:limit]
