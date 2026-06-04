@@ -44,3 +44,4 @@ backend/tests/e2e_browser/artifacts/
 .vscode/
 .cursorrules
 cursor_exports.json
+.playwright-mcp/
