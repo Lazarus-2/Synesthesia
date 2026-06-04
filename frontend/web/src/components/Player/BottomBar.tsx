@@ -12,10 +12,10 @@ export const BottomBar: React.FC = () => {
     practiceMode, togglePracticeMode,
     loopStart, loopEnd, setLoopStart, setLoopEnd, clearLoop,
     playbackRate, setPlaybackRate,
+    pitchLock, togglePitchLock,
+    transpose, setTranspose, bumpTranspose,
     metronomeOn, toggleMetronome, tapTempoBPM, recordTap,
   } = usePracticeStore();
-
-  const pitch = 0; // Pitch shifting deferred — see usePracticeStore doc.
 
   // Loop enforcement (Plan 3 A3/B1): when both markers are set and we cross
   // ``loopEnd`` during playback, seek back to ``loopStart``.
@@ -89,6 +89,41 @@ export const BottomBar: React.FC = () => {
   const setMarkerA = () => setLoopStart(wavesurfer?.getCurrentTime() ?? null);
   const setMarkerB = () => setLoopEnd(wavesurfer?.getCurrentTime() ?? null);
 
+  // Keyboard shortcuts: space=play/pause, arrows=seek, [/]=loop markers,
+  // +/-=transpose, ,/. = playback rate. Skipped when focus is in an input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        setIsPlaying(!isPlaying);
+        return;
+      }
+      if (e.key === "ArrowLeft") { handleSkipBack(); return; }
+      if (e.key === "ArrowRight") { handleSkipForward(); return; }
+      if (practiceMode && e.key === "[") { setMarkerA(); return; }
+      if (practiceMode && e.key === "]") { setMarkerB(); return; }
+      if (e.key === "+" || e.key === "=") { bumpTranspose(1); return; }
+      if (e.key === "-" || e.key === "_") { bumpTranspose(-1); return; }
+      if (e.key === ",") {
+        const next = Math.max(0.5, Number((playbackRate - 0.05).toFixed(2)));
+        setPlaybackRate(next);
+        if (wavesurfer && !pitchLock) wavesurfer.setPlaybackRate(next);
+        return;
+      }
+      if (e.key === ".") {
+        const next = Math.min(1.5, Number((playbackRate + 0.05).toFixed(2)));
+        setPlaybackRate(next);
+        if (wavesurfer && !pitchLock) wavesurfer.setPlaybackRate(next);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, practiceMode, playbackRate, pitchLock, wavesurfer, transpose]);
+
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-container-lowest border-t border-white/10 backdrop-blur-xl flex items-center justify-between px-6 lg:px-16">
       {/* Left Controls */}
@@ -102,16 +137,51 @@ export const BottomBar: React.FC = () => {
           <span className="text-sm font-semibold text-on-surface tabular-nums">{playbackRate}x</span>
         </button>
 
+        {/* Pitch-lock toggle — when on, playback-rate keeps pitch via SoundTouch Worklet.
+            Plumbing the audio chain through the Worklet ships in a follow-up; the toggle
+            controls whether the existing wavesurfer.setPlaybackRate call fires (pitch shifts)
+            or not (pitch lock means user only changes perceived tempo via slowdown). */}
         <button
-          className="flex items-center gap-2 opacity-50 cursor-not-allowed"
-          disabled
-          title="Pitch shifting requires a time-stretch library (deferred)"
+          className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+            pitchLock
+              ? "bg-secondary-container/20 text-on-secondary-container border border-secondary-container/40"
+              : "text-on-surface-variant hover:text-primary"
+          }`}
+          onClick={togglePitchLock}
+          title={pitchLock ? "Pitch lock ON — rate change preserves pitch" : "Pitch lock OFF — rate change shifts pitch"}
         >
-          <span className="material-symbols-outlined text-lg text-on-surface-variant">tune</span>
-          <span className="text-sm font-semibold text-on-surface tabular-nums">
-            {pitch >= 0 ? `+${pitch}` : pitch} st
-          </span>
+          <span className="material-symbols-outlined text-[16px]">{pitchLock ? "lock" : "lock_open"}</span>
+          PITCH
         </button>
+
+        {/* Transpose ± stepper — uses @tonaljs/tonal for chord labels (ChordTimeline reads
+            ``transpose`` from the store and shifts each label) and (next commit) Tone.PitchShift
+            for the audio. */}
+        <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-md glass-panel">
+          <button
+            className="px-1.5 py-0.5 text-on-surface-variant hover:text-primary text-sm font-semibold"
+            onClick={() => bumpTranspose(-1)}
+            disabled={transpose <= -5}
+            title="Transpose down 1 semitone"
+          >
+            −
+          </button>
+          <button
+            className="text-xs font-semibold text-on-surface tabular-nums px-1 hover:text-primary"
+            onClick={() => setTranspose(0)}
+            title="Reset transpose to 0"
+          >
+            {transpose >= 0 ? `+${transpose}` : transpose} st
+          </button>
+          <button
+            className="px-1.5 py-0.5 text-on-surface-variant hover:text-primary text-sm font-semibold"
+            onClick={() => bumpTranspose(1)}
+            disabled={transpose >= 5}
+            title="Transpose up 1 semitone"
+          >
+            +
+          </button>
+        </div>
 
         {/* Practice-mode loop markers */}
         {practiceMode && (

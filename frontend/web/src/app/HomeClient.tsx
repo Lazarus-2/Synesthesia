@@ -25,6 +25,7 @@ import { BottomBar } from "../components/Player/BottomBar";
 import { ToastContainer } from "../components/Layout/Toast";
 import { LyricsPanel } from "../components/Lyrics/LyricsPanel";
 import { AuraRing } from "../components/Synesthesia/AuraRing";
+import { ReharmSandbox } from "../components/Player/ReharmSandbox";
 
 const RIGHT_TABS = [
   { id: "play" as const, label: "PLAY" },
@@ -140,6 +141,7 @@ export default function HomeClient() {
       <BottomBar />
       <ToastContainer />
       </div>
+      <ReharmSandbox />
     </div>
   );
 }

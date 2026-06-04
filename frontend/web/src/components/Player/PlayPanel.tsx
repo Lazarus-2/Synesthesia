@@ -3,7 +3,11 @@
 import React, { useMemo } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
+import { usePracticeStore } from "../../store/usePracticeStore";
 import { ChordDiagram } from "../../types";
+import { transposeChord } from "../../lib/music";
+import { CapoWhisperer } from "./CapoWhisperer";
+import { MIDIDownloadMenu } from "./MIDIDownloadMenu";
 
 const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
   if (!diagram || !diagram.frets) {
@@ -109,6 +113,7 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
 export const PlayPanel: React.FC = () => {
   const { analysis, instrumentGuide } = useAnalysisStore();
   const { currentTime } = usePlayerStore();
+  const transpose = usePracticeStore((s) => s.transpose);
 
   const currentChordEvent = useMemo(() => {
     if (!analysis?.chords) return null;
@@ -125,8 +130,12 @@ export const PlayPanel: React.FC = () => {
     );
   }
 
-  const chordName = currentChordEvent?.chord || analysis.chords?.[0]?.chord || "Waiting...";
-  const diagram = instrumentGuide?.chord_diagrams?.find((d: ChordDiagram) => d.chord === chordName);
+  const rawChordName = currentChordEvent?.chord || analysis.chords?.[0]?.chord || "Waiting...";
+  const chordName = transpose !== 0 ? transposeChord(rawChordName, transpose) : rawChordName;
+  // Diagram lookup uses the ORIGINAL chord name — when a capo is applied,
+  // the played shape stays the same; we just display the capo-relative
+  // label above it so the user knows what they're sounding.
+  const diagram = instrumentGuide?.chord_diagrams?.find((d: ChordDiagram) => d.chord === rawChordName);
   
   // Parse strum pattern
   const strumPattern = instrumentGuide?.strum_pattern || "D . D U . U D U";
@@ -134,18 +143,23 @@ export const PlayPanel: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow w-full">
-      <div className="flex justify-between items-start w-full">
+      <div className="flex justify-between items-start w-full gap-3">
         <h2 className="font-headline text-3xl font-medium text-white tracking-wide">
           {chordName}
         </h2>
-        {instrumentGuide?.capo !== undefined && (
-          <div className="px-3 py-1 rounded-full bg-white/10 text-xs font-semibold tracking-wider text-on-surface border border-white/20">
-            Capo {instrumentGuide.capo}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {instrumentGuide?.capo !== undefined && (
+            <div className="px-3 py-1 rounded-full bg-white/10 text-xs font-semibold tracking-wider text-on-surface border border-white/20">
+              Capo {instrumentGuide.capo}
+            </div>
+          )}
+          <MIDIDownloadMenu />
+        </div>
       </div>
 
       <FretboardVisual diagram={diagram} />
+
+      <CapoWhisperer />
 
       {/* Strumming Pattern */}
       <div className="bg-surface-variant/30 rounded-lg p-4 border border-white/5 w-full mt-2">

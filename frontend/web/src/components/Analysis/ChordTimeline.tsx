@@ -3,6 +3,9 @@
 import React from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
+import { usePracticeStore } from "../../store/usePracticeStore";
+import { useReharmStore } from "../../store/useReharmStore";
+import { transposeChord } from "../../lib/music";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -13,6 +16,8 @@ function formatTime(seconds: number): string {
 export const ChordTimeline: React.FC = () => {
   const { analysis } = useAnalysisStore();
   const { currentTime, wavesurfer } = usePlayerStore();
+  const transpose = usePracticeStore((s) => s.transpose);
+  const openReharm = useReharmStore((s) => s.openFor);
 
   if (!analysis?.chords || analysis.chords.length === 0) {
     return (
@@ -29,7 +34,13 @@ export const ChordTimeline: React.FC = () => {
     (c) => currentTime >= c.start && currentTime < c.end
   );
 
-  const handleChordClick = (startTime: number) => {
+  const handleChordClick = (startTime: number, idx: number, e: React.MouseEvent) => {
+    // Shift-click → open Reharm Sandbox for that chord.
+    // Plain click → seek to its start time (existing behaviour preserved).
+    if (e.shiftKey && analysis?.chords) {
+      openReharm(idx, analysis.chords[idx]);
+      return;
+    }
     if (wavesurfer) {
       wavesurfer.seekTo(startTime / wavesurfer.getDuration());
     }
@@ -53,7 +64,8 @@ export const ChordTimeline: React.FC = () => {
               } ${isPast ? "opacity-50 hover:opacity-100" : ""} ${
                 isFuture ? "opacity-70 hover:opacity-100" : ""
               }`}
-              onClick={() => handleChordClick(chord.start)}
+              onClick={(e) => handleChordClick(chord.start, i, e)}
+              title="Click to seek · Shift-click to reharm"
             >
               <span
                 className={`font-headline ${
@@ -62,7 +74,7 @@ export const ChordTimeline: React.FC = () => {
                     : "text-2xl font-medium text-on-surface"
                 }`}
               >
-                {chord.chord}
+                {transpose !== 0 ? transposeChord(chord.chord, transpose) : chord.chord}
               </span>
               <span
                 className={`mt-1 text-xs font-medium ${
