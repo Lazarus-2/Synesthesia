@@ -81,8 +81,14 @@ def ingest_node(state: AnalysisState) -> dict:
     youtube_url = state.get("youtube_url")
     audio_path = state.get("audio_path")
     errors = list(state.get("errors", []))
+    metadata_extras: dict = {}  # title/artist/etc. from yt-dlp info to merge
 
     if youtube_url:
+        # Normalize music.youtube.com → www.youtube.com so we can use the
+        # web_safari/tv clients (which don't need a PO token per session).
+        from backend.ingestion.url_resolver import normalize_to_www_youtube
+
+        youtube_url = normalize_to_www_youtube(youtube_url)
         try:
             _validate_youtube_url(youtube_url)
         except ValueError as e:
@@ -90,13 +96,51 @@ def ingest_node(state: AnalysisState) -> dict:
             return {"audio_path": audio_path, "errors": errors}
 
         try:
+            import os
+            import shutil
+
             import yt_dlp
 
             out_dir = Path("./storage/uploads")
             out_dir.mkdir(parents=True, exist_ok=True)
 
+            # In 2026 yt-dlp needs an EJS JS runtime to solve YouTube's
+            # signature challenge (per yt-dlp #14515). Prefer Deno (faster
+            # solver), fall back to Node. shutil.which uses the parent
+            # shell's PATH; deno installed via ``npm i -g deno-bin`` lands
+            # under ``$HOME/.npm-global/bin`` which isn't on a Python
+            # subprocess's PATH unless the venv is activated — so we also
+            # probe the canonical npm-global location explicitly.
+            js_runtimes_config: dict[str, dict] = {}
+            candidates = [
+                ("deno", Path.home() / ".npm-global" / "bin" / "deno"),
+                ("deno", Path.home() / ".deno" / "bin" / "deno"),
+                ("node", None),
+            ]
+            for runtime, fallback_path in candidates:
+                rt_path = shutil.which(runtime) or (
+                    str(fallback_path) if fallback_path and fallback_path.exists() else None
+                )
+                if rt_path:
+                    js_runtimes_config[runtime] = {"path": rt_path}
+                    break
+
+            # Locate ffmpeg — prefer system, fall back to the imageio_ffmpeg
+            # bundled static binary so the worker keeps running on machines
+            # where the operator hasn't ``apt install ffmpeg`` (CI, fresh
+            # dev boxes). librosa downstream picks ffmpeg up via the venv
+            # PATH so we also symlink at install time (see README).
+            ffmpeg_location = shutil.which("ffmpeg")
+            if not ffmpeg_location:
+                try:
+                    import imageio_ffmpeg
+
+                    ffmpeg_location = imageio_ffmpeg.get_ffmpeg_exe()
+                except ImportError:
+                    pass
+
             out_path = out_dir / "%(id)s.%(ext)s"
-            ydl_opts = {
+            ydl_opts: dict = {
                 "format": "bestaudio/best",
                 "outtmpl": str(out_path),
                 "postprocessors": [
@@ -107,25 +151,58 @@ def ingest_node(state: AnalysisState) -> dict:
                     }
                 ],
                 "quiet": True,
-                # Hardening: never expand playlists, cap file size, fail fast on
-                # unexpected redirects to non-YouTube hosts.
+                # Hardening: never expand playlists, cap file size, fail
+                # fast on unexpected redirects to non-YouTube hosts.
                 "noplaylist": True,
                 "max_filesize": 100 * 1024 * 1024,  # 100 MB
-                "extractor_args": {"youtube": {"player_client": ["web"]}},
+                # 2026 client roster — web_safari + tv bypass SABR throttling
+                # better than plain web; android is deprecated for unauth requests.
+                "extractor_args": {
+                    "youtube": {"player_client": ["web_safari", "tv", "web"]}
+                },
             }
+            # Pull the cookie file in from env if set (for age-gated tracks).
+            cookie_file = os.environ.get("YTDLP_COOKIES_FILE")
+            if cookie_file and Path(cookie_file).exists():
+                ydl_opts["cookiefile"] = cookie_file
+
+            # The JS runtime config is passed as a top-level dict key.
+            if js_runtimes_config:
+                ydl_opts["js_runtimes"] = js_runtimes_config
+                # 2026: yt-dlp will only DOWNLOAD the EJS solver script
+                # when remote_components allow-list explicitly opts in.
+                # Without this, you get "Remote component challenge solver
+                # script (node) was skipped" and signature solving fails.
+                ydl_opts["remote_components"] = ["ejs:github"]
+            if ffmpeg_location:
+                ydl_opts["ffmpeg_location"] = ffmpeg_location
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
                 downloaded_file = out_dir / f"{info['id']}.mp3"
                 audio_path = str(downloaded_file)
+                # Persist title/uploader as metadata so the player header
+                # can show something nicer than the video ID. LangGraph
+                # merges the returned dict into state — don't mutate state
+                # directly inside a node.
+                if info.get("title"):
+                    metadata_extras["title"] = info["title"]
+                if info.get("uploader"):
+                    metadata_extras["artist"] = info["uploader"]
         except Exception as e:
+            # Surface yt-dlp's message + an actionable hint instead of just
+            # the bare exception (most users won't read "Requested format
+            # is not available" and know what to do).
             logger.warning("YouTube download failed for %r: %s", youtube_url, e)
-            errors.append(f"YouTube download failed: {e}")
+            errors.append(
+                f"YouTube download failed: {e}. "
+                "Try a different URL, or upload the audio file directly."
+            )
 
     if not audio_path or not Path(audio_path).exists():
         errors.append(f"Audio file not found or failed to load: {audio_path}")
 
-    return {"audio_path": audio_path, "errors": errors}
+    return {"audio_path": audio_path, "errors": errors, **metadata_extras}
 
 
 def validate_audio_node(state: AnalysisState) -> dict:

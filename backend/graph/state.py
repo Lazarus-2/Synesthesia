@@ -28,6 +28,17 @@ class AnalysisState(TypedDict, total=False):
     difficulty: Difficulty
     user_id: str | None
 
+    # --- Source metadata (filled by ingest_node from yt-dlp info, AcoustID
+    # match for uploads, or Spotify metadata fetch) ---
+    title: str
+    artist: str
+    album: str
+    album_art_url: str
+    mbid: str          # MusicBrainz Recording ID
+    spotify_id: str
+    isrc: str
+    audio_source: str  # "youtube" | "spotify_embed" | "upload" | "deezer_preview"
+
     # --- Derived features (Module 4 Lesson 2) ---
     key: str
     tempo: float
