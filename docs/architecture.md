@@ -3,6 +3,41 @@
 A reading order for the code, and the architectural decisions worth knowing
 before you change anything load-bearing.
 
+## Plan v2 platform integrations
+
+Submission can come from four sources. The classifier lives in
+`backend/ingestion/url_resolver.classify_url`; the dispatcher branches
+inside `backend/graph/nodes.ingest_node`.
+
+```
+   ┌───────────────────────────────────────────────────────────────┐
+   │ submission                                                   │
+   ├───────────────────────────────────────────────────────────────┤
+   │ File upload    → AcoustID fingerprint (pyacoustid + fpcalc)  │
+   │                 → MBID/title/artist enrichment (graceful)    │
+   │                                                              │
+   │ YouTube URL    → yt-dlp                                      │
+   │ YouTube Music  → normalize to www.youtube.com, then yt-dlp   │
+   │   yt-dlp 2026 needs:                                         │
+   │   - JS runtime (Deno or Node) for the EJS signature solver   │
+   │   - remote_components=['ejs:github'] to opt into download    │
+   │   - player_client=[web_safari, tv, web] for SABR avoidance   │
+   │   - ffmpeg (system or imageio-ffmpeg fallback)               │
+   │                                                              │
+   │ Spotify URL    → spotipy: title/artist/album/ISRC/cover      │
+   │   default (audio_source=spotify_embed): frontend iframe      │
+   │   env-gated:    SPOTIFY_ALLOW_YTDLP_FALLBACK=true → ytsearch │
+   └───────────────────────────────────────────────────────────────┘
+
+   New public endpoints
+   ────────────────────────────────────────────────────────────────
+   GET /api/v1/search?q=     Deezer + MusicBrainz, gather, dedup
+                              (Spotify Web API is dead for new apps;
+                              see docs/research/music-platforms-2026.md)
+   GET /api/v1/lyrics        LRCLIB (LRC-format synced + plain text)
+   GET /api/v1/midi/{job}/{stem}  full / vocals / drums / bass / other
+```
+
 ## Request flow (audio → result)
 
 ```
@@ -179,9 +214,12 @@ for the reasoning:
 - **Postgres for `users` / `chat_sessions`** — Mongo is fine at current scale.
 - **S3 storage abstraction** — premature; one local-files implementation is
   enough until a cloud target is chosen.
-- **Pitch-preserving slowdown** in practice mode — needs a time-stretch
-  library (`soundtouchjs`); for now the UI exposes playbackRate with a
-  tooltip noting the pitch artifact.
+- **Pitch-preserving slowdown** in practice mode — Plan v2 shipped the
+  pitch-lock toggle + vendored the SoundTouch AudioWorklet bundle
+  (`frontend/web/public/soundtouch-processor.js`). The audio chain
+  routing — replacing wavesurfer's playbackRate with a SoundTouchNode
+  inserted between the `MediaElementAudioSourceNode` and `destination`
+  — ships in the audio-engine follow-up.
 - **Pre-computed audio embeddings (CLAP / MERT) for similarity** — the
   current 36-D sequence-aware embedding is the cheap first step.
 - **Auto re-enqueue from the DLQ** — `failed_jobs` is visible in Mongo

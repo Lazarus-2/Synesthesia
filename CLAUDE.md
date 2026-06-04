@@ -47,6 +47,27 @@ npm run lint
 
 ## Architecture
 
+### Music platform integrations (Plan v2)
+
+Ingestion supports four submission modes; the dispatch is in
+`backend/ingestion/url_resolver.classify_url`:
+
+| Mode | Path |
+|---|---|
+| **File upload** | Saved to disk → AcoustID fingerprint → MBID/title/artist enrichment via `backend/ingestion/acoustid_enrich`. Free, graceful no-op if `fpcalc` or `ACOUSTID_API_KEY` missing. |
+| **YouTube / youtu.be** | yt-dlp with `player_client=[web_safari,tv,web]` + EJS challenge solver via Deno (or Node) + `imageio-ffmpeg` bundled binary as fallback. Pulls `info.title` + `info.uploader` for the player header. |
+| **YouTube Music** | `music.youtube.com` normalized to `www.youtube.com` first (avoids `web_music` client's PO-token gymnastics), then the regular YouTube path. |
+| **Spotify** | spotipy fetches title/artist/album/ISRC/cover. Audio path forks on `SPOTIFY_ALLOW_YTDLP_FALLBACK`: default `false` sets `audio_source=spotify_embed` (frontend renders the official iframe); `true` runs a `ytsearch1:` lookup and falls through to the yt-dlp branch (ToS gray area, log warning at startup). |
+
+The merged search endpoint (`GET /api/v1/search`) hits Deezer
+(no auth) + MusicBrainz (1 req/sec/IP) in parallel via
+`asyncio.gather`, dedups by `(title.lower, artist.lower)`. Spotify is
+NOT used for search — `/audio-features` and friends were dropped for
+new apps in Nov 2024 + Feb 2026 changelog ([docs/research/music-platforms-2026.md](docs/research/music-platforms-2026.md)).
+
+Synced lyrics come from LRCLIB (`GET /api/v1/lyrics`) — free, no
+auth, returns LRC-format `synced_lyrics` + `plain_lyrics`. Cached 6h.
+
 ### Request flow (audio → output)
 
 1. `backend/main.py` — FastAPI endpoint accepts upload or URL, hashes the file, enqueues a Taskiq job, returns a `job_id`.
