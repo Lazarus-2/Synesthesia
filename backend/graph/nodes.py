@@ -201,6 +201,15 @@ def ingest_node(state: AnalysisState) -> dict:
 
     if not audio_path or not Path(audio_path).exists():
         errors.append(f"Audio file not found or failed to load: {audio_path}")
+    elif not youtube_url:
+        # Pure file upload: try AcoustID fingerprint → MBID enrichment.
+        # Free, graceful no-op if fpcalc or ACOUSTID_API_KEY missing.
+        # Don't run on yt-dlp downloads — we already got title/uploader
+        # from the YouTube info dict above.
+        from backend.ingestion.acoustid_enrich import enrich_upload
+
+        for k, v in enrich_upload(audio_path).items():
+            metadata_extras.setdefault(k, v)
 
     return {"audio_path": audio_path, "errors": errors, **metadata_extras}
 
