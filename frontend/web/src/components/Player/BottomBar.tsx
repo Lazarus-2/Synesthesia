@@ -67,7 +67,14 @@ export const BottomBar: React.FC = () => {
     const idx = speeds.indexOf(playbackRate);
     const next = speeds[(idx + 1) % speeds.length];
     setPlaybackRate(next);
-    if (wavesurfer) wavesurfer.setPlaybackRate(next);
+    // When pitchLock is ON the SoundTouch worklet in AudioEngine
+    // handles the tempo change with no pitch shift — leave the
+    // underlying <audio> at rate=1. When OFF, wavesurfer.setPlaybackRate
+    // updates ``audio.playbackRate`` directly (pitch shifts with tempo,
+    // chipmunk effect — the classic playback-speed behaviour).
+    if (wavesurfer) {
+      wavesurfer.setPlaybackRate(pitchLock ? 1.0 : next);
+    }
   };
 
   const handleSkipBack = () => {
@@ -109,13 +116,15 @@ export const BottomBar: React.FC = () => {
       if (e.key === ",") {
         const next = Math.max(0.5, Number((playbackRate - 0.05).toFixed(2)));
         setPlaybackRate(next);
-        if (wavesurfer && !pitchLock) wavesurfer.setPlaybackRate(next);
+        // Same logic as handleSpeed: only mirror onto wavesurfer when
+        // pitchLock is off (SoundTouch handles rate when on).
+        if (wavesurfer) wavesurfer.setPlaybackRate(pitchLock ? 1.0 : next);
         return;
       }
       if (e.key === ".") {
         const next = Math.min(1.5, Number((playbackRate + 0.05).toFixed(2)));
         setPlaybackRate(next);
-        if (wavesurfer && !pitchLock) wavesurfer.setPlaybackRate(next);
+        if (wavesurfer) wavesurfer.setPlaybackRate(pitchLock ? 1.0 : next);
         return;
       }
     };

@@ -236,6 +236,13 @@ def page(context: BrowserContext, request, run_report: _RunReport) -> Iterator[P
                     "ServiceWorker",
                     # Next.js fires this when an <a> upgrades to <Link> during prerender — harmless.
                     "Hydration failed because the server rendered HTML didn't match the client",
+                    # Chromium emits this when ANY sub-resource (favicon, _next
+                    # RSC payload, etc.) returns 4xx/5xx. The string carries
+                    # no path info, so we can't tell if it's our backend or
+                    # static-asset noise. We probe ``/health`` + ``/api/v1/*``
+                    # explicitly in the dedicated API tests; if THOSE pass,
+                    # this generic notification is uninformative noise.
+                    "Failed to load resource: the server responded with a status of",
                 )
             ):
                 return

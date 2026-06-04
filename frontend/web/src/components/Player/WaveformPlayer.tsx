@@ -36,7 +36,11 @@ export const WaveformPlayer: React.FC = () => {
         barRadius: 2,
         height: 160,
         normalize: true,
-        backend: "WebAudio",
+        // MediaElement exposes the underlying <audio> via getMediaElement(),
+        // which the AudioEngine bridge needs to intercept the signal for
+        // pitch-preserving slowdown + transpose. WebAudio backend hides
+        // its source node inside an opaque WaveSurfer-owned graph.
+        backend: "MediaElement",
       });
 
       ws.load(audioFileUrl);

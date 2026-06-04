@@ -416,3 +416,83 @@ def test_chord_breakdown_e2e_five_songs(
     assert len(job_ids) == 5, (
         f"expected 5 distinct job_ids (no dedup short-circuit), got {len(job_ids)}: {job_ids}"
     )
+
+
+# ----------------------------------------------------------------------------
+# Plan v2 — C5 backend API smoke + C7 library polish coverage
+# ----------------------------------------------------------------------------
+
+
+def test_search_api_returns_merged_results(api_url: str, run_report):
+    """Headless API check: GET /api/v1/search hits Deezer + MusicBrainz
+    and returns deduped results. Faster + more reliable than the
+    DOM-driven path; covers the same backend wire.
+    """
+    import json
+    import urllib.request
+
+    with urllib.request.urlopen(f"{api_url}/api/v1/search?q=blackbird+beatles&limit=5") as r:
+        data = json.load(r)
+    results = data.get("results", [])
+    assert len(results) >= 1, f"expected >=1 hit, got 0: {data!r}"
+    for hit in results:
+        assert hit.get("title"), f"result missing title: {hit!r}"
+        assert hit.get("artist"), f"result missing artist: {hit!r}"
+        # Each hit should have at least one of mbid / deezer_id.
+        assert hit.get("mbid") or hit.get("deezer_id"), f"result has no id: {hit!r}"
+
+    run_report.add_row(
+        test="search_api_returns_merged_results",
+        status="passed",
+        n_results=len(results),
+        sources=sorted({h.get("source", "") for h in results}),
+    )
+
+
+def test_lyrics_api_returns_lrclib_synced(api_url: str, run_report):
+    """Headless API check: GET /api/v1/lyrics returns LRC-format synced
+    lines for a track that LRCLIB definitely has."""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    params = urllib.parse.urlencode(
+        {"track_name": "Blackbird", "artist_name": "The Beatles", "duration": 138}
+    )
+    with urllib.request.urlopen(f"{api_url}/api/v1/lyrics?{params}") as r:
+        data = json.load(r)
+    synced = data.get("synced_lyrics", "")
+    assert synced, f"expected synced LRC for Blackbird, got empty: {data!r}"
+    # First line should be an LRC timestamp like "[mm:ss.cc]..."
+    first = synced.splitlines()[0]
+    assert first.startswith("["), f"first line not an LRC timestamp: {first!r}"
+
+    run_report.add_row(
+        test="lyrics_api_returns_lrclib_synced",
+        status="passed",
+        synced_lines=synced.count("\n") + 1,
+        plain_len=len(data.get("plain_lyrics", "")),
+    )
+
+
+def test_library_filter_chips_present(
+    page: Page,
+    frontend_url: str,
+    screenshot_dir: Path,
+    run_report,
+):
+    """/library now has a row of filter chips (All / ★ Favorites / Key /
+    7d / 30d / All). Confirms the C7 polish actually rendered."""
+    page.goto(f"{frontend_url}/library", wait_until="domcontentloaded")
+    expect(page.get_by_role("heading", name="Library")).to_be_visible(timeout=10_000)
+
+    for label in ("All", "Favorites", "7d", "30d"):
+        expect(page.get_by_text(label, exact=False).first).to_be_visible()
+
+    out = screenshot_dir / "07_library_filters.png"
+    page.screenshot(path=str(out), full_page=True)
+    run_report.add_row(
+        test="library_filter_chips_present",
+        status="passed",
+        screenshot=str(out.relative_to(screenshot_dir.parent.parent)),
+    )

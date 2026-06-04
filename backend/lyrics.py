@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 _BASE = "https://lrclib.net/api"
 
+# LRCLIB doesn't enforce a User-Agent but their guidelines ask for one
+# that identifies the consumer. Helps them throttle abusers without
+# accidentally throttling us.
+_USER_AGENT = "Synesthesia/0.1 ( https://github.com/aekam93/synesthesia )"
+
 
 async def fetch_lyrics(
     track_name: str, artist_name: str, duration: int | None = None
@@ -39,7 +44,9 @@ async def fetch_lyrics(
     if duration is not None:
         params["duration"] = int(duration)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(3.0)) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(3.0), headers={"User-Agent": _USER_AGENT}
+        ) as client:
             r = await client.get(f"{_BASE}/get", params=params)
         if r.status_code == 404:
             return {"synced_lyrics": "", "plain_lyrics": "", "source": "lrclib"}

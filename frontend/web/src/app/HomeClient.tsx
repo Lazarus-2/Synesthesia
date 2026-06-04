@@ -26,6 +26,7 @@ import { ToastContainer } from "../components/Layout/Toast";
 import { LyricsPanel } from "../components/Lyrics/LyricsPanel";
 import { AuraRing } from "../components/Synesthesia/AuraRing";
 import { ReharmSandbox } from "../components/Player/ReharmSandbox";
+import { AudioEngine } from "../components/Player/AudioEngine";
 
 const RIGHT_TABS = [
   { id: "play" as const, label: "PLAY" },
@@ -142,6 +143,7 @@ export default function HomeClient() {
       <ToastContainer />
       </div>
       <ReharmSandbox />
+      <AudioEngine />
     </div>
   );
 }
