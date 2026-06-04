@@ -2,16 +2,16 @@
  * Centralized API client (Plan 2 F4).
  *
  * Every fetch to the Synesthesia backend goes through here so we get:
- *   - One base URL (set via NEXT_PUBLIC_API_URL; defaults to localhost:8000)
+ *   - One base URL (set via NEXT_PUBLIC_API_URL; defaults to localhost:8001)
  *   - One canonical request shape (sets Accept, surfaces APIError envelopes)
  *   - One SSE consumer (Plan 2 D6 event-tagged protocol)
  *   - Easy single-site insertion of auth headers once D4's frontend bits land
  *
- * Anything that called `fetch("http://localhost:8000/...")` directly should
+ * Anything that called `fetch("http://localhost:8001/...")` directly should
  * migrate to `api.get/post/postForm/sse`.
  */
 
-const FALLBACK_BASE = "http://localhost:8000";
+const FALLBACK_BASE = "http://localhost:8001";
 
 /** Resolved base URL. Reads NEXT_PUBLIC_API_URL at module load. */
 export const API_BASE_URL: string = (

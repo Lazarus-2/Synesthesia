@@ -37,8 +37,8 @@ _SCREENSHOT_DIR = _ARTIFACT_DIR / "screenshots"
 _VIDEO_DIR = _ARTIFACT_DIR / "video"
 _REPORT_PATH = _ARTIFACT_DIR / "run_report.md"
 
-_FRONTEND_URL = os.environ.get("E2E_FRONTEND_URL", "http://localhost:3000")
-_API_URL = os.environ.get("E2E_API_URL", "http://localhost:8000")
+_FRONTEND_URL = os.environ.get("E2E_FRONTEND_URL", "http://localhost:3001")
+_API_URL = os.environ.get("E2E_API_URL", "http://localhost:8001")
 _FIXTURE_AUDIO_DIR = _ARTIFACT_DIR / "tmp_audio"
 
 

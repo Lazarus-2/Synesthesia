@@ -69,9 +69,9 @@ class Settings(BaseSettings):
     # Defaults are dev-only; production must override via ALLOWED_ORIGINS env var.
     allowed_origins: list[str] = Field(
         default_factory=lambda: [
-            "http://localhost:3000",
             "http://localhost:3001",
-            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
         ]
     )
 

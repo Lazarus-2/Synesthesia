@@ -1,12 +1,27 @@
 "use client";
 
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { apiPostForm, ApiError } from "../../lib/apiClient";
 import { useToastStore } from "../../store/useToastStore";
 import type { AnalyzeResponse } from "../../types";
+import { classifyUrl, PlatformBadge, type Platform } from "./PlatformBadge";
+import { SearchPanel } from "./SearchPanel";
+
+const INSTRUMENTS = ["guitar", "piano", "ukulele", "bass"] as const;
+const DIFFICULTIES = ["beginner", "intermediate", "advanced"] as const;
+type Instrument = (typeof INSTRUMENTS)[number];
+type Difficulty = (typeof DIFFICULTIES)[number];
+type InputMode = "upload" | "search";
+
+const INSTRUMENT_ICONS: Record<Instrument, string> = {
+  guitar: "music_note",
+  piano: "piano",
+  ukulele: "graphic_eq",
+  bass: "speaker",
+};
 
 // Sample analysis cards — IDs must match the seed script
 // (``scripts/seed_samples.py``). Each card links to ``/s/{job_id}`` which
@@ -46,8 +61,15 @@ export const UploadModal: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<InputMode>("upload");
+  const [instrument, setInstrument] = useState<Instrument>("guitar");
+  const [difficulty, setDifficulty] = useState<Difficulty>("beginner");
   const { analysis, startProgressStream } = useAnalysisStore();
   const { setAudioFileUrl } = usePlayerStore();
+
+  // Live smart-detect for the URL input — shows a platform badge + ✓/⚠ as
+  // the user types so they know whether the backend will accept the URL.
+  const detectedPlatform: Platform = useMemo(() => classifyUrl(youtubeUrl), [youtubeUrl]);
 
   // All hooks declared at the top so the order is stable on every render.
   // Previously several useCallbacks lived after the early-return below,
@@ -76,10 +98,10 @@ export const UploadModal: React.FC = () => {
   const handleUpload = useCallback(async (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    form.append("instrument", "guitar");
-    form.append("difficulty", "beginner");
+    form.append("instrument", instrument);
+    form.append("difficulty", difficulty);
     await submitAnalyze(form, URL.createObjectURL(file));
-  }, [submitAnalyze]);
+  }, [submitAnalyze, instrument, difficulty]);
 
   const handleYoutubeAnalyze = useCallback(async () => {
     const trimmed = youtubeUrl.trim();
@@ -104,10 +126,12 @@ export const UploadModal: React.FC = () => {
       useToastStore.getState().error("Invalid URL scheme", message);
       return;
     }
-    const host = parsed.hostname.toLowerCase();
-    const youtubeHosts = ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"];
-    if (!youtubeHosts.includes(host)) {
-      const message = `${host} isn't supported. Paste a YouTube URL or upload an audio file.`;
+    // Frontend allowlist mirrors the backend SSRF guard exactly. YouTube
+    // (regular + music) and Spotify URLs are accepted; everything else
+    // is rejected early so the user doesn't wait for the round-trip.
+    const platform = classifyUrl(trimmed);
+    if (platform === "unknown") {
+      const message = `${parsed.hostname} isn't supported. Paste a YouTube, YouTube Music, or Spotify URL — or upload an audio file.`;
       setSubmitError(message);
       useToastStore.getState().error("Unsupported host", message);
       return;
@@ -115,10 +139,22 @@ export const UploadModal: React.FC = () => {
 
     const form = new FormData();
     form.append("youtube_url", trimmed);
-    form.append("instrument", "guitar");
-    form.append("difficulty", "beginner");
+    form.append("instrument", instrument);
+    form.append("difficulty", difficulty);
     await submitAnalyze(form);
-  }, [youtubeUrl, submitAnalyze]);
+  }, [youtubeUrl, submitAnalyze, instrument, difficulty]);
+
+  // Search picks: synthesize a query string the backend resolves via
+  // ytsearch1: under the hood, reusing the existing URL flow.
+  const handleSearchPick = useCallback(async (query: string) => {
+    const form = new FormData();
+    // ``ytsearch1:`` prefix tells the backend's yt-dlp invocation to do a
+    // YouTube search and grab the top result. Existing pipeline does the rest.
+    form.append("youtube_url", `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    form.append("instrument", instrument);
+    form.append("difficulty", difficulty);
+    await submitAnalyze(form);
+  }, [submitAnalyze, instrument, difficulty]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -211,43 +247,95 @@ export const UploadModal: React.FC = () => {
             )}
           </div>
 
-          {/* YouTube URL Input */}
-          <div className="md:col-span-12 glass-panel rounded-xl p-2 flex flex-col sm:flex-row items-center gap-2 glow-focus">
-            <div className="flex items-center flex-grow pl-4 py-2 w-full">
-              <span className="material-symbols-outlined text-outline mr-3">link</span>
-              <input
-                className="bg-transparent border-none w-full text-on-surface focus:ring-0 focus:outline-none placeholder:text-outline-variant p-0"
-                placeholder="Paste YouTube or SoundCloud URL..."
-                type="text"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleYoutubeAnalyze()}
-              />
+          {/* URL Input (with smart-detect platform badge) — only shown in upload mode */}
+          {inputMode === "upload" && (
+            <div className="md:col-span-12 glass-panel rounded-xl p-2 flex flex-col sm:flex-row items-center gap-2 glow-focus">
+              <div className="flex items-center flex-grow pl-4 py-2 w-full">
+                <span className="material-symbols-outlined text-outline mr-3">link</span>
+                <input
+                  className="bg-transparent border-none w-full text-on-surface focus:ring-0 focus:outline-none placeholder:text-outline-variant p-0"
+                  placeholder="Paste a YouTube, YouTube Music, or Spotify URL..."
+                  type="text"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleYoutubeAnalyze()}
+                />
+                {youtubeUrl.trim() && (
+                  <div className="mr-3 shrink-0">
+                    <PlatformBadge platform={detectedPlatform} />
+                  </div>
+                )}
+              </div>
+              <button
+                className="primary-gradient text-on-primary font-semibold text-sm px-6 py-4 rounded-lg w-full sm:w-auto whitespace-nowrap hover:opacity-90 transition-opacity flex items-center justify-center gap-2 tracking-wider uppercase disabled:opacity-50"
+                onClick={handleYoutubeAnalyze}
+                disabled={!youtubeUrl.trim() || detectedPlatform === "unknown"}
+              >
+                <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                Paste &amp; Analyze
+              </button>
             </div>
-            <button
-              className="primary-gradient text-on-primary font-semibold text-sm px-6 py-4 rounded-lg w-full sm:w-auto whitespace-nowrap hover:opacity-90 transition-opacity flex items-center justify-center gap-2 tracking-wider uppercase"
-              onClick={handleYoutubeAnalyze}
-              disabled={!youtubeUrl.trim()}
-            >
-              <span className="material-symbols-outlined text-lg">auto_awesome</span>
-              Paste &amp; Analyze
-            </button>
+          )}
+
+          {/* Search mode — Deezer + MusicBrainz */}
+          {inputMode === "search" && (
+            <SearchPanel onPick={handleSearchPick} />
+          )}
+
+          {/* Mode toggle */}
+          <div className="md:col-span-12 flex justify-center -mt-2">
+            <div className="inline-flex rounded-full glass-panel p-1 text-xs">
+              {(["upload", "search"] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`px-4 py-1.5 rounded-full uppercase tracking-wider font-semibold transition-colors ${
+                    inputMode === m
+                      ? "primary-gradient text-on-primary"
+                      : "text-on-surface-variant hover:text-on-surface"
+                  }`}
+                  onClick={() => setInputMode(m)}
+                >
+                  {m === "upload" ? "Upload / URL" : "Search Songs"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Instrument Chips */}
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-24">
-          <span className="text-on-surface-variant text-xs uppercase tracking-wider mr-2 font-medium">Detecting for:</span>
-          {[
-            { icon: "music_note", label: "Guitar" },
-            { icon: "piano", label: "Piano" },
-            { icon: "graphic_eq", label: "Ukulele" },
-            { icon: "speaker", label: "Bass" },
-          ].map(({ icon, label }) => (
-            <div key={label} className="flex items-center gap-2 px-4 py-2 rounded-full glass-panel">
-              <span className="material-symbols-outlined text-[16px] text-primary">{icon}</span>
-              <span className="text-xs font-medium text-on-surface">{label}</span>
-            </div>
+        {/* Instrument + difficulty chips — now interactive, drive analyze params */}
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-24">
+          <span className="text-on-surface-variant text-xs uppercase tracking-wider font-medium">Instrument</span>
+          {INSTRUMENTS.map((inst) => (
+            <button
+              key={inst}
+              type="button"
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-colors uppercase tracking-wider ${
+                instrument === inst
+                  ? "primary-gradient text-on-primary border border-transparent"
+                  : "glass-panel text-on-surface hover:border-primary/30 border border-outline/20"
+              }`}
+              onClick={() => setInstrument(inst)}
+              aria-pressed={instrument === inst}
+            >
+              <span className="material-symbols-outlined text-[16px]">{INSTRUMENT_ICONS[inst]}</span>
+              {inst}
+            </button>
+          ))}
+          <span className="text-on-surface-variant text-xs uppercase tracking-wider font-medium ml-4">Level</span>
+          {DIFFICULTIES.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={`px-4 py-2 rounded-full text-xs font-medium transition-colors uppercase tracking-wider ${
+                difficulty === d
+                  ? "primary-gradient text-on-primary border border-transparent"
+                  : "glass-panel text-on-surface hover:border-primary/30 border border-outline/20"
+              }`}
+              onClick={() => setDifficulty(d)}
+              aria-pressed={difficulty === d}
+            >
+              {d}
+            </button>
           ))}
         </div>
 

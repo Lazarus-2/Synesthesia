@@ -28,7 +28,7 @@ cp .env.example .env
 docker compose up -d mongodb mongodb-setup redis
 
 # API
-uvicorn backend.main:app --reload                       # http://localhost:8000
+uvicorn backend.main:app --reload                       # http://localhost:8001
 
 # Worker (separate terminal)
 taskiq worker backend.worker:broker backend.main
@@ -36,7 +36,7 @@ taskiq worker backend.worker:broker backend.main
 # Frontend (separate terminal)
 cd frontend/web
 npm install
-npm run dev                                             # http://localhost:3000
+npm run dev                                             # http://localhost:3001
 ```
 
 ## Quick start (Docker, canonical)
@@ -51,7 +51,7 @@ Containers:
 |----------------|-------|-----------------------|
 | `mongodb`      | 27017 | `mongo:6.0` (rs0)     |
 | `redis`        | 6379  | `redis:7`             |
-| `api`          | 8000  | `runtime-api`         |
+| `api`          | 8001  | `runtime-api`         |
 | `worker`       | —     | `runtime-worker`      |
 
 The MongoDB replica set is **required** — Taskiq transactions need it.

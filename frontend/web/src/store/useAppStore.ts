@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type Tab = "play" | "theory" | "stems" | "chat" | "settings";
+type Tab = "play" | "theory" | "stems" | "lyrics" | "chat" | "settings";
 type Theme = "light" | "dark";
 type LlmProvider = "local" | "openai" | "anthropic";
 

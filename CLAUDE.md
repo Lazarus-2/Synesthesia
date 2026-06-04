@@ -13,14 +13,14 @@ Backend (Python 3.12; venv lives at `backend/.venv/`):
 ```bash
 pip install -r backend/requirements.txt          # heavy — librosa, madmom, demucs, basic-pitch
 pip install -e ./backend                          # editable install so ``import backend`` works
-uvicorn backend.main:app --reload                 # API on :8000
+uvicorn backend.main:app --reload                 # API on :8001
 taskiq worker backend.worker:broker backend.main  # background analysis worker (needs Redis)
 ```
 
 Full stack (canonical):
 
 ```bash
-docker-compose up -d   # mongo (replica set rs0), redis, api:8000, worker
+docker-compose up -d   # mongo (replica set rs0), redis, api:8001, worker
 ```
 
 MongoDB **must** run as a replica set — Taskiq transactions require it. The `mongodb-setup` service in `docker-compose.yml` initiates `rs0` automatically; for a local non-docker mongo you must `rs.initiate()` manually.
@@ -40,7 +40,7 @@ Frontend (Next.js 16 — see warning below):
 
 ```bash
 cd frontend/web
-npm run dev      # :3000
+npm run dev      # :3001
 npm run build
 npm run lint
 ```

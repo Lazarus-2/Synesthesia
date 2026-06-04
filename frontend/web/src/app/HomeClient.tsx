@@ -23,11 +23,13 @@ import { SettingsPanel } from "../components/Settings/SettingsPanel";
 import { StemMixer } from "../components/Player/StemMixer";
 import { BottomBar } from "../components/Player/BottomBar";
 import { ToastContainer } from "../components/Layout/Toast";
+import { LyricsPanel } from "../components/Lyrics/LyricsPanel";
 
 const RIGHT_TABS = [
   { id: "play" as const, label: "PLAY" },
   { id: "theory" as const, label: "THEORY" },
   { id: "stems" as const, label: "STEMS" },
+  { id: "lyrics" as const, label: "LYRICS" },
 ] as const;
 
 export default function HomeClient() {
@@ -123,6 +125,7 @@ export default function HomeClient() {
             {activeTab === "play" && <PlayPanel />}
             {activeTab === "theory" && <TheoryPanel />}
             {activeTab === "stems" && <StemMixer />}
+            {activeTab === "lyrics" && <LyricsPanel />}
             {activeTab === "chat" && <ChatPanel />}
             {activeTab === "settings" && <SettingsPanel />}
           </div>

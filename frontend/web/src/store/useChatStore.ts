@@ -73,7 +73,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!response.ok) {
         let payload: unknown = undefined;
         try { payload = await response.json(); } catch { /* no body */ }
-        throw new ApiError(response.status, (payload as { code: string; message: string }) || `HTTP ${response.status}`);
+        throw new ApiError(
+          response.status,
+          (payload as { status: "error"; code: string; message: string }) || `HTTP ${response.status}`
+        );
       }
       if (!response.body) throw new Error('No SSE body returned');
 

@@ -6,8 +6,8 @@
 #   - chromium has been pulled (playwright install chromium)
 #   - Mongo + Redis are reachable on localhost
 #
-# Brings up uvicorn + Taskiq worker if they're not already serving on :8000.
-# Starts the Next.js dev server if :3000 isn't responding. Re-seeds the
+# Brings up uvicorn + Taskiq worker if they're not already serving on :8001.
+# Starts the Next.js dev server if :3001 isn't responding. Re-seeds the
 # Mongo samples, then runs the suite and prints the artifact path.
 
 set -euo pipefail
@@ -18,17 +18,17 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
 
 ensure_uvicorn() {
-    if curl -fsS -m 3 http://localhost:8000/health >/dev/null 2>&1; then
+    if curl -fsS -m 3 http://localhost:8001/health >/dev/null 2>&1; then
         echo "[ok] uvicorn already serving"
         return
     fi
     echo "[start] uvicorn"
     mkdir -p logs
-    nohup backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --log-level warning >logs/uvicorn.log 2>&1 &
+    nohup backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8001 --log-level warning >logs/uvicorn.log 2>&1 &
     disown
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
-        if curl -fsS -m 2 http://localhost:8000/health >/dev/null 2>&1; then
+        if curl -fsS -m 2 http://localhost:8001/health >/dev/null 2>&1; then
             echo "[ok] uvicorn ready"; return
         fi
     done
@@ -46,7 +46,7 @@ ensure_worker() {
 }
 
 ensure_frontend() {
-    if curl -fsS -m 3 -o /dev/null -w "%{http_code}" http://localhost:3000/ | grep -q "^200$"; then
+    if curl -fsS -m 3 -o /dev/null -w "%{http_code}" http://localhost:3001/ | grep -q "^200$"; then
         echo "[ok] frontend already serving"; return
     fi
     echo "[start] next dev"
@@ -54,7 +54,7 @@ ensure_frontend() {
     disown
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
-        code=$(curl -fsS -m 2 -o /dev/null -w "%{http_code}" http://localhost:3000/ || echo 000)
+        code=$(curl -fsS -m 2 -o /dev/null -w "%{http_code}" http://localhost:3001/ || echo 000)
         if [ "$code" = "200" ]; then echo "[ok] frontend ready"; return; fi
     done
     echo "[err] frontend never became ready" >&2; exit 1
