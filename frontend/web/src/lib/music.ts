@@ -3,25 +3,34 @@ export const FLAT_TO_SHARP: Record<string, string> = {
   "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"
 };
 
+function shiftRoot(root: string, semitones: number): string | null {
+  let r = root;
+  if (r.endsWith("b") && FLAT_TO_SHARP[r]) r = FLAT_TO_SHARP[r];
+  const idx = NOTES.indexOf(r.toUpperCase());
+  if (idx === -1) return null;
+  const newIdx = (idx + semitones + 12 * 12) % 12;
+  return NOTES[newIdx];
+}
+
 export function transposeChord(chord: string, semitones: number): string {
-  if (!chord || chord === "N.C." || chord === "N") return chord;
+  if (!chord || semitones === 0) return chord;
+  if (chord === "N.C." || chord === "N") return chord;
+
+  // Handle slash chords (e.g. "G/B") by transposing both root and bass.
+  const slashIdx = chord.indexOf("/");
+  if (slashIdx !== -1) {
+    const left = transposeChord(chord.slice(0, slashIdx), semitones);
+    const right = transposeChord(chord.slice(slashIdx + 1), semitones);
+    return `${left}/${right}`;
+  }
+
   const match = chord.match(/^([A-G][b#]?)(.*)$/);
   if (!match) return chord;
-  
-  let root = match[1];
-  const suffix = match[2];
-  
-  if (root.endsWith("b") && FLAT_TO_SHARP[root]) {
-    root = FLAT_TO_SHARP[root];
-  }
-  
-  const idx = NOTES.indexOf(root.toUpperCase());
-  if (idx === -1) return chord;
-  
-  const newIdx = (idx + semitones + 12) % 12;
-  const newRoot = NOTES[newIdx];
-  
-  return newRoot + suffix;
+
+  const newRoot = shiftRoot(match[1], semitones);
+  if (newRoot === null) return chord;
+
+  return newRoot + match[2];
 }
 
 // Scriabin Color Mapping

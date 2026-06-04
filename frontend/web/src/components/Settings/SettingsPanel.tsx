@@ -10,11 +10,61 @@ const LLM_PROVIDERS = [
 ];
 
 export const SettingsPanel: React.FC = () => {
-  const { llmProvider, setLlmProvider } = useAppStore();
+  const { llmProvider, setLlmProvider, colorStorm, toggleColorStorm } = useAppStore();
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
       <h2 className="font-headline text-2xl font-medium text-white">Settings</h2>
+
+      {/* Synesthesia Visuals */}
+      <div>
+        <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-4">
+          Visuals
+        </h3>
+        <button
+          onClick={toggleColorStorm}
+          aria-pressed={colorStorm}
+          className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left ${
+            colorStorm
+              ? "bg-primary-container/15 border-primary-container/40 glow-amber"
+              : "glass-panel hover:border-primary/30"
+          }`}
+        >
+          <div
+            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              colorStorm ? "bg-primary-container/20" : "bg-white/5"
+            }`}
+          >
+            <span
+              className={`material-symbols-outlined text-xl ${
+                colorStorm ? "text-primary-container" : "text-on-surface-variant"
+              }`}
+              style={{ fontVariationSettings: colorStorm ? "'FILL' 1" : undefined }}
+            >
+              auto_awesome
+            </span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-on-surface">
+              {"✨"} Color Storm
+            </p>
+            <p className="text-xs text-on-surface-variant mt-0.5">
+              Crank the Scriabin aura — saturated, swirling, unmissable
+            </p>
+          </div>
+          <div
+            className={`relative w-10 h-6 rounded-full transition-colors ${
+              colorStorm ? "bg-primary-container" : "bg-white/15"
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                colorStorm ? "translate-x-[18px]" : "translate-x-0.5"
+              }`}
+            />
+          </div>
+        </button>
+      </div>
 
       {/* LLM Provider Selection */}
       <div>

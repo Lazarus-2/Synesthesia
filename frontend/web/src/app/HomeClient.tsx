@@ -24,6 +24,7 @@ import { StemMixer } from "../components/Player/StemMixer";
 import { BottomBar } from "../components/Player/BottomBar";
 import { ToastContainer } from "../components/Layout/Toast";
 import { LyricsPanel } from "../components/Lyrics/LyricsPanel";
+import { AuraRing } from "../components/Synesthesia/AuraRing";
 
 const RIGHT_TABS = [
   { id: "play" as const, label: "PLAY" },
@@ -62,7 +63,11 @@ export default function HomeClient() {
 
   // Player View — Stitch 12-col grid layout
   return (
-    <div className="flex flex-col h-screen bg-background pb-16">
+    <div className="relative flex flex-col h-screen bg-background pb-16">
+      {/* Scriabin Aura Ring — fixed full-screen glow behind the UI. */}
+      <AuraRing />
+
+      <div className="relative z-10 flex flex-col h-full">
       <Header />
 
       <div className="flex-grow overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
@@ -134,6 +139,7 @@ export default function HomeClient() {
 
       <BottomBar />
       <ToastContainer />
+      </div>
     </div>
   );
 }

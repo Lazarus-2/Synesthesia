@@ -27,10 +27,25 @@ export interface PracticeState {
   setLoopEnd: (t: number | null) => void;
   clearLoop: () => void;
 
-  // Playback speed. Pitch-shifting playback rate (Tone.js ``playbackRate``);
-  // real pitch-preserving slowdown is deferred (see header doc).
+  // Playback speed. When ``pitchLock`` is on, the rate change is routed
+  // through the SoundTouch AudioWorklet so pitch stays at original;
+  // otherwise WaveSurfer's native ``setPlaybackRate`` is used (which DOES
+  // shift pitch).
   playbackRate: number;
   setPlaybackRate: (rate: number) => void;
+
+  // When true, route playback-rate changes through the pitch-preserving
+  // time-stretch worklet. Default off so existing UX is unchanged.
+  pitchLock: boolean;
+  togglePitchLock: () => void;
+  setPitchLock: (on: boolean) => void;
+
+  // Transpose offset in semitones. Range [-5, +5]. Stored centrally so
+  // chord labels (ChordTimeline / TheoryPanel / PlayPanel) and the audio
+  // pitch-shift node stay in sync.
+  transpose: number;
+  setTranspose: (semitones: number) => void;
+  bumpTranspose: (delta: number) => void;
 
   // Metronome (Plan 3 B6).
   metronomeOn: boolean;
@@ -53,6 +68,18 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
   playbackRate: 1.0,
   setPlaybackRate: (rate) => set({ playbackRate: rate }),
+
+  pitchLock: false,
+  togglePitchLock: () => set((s) => ({ pitchLock: !s.pitchLock })),
+  setPitchLock: (on) => set({ pitchLock: on }),
+
+  transpose: 0,
+  setTranspose: (semitones) =>
+    set({ transpose: Math.max(-5, Math.min(5, Math.trunc(semitones))) }),
+  bumpTranspose: (delta) =>
+    set((s) => ({
+      transpose: Math.max(-5, Math.min(5, s.transpose + delta)),
+    })),
 
   metronomeOn: false,
   toggleMetronome: () => set((s) => ({ metronomeOn: !s.metronomeOn })),

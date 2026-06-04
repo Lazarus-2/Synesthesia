@@ -3,13 +3,18 @@
 import React from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { useAppStore } from "../../store/useAppStore";
+import { useFavoritesStore } from "../../store/useFavoritesStore";
 
 export const Header: React.FC = () => {
-  const { analysis } = useAnalysisStore();
+  const { analysis, jobId } = useAnalysisStore();
   // ``useAppStore`` is intentionally not consumed here yet — kept as a
   // re-mount anchor for the planned ``setActiveTab("library")`` action when
   // the library page (Plan 3 A7) ships its breadcrumb in the header.
   void useAppStore;
+  // Subscribe to the ids array so the icon re-renders on toggle. ``has()``
+  // is a selector but doesn't trigger a re-render on its own.
+  const favoriteIds = useFavoritesStore((s) => s.ids);
+  const isFavorite = jobId ? favoriteIds.includes(jobId) : false;
 
   if (!analysis) return null;
 
@@ -60,10 +65,23 @@ export const Header: React.FC = () => {
           </span>
         </div>
         {/* Favorite Button */}
-        <button className="w-12 h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group ml-2">
+        <button
+          className="w-12 h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group ml-2 disabled:opacity-40"
+          onClick={() => {
+            if (!jobId) return;
+            const fav = useFavoritesStore.getState();
+            if (fav.has(jobId)) fav.remove(jobId);
+            else fav.add(jobId);
+          }}
+          disabled={!jobId}
+          aria-pressed={isFavorite}
+          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+        >
           <span
             className="material-symbols-outlined text-primary-container"
-            style={{ fontVariationSettings: "'FILL' 0, 'wght' 400" }}
+            style={{
+              fontVariationSettings: `'FILL' ${isFavorite ? 1 : 0}, 'wght' 400`,
+            }}
           >
             favorite
           </span>

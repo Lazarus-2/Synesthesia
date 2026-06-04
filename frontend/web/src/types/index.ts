@@ -33,6 +33,13 @@ export interface SongAnalysis {
   vibe_palette?: string[];
   instrument_guides?: Record<string, InstrumentGuide>;
   audioUrl?: string;
+  // Metadata enrichment (C4). All optional — backend populates lazily.
+  album?: string;
+  album_art_url?: string;
+  mbid?: string;
+  spotify_id?: string;
+  isrc?: string;
+  audio_source?: string;
 }
 
 export interface ChordDiagram {
@@ -70,4 +77,6 @@ export interface AnalyzeResponse {
   analysis?: SongAnalysis;
   instrument_guide?: InstrumentGuide;
   error?: string;
+  audio_url?: string;
+  youtube_url?: string;
 }

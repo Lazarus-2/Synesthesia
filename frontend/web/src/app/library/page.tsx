@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiGet, ApiError } from "../../lib/apiClient";
 import { useToastStore } from "../../store/useToastStore";
+import { useFavoritesStore } from "../../store/useFavoritesStore";
 
 // Library entry shape mirrors backend ``LibraryEntry`` (Plan 3 A7).
 interface LibraryEntry {
@@ -33,6 +34,69 @@ function formatDuration(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+// Filter chip primitive — keeps consistent Stitch styling for the chip row.
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all border ${
+        active
+          ? "primary-gradient text-on-primary border-transparent"
+          : "glass-panel text-on-surface-variant border-white/10 hover:text-on-surface hover:border-white/20"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const KEY_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Any key" },
+  { value: "C", label: "C" },
+  { value: "G", label: "G" },
+  { value: "D", label: "D" },
+  { value: "A", label: "A" },
+  { value: "E", label: "E" },
+  { value: "B", label: "B" },
+  { value: "F", label: "F" },
+  { value: "b", label: "All flats" }, // any key containing a flat accidental
+];
+
+type TimeRange = "7d" | "30d" | "all";
+
+const RANGE_LABEL: Record<TimeRange, string> = {
+  "7d": "7d",
+  "30d": "30d",
+  all: "All",
+};
+
+function matchesKeyFilter(entryKey: string, filter: string): boolean {
+  if (!filter) return true;
+  if (filter === "b") return entryKey.includes("b"); // flat accidental
+  // Partial, case-sensitive match on the tonic letter. ``entry.key`` is
+  // shaped like "C major" / "A minor" — startsWith catches those without
+  // matching the "C" in "C# major" via plain ``includes``.
+  return entryKey.startsWith(filter);
+}
+
+function matchesRangeFilter(createdAt: string | null, range: TimeRange): boolean {
+  if (range === "all") return true;
+  if (!createdAt) return false;
+  const ts = Date.parse(createdAt);
+  if (Number.isNaN(ts)) return false;
+  const days = range === "7d" ? 7 : 30;
+  return Date.now() - ts <= days * 24 * 60 * 60 * 1000;
+}
+
 export default function LibraryPage() {
   // ``activePage`` tracks the page whose fetch has completed; loading is
   // derived from comparing it to the requested ``page``. This avoids the
@@ -42,6 +106,13 @@ export default function LibraryPage() {
   const [page, setPage] = useState(0);
   const [activePage, setActivePage] = useState<number | null>(null);
   const loading = activePage !== page;
+
+  // Filter state — applied client-side over the current page's items.
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [keyFilter, setKeyFilter] = useState<string>("");
+  const [keyMenuOpen, setKeyMenuOpen] = useState(false);
+  const [range, setRange] = useState<TimeRange>("all");
+  const favoriteIds = useFavoritesStore((s) => s.ids);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,9 +126,22 @@ export default function LibraryPage() {
     return () => { cancelled = true; };
   }, [page]);
 
-  const items = data?.items ?? [];
+  const rawItems = data?.items ?? [];
   const total = data?.total ?? 0;
   const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+
+  const items = useMemo(() => {
+    const favSet = new Set(favoriteIds);
+    return rawItems.filter((it) => {
+      if (favoritesOnly && !favSet.has(it.job_id)) return false;
+      if (!matchesKeyFilter(it.key ?? "", keyFilter)) return false;
+      if (!matchesRangeFilter(it.created_at, range)) return false;
+      return true;
+    });
+  }, [rawItems, favoriteIds, favoritesOnly, keyFilter, range]);
+  const filtered = items.length !== rawItems.length;
+  const activeKeyLabel =
+    KEY_OPTIONS.find((o) => o.value === keyFilter)?.label ?? "Any key";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -81,9 +165,93 @@ export default function LibraryPage() {
 
       <main className="flex-grow px-6 md:px-16 py-10 max-w-[1280px] mx-auto w-full">
         <h1 className="font-headline text-4xl font-semibold text-on-surface mb-2">Library</h1>
-        <p className="text-sm text-on-surface-variant mb-8">
-          {loading ? "Loading…" : `${total} analyzed song${total === 1 ? "" : "s"}`}
+        <p className="text-sm text-on-surface-variant mb-6">
+          {loading
+            ? "Loading…"
+            : filtered
+              ? `${items.length} of ${total} song${total === 1 ? "" : "s"} match filters`
+              : `${total} analyzed song${total === 1 ? "" : "s"}`}
         </p>
+
+        {/* Filter chips */}
+        <div className="flex flex-wrap items-center gap-2 mb-8">
+          <Chip active={!favoritesOnly} onClick={() => setFavoritesOnly(false)}>
+            All
+          </Chip>
+          <Chip
+            active={favoritesOnly}
+            onClick={() => setFavoritesOnly((v) => !v)}
+          >
+            <span className="mr-1">★</span>
+            Favorites
+            {favoriteIds.length > 0 && (
+              <span className="ml-1 opacity-70">({favoriteIds.length})</span>
+            )}
+          </Chip>
+
+          <span className="w-px h-5 bg-white/10 mx-1" aria-hidden />
+
+          {/* Key dropdown chip */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setKeyMenuOpen((v) => !v)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all border inline-flex items-center gap-1 ${
+                keyFilter
+                  ? "primary-gradient text-on-primary border-transparent"
+                  : "glass-panel text-on-surface-variant border-white/10 hover:text-on-surface hover:border-white/20"
+              }`}
+              aria-haspopup="listbox"
+              aria-expanded={keyMenuOpen}
+            >
+              Key: {activeKeyLabel}
+              <span
+                className="material-symbols-outlined text-base"
+                style={{ fontVariationSettings: "'wght' 400" }}
+              >
+                {keyMenuOpen ? "expand_less" : "expand_more"}
+              </span>
+            </button>
+            {keyMenuOpen && (
+              <ul
+                className="absolute z-10 mt-2 min-w-[10rem] glass-panel rounded-xl p-1 border border-white/10 shadow-xl"
+                role="listbox"
+              >
+                {KEY_OPTIONS.map((opt) => (
+                  <li key={opt.value || "any"}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={keyFilter === opt.value}
+                      onClick={() => {
+                        setKeyFilter(opt.value);
+                        setKeyMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs ${
+                        keyFilter === opt.value
+                          ? "bg-primary/15 text-primary"
+                          : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <span className="w-px h-5 bg-white/10 mx-1" aria-hidden />
+
+          {/* Time range chip group */}
+          <div className="inline-flex items-center gap-1">
+            {(["7d", "30d", "all"] as TimeRange[]).map((r) => (
+              <Chip key={r} active={range === r} onClick={() => setRange(r)}>
+                {RANGE_LABEL[r]}
+              </Chip>
+            ))}
+          </div>
+        </div>
 
         {loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -96,7 +264,7 @@ export default function LibraryPage() {
           </div>
         )}
 
-        {!loading && items.length === 0 && (
+        {!loading && items.length === 0 && rawItems.length === 0 && (
           <div className="glass-panel rounded-xl p-12 text-center">
             <span className="material-symbols-outlined text-5xl text-on-surface-variant mb-4 inline-block">
               library_music
@@ -111,6 +279,31 @@ export default function LibraryPage() {
             >
               Start an analysis
             </Link>
+          </div>
+        )}
+
+        {!loading && items.length === 0 && rawItems.length > 0 && (
+          <div className="glass-panel rounded-xl p-12 text-center">
+            <span className="material-symbols-outlined text-5xl text-on-surface-variant mb-4 inline-block">
+              filter_alt_off
+            </span>
+            <h2 className="font-headline text-xl text-on-surface mb-2">
+              No songs match these filters
+            </h2>
+            <p className="text-sm text-on-surface-variant mb-6">
+              Try clearing the key, time range, or favorites filter.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setFavoritesOnly(false);
+                setKeyFilter("");
+                setRange("all");
+              }}
+              className="inline-block px-5 py-2 glass-panel rounded-full text-sm hover:border-primary/30"
+            >
+              Clear filters
+            </button>
           </div>
         )}
 

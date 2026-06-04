@@ -19,7 +19,12 @@ interface AppState {
   // LLM Provider
   llmProvider: LlmProvider;
   setLlmProvider: (provider: LlmProvider) => void;
-  
+
+  // Synesthesia visuals
+  colorStorm: boolean;
+  setColorStorm: (on: boolean) => void;
+  toggleColorStorm: () => void;
+
   // App-wide error handling
   error: string | null;
   setError: (error: string | null) => void;
@@ -38,7 +43,11 @@ export const useAppStore = create<AppState>((set) => ({
   
   llmProvider: "local",
   setLlmProvider: (llmProvider) => set({ llmProvider }),
-  
+
+  colorStorm: false,
+  setColorStorm: (colorStorm) => set({ colorStorm }),
+  toggleColorStorm: () => set((s) => ({ colorStorm: !s.colorStorm })),
+
   error: null,
   setError: (error) => set({ error }),
 }));

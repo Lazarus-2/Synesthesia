@@ -71,6 +71,34 @@ Key env vars: `LLM_PROVIDER`, `MODEL_NAME`, `LLM_FALLBACK_PROVIDER`,
 `REQUIRE_AUTH`, `AUTH_SECRET_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
 `LOG_FORMAT` (`json` | `plain`).
 
+### Music platform integrations (Plan v2)
+
+The ingestion + search layer pulls from several free / freemium services.
+**All are optional** — the analysis pipeline degrades gracefully when
+their credentials are missing.
+
+| Env var | Used by | What it unlocks |
+|---|---|---|
+| `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET` | `/analyze` (Spotify URL branch) | Track metadata when the user pastes an `open.spotify.com/...` URL. Without these, Spotify URLs return a 400 with a friendly "Spotify integration disabled" message. |
+| `SPOTIFY_ALLOW_YTDLP_FALLBACK` | Same as above | **Default off (ToS-clean).** When set to `true`, the backend bridges Spotify metadata → ytsearch1 → YouTube download. Spotify Developer ToS §III.2.a.i is at minimum ambiguous about this; you own the legal risk. |
+| `ACOUSTID_API_KEY` | `/analyze` (file upload branch) | AcoustID fingerprint → MBID enrichment. Without it, uploaded files keep their browser-supplied title. Get a free key at https://acoustid.org/new-application. |
+| `YTDLP_COOKIES_FILE` | yt-dlp ingest | Path to a Netscape-format cookie file; lets yt-dlp pull age-gated tracks. |
+
+### System dependencies for ingest
+
+- **Deno or Node.js** as a JavaScript runtime for yt-dlp's EJS signature
+  solver (yt-dlp ≥ 2026.03 requires this; YouTube ships a new challenge
+  most weeks). Install Deno via `npm i -g deno-bin` (no sudo) or
+  https://deno.land/install. Node.js 18+ is also acceptable.
+- **ffmpeg + ffprobe** for audio postprocessing. A static binary is
+  bundled via the `imageio-ffmpeg` wheel so the worker keeps running on
+  machines without a system ffmpeg — but for the best library
+  compatibility, `apt install ffmpeg` (or `brew install ffmpeg`) is
+  recommended.
+- **fpcalc** (Chromaprint) for AcoustID fingerprinting. Install via
+  `apt install libchromaprint-tools`. Without it, AcoustID enrichment
+  silently no-ops.
+
 ## Test, lint, type-check
 
 ```bash
@@ -88,8 +116,20 @@ cd frontend/web
 npm run codegen                          # dump openapi.json + regenerate types
 ```
 
-CI (`.github/workflows/`) runs lint, test, codegen-check, and a weekly
+CI (`.github/workflows/`) runs lint, test, codegen-check, an `e2e`
+Playwright suite against a freshly-built stack, and a weekly
 golden-songs eval against the LangGraph pipeline.
+
+## API surface (Plan v2 additions)
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/v1/analyze` | Upload an audio file or paste a URL. Accepts YouTube, YouTube Music, and Spotify URLs (Spotify metadata-only by default; env-gated yt-dlp bridge for full track). |
+| `GET /api/v1/search?q=&limit=` | Merged Deezer + MusicBrainz catalog search. 30/min per IP. Cached 1h. |
+| `GET /api/v1/lyrics?track_name=&artist_name=&duration=` | LRCLIB synced + plain lyrics. 60/min per IP. Cached 6h. Empty strings on no-match (the frontend treats that as "lyrics not available"). |
+| `GET /api/v1/midi/{job_id}/{stem}` | Download a stem-isolated MIDI for `full / vocals / drums / bass / other`. |
+| `GET /api/v1/library?limit=&offset=` | Paginated list of completed analyses. |
+| `GET /api/v1/share/{job_id}` | Read-only public view of a single analysis. |
 
 ## Where to look first
 

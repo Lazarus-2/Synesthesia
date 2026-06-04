@@ -46,6 +46,15 @@ export default function SharePage() {
   }
 
   const a = data.analysis;
+  const spotifyId = a?.spotify_id;
+  const hasSpotify = Boolean(spotifyId) || a?.audio_source === "spotify_embed";
+  // ``youtube_url`` lives on the envelope per backend AnalyzeResponse; we
+  // also fall back to ``state.youtube_url`` shape if a future revision moves
+  // it under analysis. Cast through unknown because the optional field
+  // isn't on SongAnalysis.
+  const youtubeUrl =
+    data.youtube_url ??
+    (a as unknown as { youtube_url?: string } | undefined)?.youtube_url;
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <nav className="w-full px-6 md:px-16 h-20 flex justify-between items-center border-b border-white/5 bg-surface/30 backdrop-blur-xl shrink-0">
@@ -63,10 +72,65 @@ export default function SharePage() {
       </nav>
 
       <main className="flex-grow px-6 md:px-16 py-10 max-w-[1024px] mx-auto w-full">
+        {spotifyId && (
+          <section className="mb-8 rounded-xl overflow-hidden glass-panel">
+            <iframe
+              title="Spotify player"
+              src={`https://open.spotify.com/embed/track/${encodeURIComponent(spotifyId)}`}
+              width="100%"
+              height={152}
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              className="block w-full border-0"
+            />
+          </section>
+        )}
+
         <h1 className="font-headline text-5xl font-semibold text-on-surface mb-2">
           {a?.title || "Untitled"}
         </h1>
-        <p className="text-on-surface-variant mb-8">{a?.artist || "Unknown artist"}</p>
+        <p className="text-on-surface-variant mb-6">{a?.artist || "Unknown artist"}</p>
+
+        {(hasSpotify || youtubeUrl) && (
+          <div className="flex flex-wrap gap-2 mb-8">
+            {youtubeUrl && (
+              <a
+                href={youtubeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel text-sm hover:border-primary/30 transition-all"
+              >
+                <span
+                  className="material-symbols-outlined text-base text-red-400"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  play_circle
+                </span>
+                Open in YouTube
+              </a>
+            )}
+            {hasSpotify && (
+              <a
+                href={
+                  spotifyId
+                    ? `https://open.spotify.com/track/${encodeURIComponent(spotifyId)}`
+                    : "https://open.spotify.com"
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel text-sm hover:border-primary/30 transition-all"
+              >
+                <span
+                  className="material-symbols-outlined text-base text-green-400"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  graphic_eq
+                </span>
+                Open in Spotify
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3 mb-10">
           <span className="px-4 py-2 rounded-full glass-panel">
