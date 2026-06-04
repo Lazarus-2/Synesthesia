@@ -990,16 +990,16 @@ async def search_tracks(request: Request, q: str, limit: int = 10) -> dict:
         )
     limit = max(1, min(limit, 25))
 
+    import json as _json
+
     from backend.search import merged_search
 
     cache_key = f"search:q={q.lower().strip()}:limit={limit}"
-    cached = await cache.get(cache_key)
+    cached = cache.get(cache_key)
     if cached:
-        import json as _json
         return {"results": _json.loads(cached), "cached": True}
     results = await merged_search(q, limit=limit)
-    import json as _json
-    await cache.set(cache_key, _json.dumps(results), ttl_seconds=3600)
+    cache.set(cache_key, _json.dumps(results), ttl_seconds=3600)
     return {"results": results, "cached": False}
 
 
@@ -1025,20 +1025,20 @@ async def get_lyrics(
             status_code=400, detail="track_name and artist_name are required"
         )
 
+    import json as _json
+
     from backend.lyrics import fetch_lyrics
 
     cache_key = (
         f"lyrics:t={track_name.lower().strip()}"
         f":a={artist_name.lower().strip()}:d={duration or 'any'}"
     )
-    cached = await cache.get(cache_key)
+    cached = cache.get(cache_key)
     if cached:
-        import json as _json
         return _json.loads(cached) | {"cached": True}
     payload = await fetch_lyrics(track_name, artist_name, duration)
-    import json as _json
     # Cache hits AND misses (both are valuable). 6h TTL.
-    await cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
+    cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
     return payload | {"cached": False}
 
 
