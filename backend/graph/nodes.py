@@ -32,6 +32,7 @@ def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
         roman=state.get("roman"),
     )
 
+
 logger = logging.getLogger(__name__)
 
 # Domains explicitly allowed for yt-dlp ingestion. yt-dlp supports thousands of
@@ -44,6 +45,11 @@ _YTDLP_ALLOWED_HOSTS = frozenset(
         "m.youtube.com",
         "music.youtube.com",
         "youtu.be",
+        # Spotify hosts — validated here so the SSRF check still runs
+        # even though we go through spotipy (which uses api.spotify.com).
+        # The pasted URL itself points at open.spotify.com / embed.spotify.com.
+        "open.spotify.com",
+        "embed.spotify.com",
     }
 )
 
@@ -84,11 +90,48 @@ def ingest_node(state: AnalysisState) -> dict:
     metadata_extras: dict = {}  # title/artist/etc. from yt-dlp info to merge
 
     if youtube_url:
-        # Normalize music.youtube.com → www.youtube.com so we can use the
-        # web_safari/tv clients (which don't need a PO token per session).
-        from backend.ingestion.url_resolver import normalize_to_www_youtube
+        # Branch by platform. Spotify gets its own flow: metadata-only
+        # by default, env-gated YouTube re-download fallback. The
+        # ``audio_source`` field tells downstream nodes whether they
+        # have real audio to analyze or whether the frontend will play
+        # via Spotify's iframe embed.
+        from backend.ingestion.url_resolver import classify_url, normalize_to_www_youtube
 
-        youtube_url = normalize_to_www_youtube(youtube_url)
+        platform = classify_url(youtube_url)
+
+        if platform == "spotify":
+            from backend.ingestion import spotify as spotify_ingest
+
+            track_id = spotify_ingest.parse_spotify_url(youtube_url)
+            if not track_id:
+                errors.append(
+                    f"Rejected URL: could not parse Spotify track ID from {youtube_url!r}"
+                )
+                return {"audio_path": audio_path, "errors": errors}
+            spotify_meta = spotify_ingest.fetch_spotify_metadata(track_id) or {}
+            metadata_extras.update(spotify_meta)
+            # Optional ToS-aware bridge to YouTube (env-gated).
+            bridge_url = None
+            if spotify_meta.get("title"):
+                bridge_url = spotify_ingest.resolve_via_youtube(
+                    spotify_meta["title"], spotify_meta.get("artist", "")
+                )
+            if bridge_url:
+                youtube_url = bridge_url  # fall through to the yt-dlp branch
+                metadata_extras["audio_source"] = "youtube"
+            else:
+                # ToS-clean path: no audio download. Frontend renders
+                # the Spotify embed iframe instead; analysis pipeline
+                # downstream of ingest_node sees missing audio and
+                # surfaces a structured "metadata-only" state.
+                metadata_extras["audio_source"] = "spotify_embed"
+                return {"audio_path": None, "errors": errors, **metadata_extras}
+
+        if platform == "youtube_music" or "music.youtube.com" in youtube_url:
+            # Normalize music.youtube.com → www.youtube.com so we can use the
+            # web_safari/tv clients (which don't need a PO token per session).
+            youtube_url = normalize_to_www_youtube(youtube_url)
+
         try:
             _validate_youtube_url(youtube_url)
         except ValueError as e:
@@ -157,9 +200,7 @@ def ingest_node(state: AnalysisState) -> dict:
                 "max_filesize": 100 * 1024 * 1024,  # 100 MB
                 # 2026 client roster — web_safari + tv bypass SABR throttling
                 # better than plain web; android is deprecated for unauth requests.
-                "extractor_args": {
-                    "youtube": {"player_client": ["web_safari", "tv", "web"]}
-                },
+                "extractor_args": {"youtube": {"player_client": ["web_safari", "tv", "web"]}},
             }
             # Pull the cookie file in from env if set (for age-gated tracks).
             cookie_file = os.environ.get("YTDLP_COOKIES_FILE")
