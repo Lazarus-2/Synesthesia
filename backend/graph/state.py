@@ -34,7 +34,7 @@ class AnalysisState(TypedDict, total=False):
     artist: str
     album: str
     album_art_url: str
-    mbid: str          # MusicBrainz Recording ID
+    mbid: str  # MusicBrainz Recording ID
     spotify_id: str
     isrc: str
     audio_source: str  # "youtube" | "spotify_embed" | "upload" | "deezer_preview"
