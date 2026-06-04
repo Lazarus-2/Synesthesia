@@ -18,7 +18,14 @@ _PROVIDERS_REQUIRING_KEY = frozenset({"openai", "anthropic", "gemini", "groq", "
 
 # Maximum audio duration (seconds) accepted by the ML pipeline. Centralized so the
 # limit stays consistent across chord/beat/key extractors.
-MAX_AUDIO_DURATION_S = 180
+#
+# Set to 10 minutes — covers virtually every pop/rock song, leaves a margin
+# for extended cuts (Stairway, Bohemian Rhapsody, Free Bird live), and the
+# librosa+demucs pipeline still completes in under ~2 minutes for that
+# length on a modest CPU. The previous 180s limit rejected anything longer
+# than 3 minutes — including Never Gonna Give You Up at 213s — which made
+# the YouTube paste flow feel broken on the first track most users tried.
+MAX_AUDIO_DURATION_S = 600
 
 
 class Settings(BaseSettings):

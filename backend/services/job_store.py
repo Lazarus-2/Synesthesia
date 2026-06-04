@@ -41,7 +41,15 @@ logger = logging.getLogger(__name__)
 # Default heartbeat staleness window. If a job's last heartbeat is older
 # than this, ``is_stale()`` reports True so the SSE handler can surface
 # "worker likely crashed" instead of waiting indefinitely.
-DEFAULT_HEARTBEAT_TIMEOUT_S = 60
+#
+# Sized generously (5 minutes) because the yt-dlp download stage doesn't
+# tick the heartbeat from inside its own progress callback — a HLS-fragment
+# download for a typical 4-minute song can stretch past 60s without any
+# JobStore writes, which was firing a spurious WORKER_STALE error in the
+# SSE consumer while the worker was actually fine. The downstream ML
+# stages (chord/key/beat) each take well under 30s, so genuine worker
+# crashes still surface within the 5-minute envelope.
+DEFAULT_HEARTBEAT_TIMEOUT_S = 5 * 60
 
 # How long progress entries live in Redis before automatic eviction. Longer
 # than any plausible analysis so a slow LLM doesn't lose its progress.

@@ -263,8 +263,21 @@ export function openProgressStream(
   // Named events (Plan 2 D6).
   es.addEventListener("chunk", (e) => handlers.onChunk?.(safeParse((e as MessageEvent).data)));
   es.addEventListener("done", (e) => handlers.onDone?.(safeParse((e as MessageEvent).data)));
+  // The "error" listener fires for BOTH server-sent ``event: error`` frames
+  // AND for native transport errors (server restart, connection blip).
+  // Native transport errors arrive with no ``data`` payload and the
+  // EventSource auto-reconnects (readyState === CONNECTING). Only surface
+  // the error to the consumer when it's a real server-sent error frame.
   es.addEventListener("error", (e) => {
-    const data = safeParse((e as MessageEvent).data);
+    const me = e as MessageEvent;
+    if (!me.data) {
+      // Transport blip — EventSource is already auto-reconnecting. Ignore
+      // unless the connection is permanently closed (readyState === 2).
+      if (es.readyState !== EventSource.CLOSED) return;
+      handlers.onError?.({ message: "SSE connection closed" });
+      return;
+    }
+    const data = safeParse(me.data);
     handlers.onError?.(
       data && typeof data === "object"
         ? data as { code?: string; message: string }
