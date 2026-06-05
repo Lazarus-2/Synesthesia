@@ -45,3 +45,16 @@ backend/tests/e2e_browser/artifacts/
 .cursorrules
 cursor_exports.json
 .playwright-mcp/
+
+# Agent / assistant instructions (local-only; canonical public docs are README.md + .env.example)
+CLAUDE.md
+AGENTS.md
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+.trae/
+.trae-cn/
+
+# Internal docs (architecture notes, research, screenshots — kept local, not pushed)
+docs/
