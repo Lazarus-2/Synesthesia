@@ -12,8 +12,6 @@ import logging
 import math
 from pathlib import Path
 
-from langchain_core.runnables import Runnable
-
 logger = logging.getLogger(__name__)
 
 
@@ -242,13 +240,3 @@ def find_similar(
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:k]
-
-
-def build_similarity_chain() -> Runnable:
-    """LCEL chain wrapping find_similar for uniform composition.
-
-    Input dict shape: ``{"chords": list[str], "key": str | None, "k": int}``.
-    """
-    from langchain_core.runnables import RunnableLambda
-
-    return RunnableLambda(lambda x: find_similar(x["chords"], k=x.get("k", 5), key=x.get("key")))

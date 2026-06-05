@@ -11,8 +11,7 @@ Synesthesia (formerly "SoundBreak") is a music-analysis + education platform. A 
 Backend (Python 3.12; venv lives at `backend/.venv/`):
 
 ```bash
-pip install -r backend/requirements.txt          # heavy — librosa, madmom, demucs, basic-pitch
-pip install -e ./backend                          # editable install so ``import backend`` works
+pip install -e "./backend[dev]"                   # editable install + dev extras (ruff/mypy/pytest)
 uvicorn backend.main:app --reload                 # API on :8001
 taskiq worker backend.worker:broker backend.main  # background analysis worker (needs Redis)
 ```

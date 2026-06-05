@@ -214,12 +214,6 @@ for the reasoning:
 - **Postgres for `users` / `chat_sessions`** — Mongo is fine at current scale.
 - **S3 storage abstraction** — premature; one local-files implementation is
   enough until a cloud target is chosen.
-- **Pitch-preserving slowdown** in practice mode — Plan v2 shipped the
-  pitch-lock toggle + vendored the SoundTouch AudioWorklet bundle
-  (`frontend/web/public/soundtouch-processor.js`). The audio chain
-  routing — replacing wavesurfer's playbackRate with a SoundTouchNode
-  inserted between the `MediaElementAudioSourceNode` and `destination`
-  — ships in the audio-engine follow-up.
 - **Pre-computed audio embeddings (CLAP / MERT) for similarity** — the
   current 36-D sequence-aware embedding is the cheap first step.
 - **Auto re-enqueue from the DLQ** — `failed_jobs` is visible in Mongo

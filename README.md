@@ -147,15 +147,3 @@ golden-songs eval against the LangGraph pipeline.
   OpenTelemetry tracing.
 - [`frontend/web/src/lib/apiClient.ts`](frontend/web/src/lib/apiClient.ts) —
   the single fetch / SSE wrapper every store and component should use.
-
-## Plans
-
-The `plans/` directory contains the rolling implementation plans:
-
-- [plans/01-cleanup-and-optimization.md](plans/01-cleanup-and-optimization.md)
-- [plans/02-architecture-and-improvements.md](plans/02-architecture-and-improvements.md)
-- [plans/03-pending-work-and-features.md](plans/03-pending-work-and-features.md)
-- [plans/00-verification-and-corrections.md](plans/00-verification-and-corrections.md)
-
-Plans 1 and 2 are complete; Plan 3 is almost complete (see the file for the
-deferred parking-lot items).
