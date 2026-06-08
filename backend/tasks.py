@@ -183,6 +183,7 @@ async def run_analysis_pipeline(
 
     graph = get_graph()
     initial_state = {
+        "job_id": job_id,
         "youtube_url": youtube_url,
         "audio_path": audio_path,
         "instrument": instrument,

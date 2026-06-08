@@ -35,6 +35,7 @@ NO_CHORDS_MESSAGE = (
 
 class AnalysisState(TypedDict, total=False):
     # --- Input ---
+    job_id: str
     audio_path: str
     youtube_url: str | None
     instrument: Instrument
