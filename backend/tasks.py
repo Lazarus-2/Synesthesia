@@ -145,9 +145,9 @@ async def run_analysis_pipeline(
 
     job_store = get_job_store()
 
-    def _progress(pct: int, msg: str, status: str = "processing"):
+    async def _progress(pct: int, msg: str, status: str = "processing"):
         """Push incremental progress + heartbeat to the unified JobStore."""
-        job_store.set_progress(
+        await job_store.set_progress(
             job_id,
             {"job_id": job_id, "status": status, "progress": pct, "message": msg},
         )
@@ -167,7 +167,7 @@ async def run_analysis_pipeline(
         existing = None
     if existing:
         logger.info("Job %s already complete in DB; idempotent return", job_id)
-        cached = job_store.get_cached_response(job_id)
+        cached = await job_store.get_cached_response(job_id)
         if not cached:
             try:
                 replay = AnalyzeResponse(
@@ -176,7 +176,7 @@ async def run_analysis_pipeline(
                     analysis=SongAnalysis.model_validate(existing),
                     instrument_guide=None,
                 )
-                job_store.cache_response(job_id, replay.model_dump_json())
+                await job_store.cache_response(job_id, replay.model_dump_json())
             except Exception:
                 logger.exception("Failed to rebuild cached response for %s", job_id)
         return
@@ -193,22 +193,22 @@ async def run_analysis_pipeline(
         "retries": 0,
     }
 
-    _progress(0, "Queued for analysis", "queued")
+    await _progress(0, "Queued for analysis", "queued")
 
     try:
-        _progress(5, "Loading audio file...")
+        await _progress(5, "Loading audio file...")
         result = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": job_id}},
         )
-        _progress(80, "Building analysis results...")
+        await _progress(80, "Building analysis results...")
 
         from backend.graph.status import derive_status
 
         status = derive_status(result)
         errors = result.get("errors", [])
         if status == "failed":
-            _progress(0, "; ".join(errors) or "Analysis failed", "error")
+            await _progress(0, "; ".join(errors) or "Analysis failed", "error")
             return
 
         chords = result.get("chords", [])
@@ -232,7 +232,7 @@ async def run_analysis_pipeline(
             stems=result.get("stems", {}),
         )
 
-        _progress(90, "Saving to database...")
+        await _progress(90, "Saving to database...")
 
         # Fetch existing record to preserve other instrument guides
         existing_for_merge = await db.song_analyses.find_one({"_id": job_id})
@@ -279,13 +279,13 @@ async def run_analysis_pipeline(
             instrument_guide=result.get("instrument_guide"),
             audio_url=f"/api/v1/audio/{job_id}",
         )
-        job_store.cache_response(job_id, done_response.model_dump_json())
+        await job_store.cache_response(job_id, done_response.model_dump_json())
 
     except Exception as e:
         # Push a user-visible error frame to the SSE cache so the client
         # knows something went wrong on THIS attempt. The retry middleware
         # will re-enqueue and subsequent attempts will overwrite this.
-        _progress(0, f"Analysis pipeline crashed: {e}", "error")
+        await _progress(0, f"Analysis pipeline crashed: {e}", "error")
         if is_final_attempt:
             logger.error(
                 "run_analysis_pipeline: job_id=%s exhausted retries (attempt %d/%d)",

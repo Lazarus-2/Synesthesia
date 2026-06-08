@@ -286,10 +286,10 @@ class TestChatHistoryRefactor:
 
         original_get = cache_module.cache.get
 
-        def _cold_get(key: str):
+        async def _cold_get(key: str):
             if key == _target_key:
                 return None
-            return original_get(key)  # leave other keys untouched
+            return await original_get(key)  # leave other keys untouched
 
         monkeypatch.setattr(cache_module.cache, "get", _cold_get)
 

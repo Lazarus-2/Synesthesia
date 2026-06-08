@@ -484,7 +484,7 @@ async def analyze(
         status="queued",
         audio_url=f"/api/v1/audio/{job_id}" if audio_path else None,
     )
-    get_job_store().cache_response(job_id, response.model_dump_json())
+    await get_job_store().cache_response(job_id, response.model_dump_json())
 
     await run_analysis_pipeline.kiq(
         job_id,
@@ -514,7 +514,8 @@ async def get_analysis(
     # the cached payload's instrument_guide may not match the request — we
     # re-pick from the persisted analysis below when an instrument is specified).
     job_store = get_job_store()
-    cached = job_store.get_cached_response(job_id)
+    # FT-03: the :result key is the fast path; Mongo is the durable fallback.
+    cached = await job_store.get_cached_response(job_id)
     if cached and instrument is None:
         return AnalyzeResponse.model_validate_json(cached)
 
@@ -557,7 +558,7 @@ async def get_analysis(
     # Only cache the un-instrumented response so the per-instrument variants
     # don't pollute the shared key.
     if instrument is None:
-        job_store.cache_response(job_id, response.model_dump_json())
+        await job_store.cache_response(job_id, response.model_dump_json())
     return response
 
 
@@ -951,7 +952,17 @@ async def get_analysis_progress(job_id: str):
         elapsed = 0
         last_emitted: str | None = None
         while elapsed < max_lifetime_s:
-            cached_data = job_store.get_cached_response(job_id)
+            # FT-03: progress and result now live under distinct keys. The
+            # terminal AnalyzeResponse lands on the :result key via
+            # cache_response; incremental frames (and the worker's error
+            # frame) land on the :progress key via set_progress. Read the
+            # result first so a completed job ends the stream immediately,
+            # then fall back to the in-flight progress payload.
+            result_data = await job_store.get_cached_response(job_id)
+            progress_data = await job_store.get_progress(job_id)
+            cached_data = result_data or (
+                json.dumps(progress_data) if progress_data else None
+            )
             if cached_data and cached_data != last_emitted:
                 last_emitted = cached_data
                 try:
@@ -978,7 +989,7 @@ async def get_analysis_progress(job_id: str):
                     return
                 yield _sse_frame("chunk", parsed)
 
-            if job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S):
+            if await job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S):
                 yield _sse_frame(
                     "error",
                     {
