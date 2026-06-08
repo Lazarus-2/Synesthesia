@@ -9,8 +9,6 @@ underlying modules — the LLM never computes it.
 
 from __future__ import annotations
 
-import asyncio
-
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -80,26 +78,17 @@ def _resolve_analysis_repo() -> AnalysisRepo:
     return AnalysisRepo(get_mongodb())
 
 
-def _run_coro(coro):
-    """Run an async repo call from inside the sync @tool body.
-
-    create_react_agent invokes sync tools in a worker thread (via run_in_executor
-    / anyio), so there is no running loop here; asyncio.run is safe.
-    """
-    return asyncio.run(coro)
-
-
 class SongAnalysisArgs(BaseModel):
     job_id: str = Field(description="The analysis job id for the current song.")
 
 
 @tool(args_schema=SongAnalysisArgs)
-def get_song_analysis(job_id: str) -> dict:
+async def get_song_analysis(job_id: str) -> dict:
     """Read the deterministic, already-computed analysis facts for a song
     (key, tempo, chord symbols in order, Roman numerals, section names, and the
     analysis trust status). READ-ONLY ground truth — never invent facts the
     analysis didn't detect; if a fact is absent, say so."""
-    doc = _run_coro(_resolve_analysis_repo().get(job_id))
+    doc = await _resolve_analysis_repo().get(job_id)
     if not doc:
         return {"error": f"No analysis found for job_id '{job_id}'."}
 
@@ -144,12 +133,12 @@ class FindSimilarArgs(BaseModel):
 
 
 @tool(args_schema=FindSimilarArgs)
-def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
+async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
     """Find catalog songs whose chord progression is most similar to the current
     song's, using the deterministic key-aware progression embedding. Returns a
     ranked list of {title, artist, progression, score}. Use this for
     'what sounds like this?' / 'songs with similar chords' questions."""
-    doc = _run_coro(_resolve_analysis_repo().get(analysis_job_id))
+    doc = await _resolve_analysis_repo().get(analysis_job_id)
     if not doc:
         return {"error": f"No analysis found for job_id '{analysis_job_id}'."}
 

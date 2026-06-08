@@ -115,13 +115,13 @@ _STORED_DOC = {
 
 
 class TestGetSongAnalysis:
-    def test_returns_compact_facts(self, monkeypatch):
+    async def test_returns_compact_facts(self, monkeypatch):
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import get_song_analysis
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
 
-        out = get_song_analysis.invoke({"job_id": "job-abc"})
+        out = await get_song_analysis.ainvoke({"job_id": "job-abc"})
         assert out["title"] == "Let It Be"
         assert out["key"] == "C major"
         assert out["tempo"] == 72.0
@@ -131,13 +131,13 @@ class TestGetSongAnalysis:
         assert out["roman"] == ["I", "V", "vi"]
         assert out["sections"] == ["verse"]
 
-    def test_missing_job_returns_not_found(self, monkeypatch):
+    async def test_missing_job_returns_not_found(self, monkeypatch):
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import get_song_analysis
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(None))
 
-        out = get_song_analysis.invoke({"job_id": "nope"})
+        out = await get_song_analysis.ainvoke({"job_id": "nope"})
         assert "found" in out["error"].lower()
 
     def test_is_a_langchain_tool_with_schema(self):
@@ -150,15 +150,26 @@ class TestGetSongAnalysis:
         assert get_song_analysis.description
         assert "job_id" in get_song_analysis.args_schema.model_json_schema()["properties"]
 
+    async def test_async_ainvoke_runs_on_live_loop(self, monkeypatch):
+        """Prove the tool runs natively async (no asyncio.run / cross-loop) via ainvoke."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import get_song_analysis
+
+        monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
+
+        out = await get_song_analysis.ainvoke({"job_id": "job-abc"})
+        assert out["job_id"] == "job-abc"
+        assert out["title"] == "Let It Be"
+
 
 class TestFindSimilarSongs:
-    def test_returns_ranked_matches(self, monkeypatch):
+    async def test_returns_ranked_matches(self, monkeypatch):
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import find_similar_songs
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
 
-        out = find_similar_songs.invoke({"analysis_job_id": "job-abc"})
+        out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
         assert isinstance(out, list)
         assert out, "expected at least one similar-song match"
         first = out[0]
@@ -167,24 +178,24 @@ class TestFindSimilarSongs:
         scores = [r["score"] for r in out]
         assert scores == sorted(scores, reverse=True)
 
-    def test_missing_job_returns_not_found(self, monkeypatch):
+    async def test_missing_job_returns_not_found(self, monkeypatch):
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import find_similar_songs
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(None))
 
-        out = find_similar_songs.invoke({"analysis_job_id": "nope"})
+        out = await find_similar_songs.ainvoke({"analysis_job_id": "nope"})
         assert isinstance(out, dict)
         assert "found" in out["error"].lower()
 
-    def test_no_chords_returns_clear_message(self, monkeypatch):
+    async def test_no_chords_returns_clear_message(self, monkeypatch):
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import find_similar_songs
 
         doc = {"_id": "job-empty", "key": "C major", "chords": []}
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(doc))
 
-        out = find_similar_songs.invoke({"analysis_job_id": "job-empty"})
+        out = await find_similar_songs.ainvoke({"analysis_job_id": "job-empty"})
         assert isinstance(out, dict)
         assert "chord" in out["error"].lower()
 
@@ -198,6 +209,17 @@ class TestFindSimilarSongs:
         assert find_similar_songs.description
         props = find_similar_songs.args_schema.model_json_schema()["properties"]
         assert "analysis_job_id" in props
+
+    async def test_async_ainvoke_runs_on_live_loop(self, monkeypatch):
+        """Prove the tool runs natively async (no asyncio.run / cross-loop) via ainvoke."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import find_similar_songs
+
+        monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
+
+        out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
+        assert isinstance(out, list)
+        assert out[0]["score"] <= 1.0
 
 
 class TestToolsList:
