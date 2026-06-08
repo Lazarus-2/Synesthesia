@@ -255,7 +255,7 @@ class TestBindBeforeFallback:
 
         def _transform(model):
             # Tag every model the transform touches so we can assert both ran.
-            seen.append(id(model).__class__.__name__)  # type: ignore[attr-defined]
+            seen.append(id(model))
             return model | RunnableLambda(lambda v: v)
 
         reset_fallback_stats()
@@ -264,8 +264,9 @@ class TestBindBeforeFallback:
             _make_fallback,
             transform=_transform,
         )
-        # transform ran on primary AND fallback => two calls.
+        # transform ran on primary AND fallback => two calls on two DISTINCT objects.
         assert len(seen) == 2
+        assert seen[0] != seen[1]
         # Fallback routing still works.
         assert runnable.invoke("hi") == "fb:hi"
 

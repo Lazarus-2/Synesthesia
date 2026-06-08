@@ -49,12 +49,16 @@ def reset_fallback_stats() -> None:
 
 
 def _wrap_with_observable_fallback(
-    primary: BaseChatModel,
-    fallback: BaseChatModel,
+    primary: Runnable,
+    fallback: Runnable,
     primary_name: str,
     fallback_name: str,
 ) -> Any:
     """Compose primary + fallback so each fallback activation is logged.
+
+    Both ``primary`` and ``fallback`` may be any :class:`Runnable` — including
+    ``RunnableSequence`` objects returned by ``.with_structured_output()`` or
+    ``.bind_tools()`` — not just bare ``BaseChatModel`` instances.
 
     ``RunnableWithFallbacks`` silently catches the primary's exception and
     routes to the fallback. We need a side-effect on that error path. The
@@ -258,6 +262,55 @@ def _get_api_key(provider: str) -> str:
     return key_map.get(provider, "")
 
 
+def _resolve_primary_and_fallback(
+    temperature: float,
+) -> tuple[Callable[[], BaseChatModel], Callable[[], BaseChatModel] | None, str, str | None]:
+    """Resolve provider/model/key config and emit logger.info lines ONCE.
+
+    Returns a 4-tuple:
+    - ``build_primary``  — zero-arg builder for the primary bare model
+    - ``build_fallback`` — zero-arg builder for the fallback bare model, or ``None``
+    - ``primary_name``   — resolved primary provider string
+    - ``fallback_name``  — resolved fallback provider string, or ``None``
+
+    Both :func:`build_llm` and :func:`_provider_builders` (which backs
+    :func:`build_chat_llm` / :func:`build_structured_llm`) delegate here so
+    provider resolution and logging happen in exactly one place.
+    """
+    s = get_settings()
+    provider = (s.llm_provider or "ollama").lower()
+
+    logger.info("Building LLM: provider=%s, model=%s", provider, s.model_name or "(default)")
+
+    def _build_primary() -> BaseChatModel:
+        return _build_provider_llm(
+            provider=provider,
+            model=s.model_name,
+            temperature=temperature,
+            api_key=_get_api_key(provider),
+        )
+
+    fallback_provider = (s.llm_fallback_provider or "").lower()
+    if fallback_provider and fallback_provider != provider:
+        logger.info(
+            "Fallback configured: provider=%s, model=%s",
+            fallback_provider,
+            s.llm_fallback_model or "(default)",
+        )
+
+        def _build_fallback() -> BaseChatModel:
+            return _build_provider_llm(
+                provider=fallback_provider,
+                model=s.llm_fallback_model,
+                temperature=temperature,
+                api_key=_get_api_key(fallback_provider),
+            )
+
+        return _build_primary, _build_fallback, provider, fallback_provider
+
+    return _build_primary, None, provider, None
+
+
 def build_llm(temperature: float = 0.2) -> BaseChatModel:
     """Build LLM with optional fallback chain.
 
@@ -268,37 +321,19 @@ def build_llm(temperature: float = 0.2) -> BaseChatModel:
     Usage:
         llm = build_llm(temperature=0.3)
         result = llm.invoke("Hello")
-        # or with structured output:
-        structured = llm.with_structured_output(MySchema)
-        result = structured.invoke("Extract data from ...")
+
+    For structured output with a configured fallback, use
+    ``build_structured_llm(MySchema)`` instead — it applies
+    ``with_structured_output`` to each bare model before composing fallbacks.
     """
-    s = get_settings()
-    provider = (s.llm_provider or "ollama").lower()
-
-    logger.info("Building LLM: provider=%s, model=%s", provider, s.model_name or "(default)")
-
-    primary = _build_provider_llm(
-        provider=provider,
-        model=s.model_name,
-        temperature=temperature,
-        api_key=_get_api_key(provider),
+    build_primary, build_fallback, provider, fallback_provider = _resolve_primary_and_fallback(
+        temperature
     )
 
-    # Optional fallback — auto-tries second provider on any exception.
-    # The wrapper logs every fallback activation (Plan 2 B5).
-    fallback_provider = (s.llm_fallback_provider or "").lower()
-    if fallback_provider and fallback_provider != provider:
-        logger.info(
-            "Fallback configured: provider=%s, model=%s",
-            fallback_provider,
-            s.llm_fallback_model or "(default)",
-        )
-        fallback = _build_provider_llm(
-            provider=fallback_provider,
-            model=s.llm_fallback_model,
-            temperature=temperature,
-            api_key=_get_api_key(fallback_provider),
-        )
+    primary = build_primary()
+
+    if build_fallback is not None and fallback_provider is not None:
+        fallback = build_fallback()
         return _wrap_with_observable_fallback(
             primary,
             fallback,
@@ -314,34 +349,13 @@ def _provider_builders(
 ) -> tuple[Callable[[], BaseChatModel], Callable[[], BaseChatModel] | None]:
     """Return zero-arg builders for the primary and (optional) fallback models.
 
-    Shared by :func:`build_chat_llm` and :func:`build_structured_llm` so they
-    resolve provider/model/key exactly like :func:`build_llm` does.
+    Delegates to :func:`_resolve_primary_and_fallback` so provider resolution
+    and logging are shared with :func:`build_llm`.
     """
-    s = get_settings()
-    provider = (s.llm_provider or "ollama").lower()
-
-    def _build_primary() -> BaseChatModel:
-        return _build_provider_llm(
-            provider=provider,
-            model=s.model_name,
-            temperature=temperature,
-            api_key=_get_api_key(provider),
-        )
-
-    fallback_provider = (s.llm_fallback_provider or "").lower()
-    if fallback_provider and fallback_provider != provider:
-
-        def _build_fallback() -> BaseChatModel:
-            return _build_provider_llm(
-                provider=fallback_provider,
-                model=s.llm_fallback_model,
-                temperature=temperature,
-                api_key=_get_api_key(fallback_provider),
-            )
-
-        return _build_primary, _build_fallback
-
-    return _build_primary, None
+    build_primary, build_fallback, _primary_name, _fallback_name = _resolve_primary_and_fallback(
+        temperature
+    )
+    return build_primary, build_fallback
 
 
 def build_chat_llm(temperature: float = 0.7, tools: list | None = None) -> Runnable:
@@ -355,7 +369,7 @@ def build_chat_llm(temperature: float = 0.7, tools: list | None = None) -> Runna
     build_primary, build_fallback = _provider_builders(temperature)
 
     def _transform(model: BaseChatModel) -> Runnable:
-        if tools:
+        if tools is not None:
             return model.bind_tools(tools)
         return model
 
