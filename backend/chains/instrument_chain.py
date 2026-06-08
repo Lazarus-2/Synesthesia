@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableParallel
 
-from backend.chains.llm_factory import build_llm
+from backend.chains.llm_factory import build_structured_llm
 from backend.config import get_settings
 from backend.prompts.instrument_prompt import instrument_prompt
 from backend.schemas import InstrumentGuide, SongAnalysis
@@ -66,10 +66,12 @@ class LLMInstrumentTips(BaseModel):
 def build_instrument_chain() -> Runnable:
     """Runnable expecting: {"analysis": SongAnalysis, "instrument": ..., "difficulty": ...}."""
     s = get_settings()
-    llm = build_llm(temperature=s.instrument_temperature)
 
-    # Use structured output for the LLM portion
-    structured_llm = llm.with_structured_output(LLMInstrumentTips)
+    # Structured output applied to each bare provider model before fallback
+    # composition (Group 1 P1 fix).
+    structured_llm = build_structured_llm(
+        LLMInstrumentTips, temperature=s.instrument_temperature
+    )
     llm_tips = RunnableLambda(_format_inputs) | instrument_prompt | structured_llm
 
     def _assemble_guide(results: dict) -> InstrumentGuide:

@@ -440,3 +440,30 @@ class TestTheoryChainFallbackSafe:
         assert chain is not None
         # Schema passed is the chain-local TheoryExplanation.
         assert captured == [theory_chain.TheoryExplanation]
+
+
+class TestInstrumentChainFallbackSafe:
+    """Regression: build_instrument_chain must build cleanly with a different
+    fallback provider configured (was AttributeError on
+    RunnableWithFallbacks.with_structured_output)."""
+
+    def test_build_instrument_chain_with_cross_provider_fallback(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains import instrument_chain
+
+        captured: list[object] = []
+
+        def _fake_structured(schema, temperature=0.2):
+            captured.append(schema)
+            return RunnableLambda(lambda _x: _x)
+
+        with patch.object(
+            instrument_chain, "build_structured_llm", side_effect=_fake_structured
+        ):
+            chain = instrument_chain.build_instrument_chain()
+
+        assert chain is not None
+        assert captured == [instrument_chain.LLMInstrumentTips]
