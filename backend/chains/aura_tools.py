@@ -9,14 +9,41 @@ underlying modules — the LLM never computes it.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from backend.chains.similarity_chain import find_similar
 from backend.database import get_mongodb
 from backend.repositories.analysis_repo import AnalysisRepo
 from backend.schemas import Instrument
+from backend.tools.capo import suggest_capo
+from backend.tools.chords import parse_chord
 from backend.tools.synesthesia_colors import get_chord_color as _get_chord_color
+from backend.tools.theory_glossary import lookup_theory
+from backend.tools.transpose import transpose_progression
 from backend.tools.voicings import get_chord_diagrams
+
+# ---------------------------------------------------------------------------
+# Ownership context variable (I-1)
+# ---------------------------------------------------------------------------
+
+current_user_id: ContextVar[str | None] = ContextVar(
+    "aura_current_user_id", default=None
+)
+"""Set by the chat endpoint (Group D) before invoking the agent so the
+analysis-reading tools enforce per-user ownership via get_owned; the LLM
+cannot influence it.
+
+Usage::
+
+    token = current_user_id.set(authenticated_user.id)
+    try:
+        result = await agent.ainvoke(...)
+    finally:
+        current_user_id.reset(token)
+"""
 
 # ---------------------------------------------------------------------------
 # B.1  get_chord_voicing
@@ -46,8 +73,6 @@ def get_chord_voicing(chord: str, instrument: str = "guitar") -> dict:
 # B.2  get_chord_color  (Python symbol: get_chord_color_tool to avoid shadowing
 #                        the imported synesthesia_colors.get_chord_color)
 # ---------------------------------------------------------------------------
-
-from backend.tools.chords import parse_chord  # noqa: E402
 
 
 class ChordColorArgs(BaseModel):
@@ -87,8 +112,16 @@ async def get_song_analysis(job_id: str) -> dict:
     """Read the deterministic, already-computed analysis facts for a song
     (key, tempo, chord symbols in order, Roman numerals, section names, and the
     analysis trust status). READ-ONLY ground truth — never invent facts the
-    analysis didn't detect; if a fact is absent, say so."""
-    doc = await _resolve_analysis_repo().get(job_id)
+    analysis didn't detect; if a fact is absent, say so.
+
+    Most analysis facts (key, tempo, chords, Roman numerals) are already in
+    the system prompt when a song is loaded; call this tool when you need
+    section names, the analysis trust status, or when no analysis context was
+    injected.
+    """
+    repo = _resolve_analysis_repo()
+    uid = current_user_id.get()
+    doc = await repo.get_owned(job_id, uid) if uid is not None else await repo.get(job_id)
     if not doc:
         return {"error": f"No analysis found for job_id '{job_id}'."}
 
@@ -123,22 +156,28 @@ async def get_song_analysis(job_id: str) -> dict:
 # B.4  find_similar_songs  (uses _resolve_analysis_repo + similarity_chain)
 # ---------------------------------------------------------------------------
 
-from backend.chains.similarity_chain import find_similar  # noqa: E402
-
 
 class FindSimilarArgs(BaseModel):
     analysis_job_id: str = Field(
-        description="The analysis job id whose chord progression to match against the catalog."
+        description=(
+            "The analysis job id for the CURRENT song — the same value used by "
+            "get_song_analysis. This is injected by the system from the loaded "
+            "song context; do NOT ask the user for it."
+        )
     )
 
 
 @tool(args_schema=FindSimilarArgs)
 async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
-    """Find catalog songs whose chord progression is most similar to the current
-    song's, using the deterministic key-aware progression embedding. Returns a
+    """Find catalog songs whose chord progression is most similar to the CURRENT
+    song's, using the deterministic key-aware progression embedding. The
+    analysis_job_id is the same id used by get_song_analysis — it identifies the
+    currently loaded song and is provided by the system, not the user. Returns a
     ranked list of {title, artist, progression, score}. Use this for
     'what sounds like this?' / 'songs with similar chords' questions."""
-    doc = await _resolve_analysis_repo().get(analysis_job_id)
+    repo = _resolve_analysis_repo()
+    uid = current_user_id.get()
+    doc = await repo.get_owned(analysis_job_id, uid) if uid is not None else await repo.get(analysis_job_id)
     if not doc:
         return {"error": f"No analysis found for job_id '{analysis_job_id}'."}
 
@@ -146,7 +185,7 @@ async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
     chords: list[str] = []
     for c in raw_chords:
         sym = c.get("chord") if isinstance(c, dict) else getattr(c, "chord", None)
-        if sym:
+        if sym and sym not in chords:  # dedupe preserving order (m-2)
             chords.append(sym)
     if not chords:
         return {"error": "This analysis has no chords to compare; cannot find similar songs."}
@@ -157,10 +196,6 @@ async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
 # ---------------------------------------------------------------------------
 # B.5  TOOLS list — canonical AURA tool roster
 # ---------------------------------------------------------------------------
-
-from backend.tools.capo import suggest_capo  # noqa: E402
-from backend.tools.theory_glossary import lookup_theory  # noqa: E402  (Group A)
-from backend.tools.transpose import transpose_progression  # noqa: E402
 
 # Canonical AURA tool roster. ORDER is part of the contract (cross-group
 # references index by name, but the order keeps the system prompt deterministic).

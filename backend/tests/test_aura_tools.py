@@ -88,13 +88,23 @@ class TestGetChordColor:
 
 
 class _FakeAnalysisRepo:
-    """Stands in for AnalysisRepo.get — async, no Mongo."""
+    """Stands in for AnalysisRepo.get / get_owned — async, no Mongo."""
 
-    def __init__(self, doc: dict | None):
+    def __init__(self, doc: dict | None, owner_id: str | None = None):
         self._doc = doc
+        # owner_id is the user_id that "owns" the stored doc; None means public.
+        self._owner_id = owner_id
 
     async def get(self, job_id: str):
         return self._doc if (self._doc and self._doc.get("_id") == job_id) else None
+
+    async def get_owned(self, job_id: str, user_id: str):
+        """Return the doc only if job_id matches AND owner matches."""
+        if not self._doc or self._doc.get("_id") != job_id:
+            return None
+        if self._owner_id is not None and self._owner_id != user_id:
+            return None
+        return self._doc
 
 
 _STORED_DOC = {
@@ -220,6 +230,104 @@ class TestFindSimilarSongs:
         out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
         assert isinstance(out, list)
         assert out[0]["score"] <= 1.0
+
+
+class TestOwnershipContextVar:
+    """I-1 — current_user_id context variable enforces per-user ownership."""
+
+    async def test_get_song_analysis_uses_get_owned_when_uid_set(self, monkeypatch):
+        """When current_user_id is set, get_owned is called; matching owner → success."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, get_song_analysis
+
+        # Repo whose owner_id matches the user we'll set in context
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        token = current_user_id.set("user-1")
+        try:
+            out = await get_song_analysis.ainvoke({"job_id": "job-abc"})
+        finally:
+            current_user_id.reset(token)
+        assert out["title"] == "Let It Be"
+
+    async def test_get_song_analysis_ownership_mismatch_returns_not_found(self, monkeypatch):
+        """When current_user_id is set to a DIFFERENT user, get_owned returns None → not-found."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, get_song_analysis
+
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        token = current_user_id.set("user-2")  # wrong owner
+        try:
+            out = await get_song_analysis.ainvoke({"job_id": "job-abc"})
+        finally:
+            current_user_id.reset(token)
+        assert "found" in out["error"].lower()
+
+    async def test_get_song_analysis_uses_public_get_when_uid_unset(self, monkeypatch):
+        """When current_user_id is None (default), the public get() path is used."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, get_song_analysis
+
+        # owner_id set but uid is None → falls to repo.get(), which ignores ownership
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        # Ensure context var is unset (default None)
+        assert current_user_id.get() is None
+        out = await get_song_analysis.ainvoke({"job_id": "job-abc"})
+        assert out["title"] == "Let It Be"
+
+    async def test_find_similar_uses_get_owned_when_uid_set(self, monkeypatch):
+        """When current_user_id is set, find_similar_songs enforces ownership."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, find_similar_songs
+
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        token = current_user_id.set("user-1")
+        try:
+            out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
+        finally:
+            current_user_id.reset(token)
+        assert isinstance(out, list)
+
+    async def test_find_similar_ownership_mismatch_returns_not_found(self, monkeypatch):
+        """Ownership mismatch in find_similar_songs yields not-found message."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, find_similar_songs
+
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        token = current_user_id.set("user-99")  # wrong owner
+        try:
+            out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
+        finally:
+            current_user_id.reset(token)
+        assert isinstance(out, dict)
+        assert "found" in out["error"].lower()
+
+    async def test_find_similar_uses_public_get_when_uid_unset(self, monkeypatch):
+        """When current_user_id is None, find_similar_songs uses the public get() path."""
+        import backend.chains.aura_tools as at
+        from backend.chains.aura_tools import current_user_id, find_similar_songs
+
+        monkeypatch.setattr(
+            at, "_resolve_analysis_repo",
+            lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
+        )
+        assert current_user_id.get() is None
+        out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
+        assert isinstance(out, list)
 
 
 class TestToolsList:
