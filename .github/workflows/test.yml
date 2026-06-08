@@ -55,8 +55,22 @@ jobs:
           # Skip the heavy demucs / basic-pitch installs — they're optional
           # extras and the unit tests don't exercise them.
           pip install -r backend/requirements.txt
-          # Editable install so ``import backend`` resolves cleanly under pytest.
-          pip install -e ./backend
+          # Editable install + dev extra so pytest-asyncio / sse-starlette and
+          # the rest of the test tooling are present for the full suite.
+          pip install -e "./backend[dev]"
 
       - name: Pytest
-        run: pytest backend/tests/test_tools.py backend/tests/test_db_cache.py -v --tb=short
+        run: >-
+          pytest -c backend/pyproject.toml
+          backend/tests/test_tools.py
+          backend/tests/test_db_cache.py
+          backend/tests/test_graph_routing.py
+          backend/tests/test_chains.py
+          backend/tests/test_api.py
+          backend/tests/test_ml.py
+          backend/tests/test_search_and_lyrics.py
+          backend/tests/test_acoustid_enrich.py
+          backend/tests/test_spotify_ingestion.py
+          backend/tests/test_sse_progress.py
+          -m "not ml and not integration"
+          -v --tb=short
