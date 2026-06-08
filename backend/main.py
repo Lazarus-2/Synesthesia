@@ -782,7 +782,7 @@ async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeRespons
     "show this analysis to someone." Frontend builds the share link as
     ``/s/{job_id}`` which proxies here.
     """
-    db_record = await db.song_analyses.find_one({"_id": job_id})
+    db_record = await AnalysisRepo(db).get(job_id)
     if not db_record:
         raise HTTPException(status_code=404, detail=f"Analysis {job_id} not found")
     song = SongAnalysisModel.model_validate(db_record)

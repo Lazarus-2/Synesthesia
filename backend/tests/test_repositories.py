@@ -227,3 +227,23 @@ class TestChatHistoryRefactor:
         # The load-bearing assertion: server-side windowing via $slice.
         _, kwargs_or_proj = mock_mongo.chat_sessions.find_one.call_args.args
         assert kwargs_or_proj == {"messages": {"$slice": -200}}
+
+
+class TestShareRefactor:
+    def test_share_404_when_missing(self, api_client, mock_mongo):
+        mock_mongo.song_analyses.find_one.return_value = None
+        r = api_client.get("/api/v1/share/job_missing")
+        assert r.status_code == 404
+
+    def test_share_reads_by_id_via_repo(self, api_client, mock_mongo):
+        mock_mongo.song_analyses.find_one.return_value = {
+            "_id": "job_1",
+            "duration": 10.0,
+            "key": "C major",
+            "tempo": 120.0,
+            "chords": [],
+        }
+        r = api_client.get("/api/v1/share/job_1")
+        assert r.status_code == 200
+        assert r.json()["job_id"] == "job_1"
+        mock_mongo.song_analyses.find_one.assert_awaited_once_with({"_id": "job_1"})
