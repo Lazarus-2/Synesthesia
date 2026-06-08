@@ -62,27 +62,25 @@ def test_unauthenticated_is_401(api_client):
 
 
 def test_session_ownership_mismatch_is_403(as_user, mock_mongo, monkeypatch):
-    # A session that exists but belongs to someone else → get_owned_session None.
-    mock_mongo.chat_sessions.find_one = AsyncMock(return_value=None)
+    # A session that exists but belongs to someone else → 403.
+    # _resolve_session does a single find_one then checks user_id ownership.
+    mock_mongo.chat_sessions.find_one = AsyncMock(
+        return_value={"_id": "sess-other", "user_id": "user-999"}
+    )
 
     async def _fake_run_aura(**kwargs):  # pragma: no cover - must not be called
         raise AssertionError("model must not be called on ownership failure")
 
     monkeypatch.setattr("backend.main.run_aura", _fake_run_aura)
-    # Make the session "exist" so we can prove it's the ownership check (not
-    # a generate-new-id path) that rejects it.
-    monkeypatch.setattr(
-        "backend.main._session_exists", AsyncMock(return_value=True)
-    )
     r = as_user.post(
         "/api/v1/chat", json={"message": "hi", "session_id": "sess-other"}
     )
     assert r.status_code == 403
 
 
-def test_history_is_server_side_client_history_ignored(as_user, mock_mongo, monkeypatch):
-    # Server returns a known history; the (now-absent) client history can't
-    # influence it. We capture what the endpoint passes to run_aura.
+def test_history_is_server_side_recent_turns_used(as_user, mock_mongo, monkeypatch):
+    """recent_turns (windowed $slice query) must be the call that supplies
+    the agent's history — not a full-doc Python slice.  Lock in the call."""
     mock_mongo.chat_sessions.find_one = AsyncMock(
         return_value={"_id": "sess-1", "user_id": "user-1",
                       "messages": [{"role": "user", "content": "earlier turn"}]}
@@ -95,15 +93,25 @@ def test_history_is_server_side_client_history_ignored(as_user, mock_mongo, monk
         return "ok-reply"
 
     monkeypatch.setattr("backend.main.run_aura", _fake_run_aura)
+
+    # Patch recent_turns to assert it's called with the right args and return
+    # a known slice so we can assert it reaches run_aura unchanged.
+    recent_turns_mock = AsyncMock(return_value=[{"role": "user", "content": "earlier turn"}])
     monkeypatch.setattr(
-        "backend.main._session_exists", AsyncMock(return_value=True)
+        "backend.repositories.ChatSessionRepo.recent_turns", recent_turns_mock
     )
+
+    from backend.config import get_settings
+    settings = get_settings()
+
     r = as_user.post(
         "/api/v1/chat",
         json={"message": "now", "session_id": "sess-1"},
     )
     assert r.status_code == 200
     assert captured["history"] == [{"role": "user", "content": "earlier turn"}]
+    # Lock-in: recent_turns was called with (session_id, chat_history_turns).
+    recent_turns_mock.assert_awaited_once_with("sess-1", settings.chat_history_turns)
 
 
 def test_over_budget_refuses_without_model_call(as_user, monkeypatch):
@@ -142,3 +150,39 @@ def test_happy_path_persists_two_turns(as_user, mock_mongo, monkeypatch):
     assert body["session_id"]  # server generated one
     roles = [role for role, _ in appended]
     assert roles == ["user", "assistant"]
+
+
+def test_foreign_analysis_job_not_loaded(as_user, mock_mongo, monkeypatch):
+    """I1: analysis owned by a different user must NOT be passed to run_aura.
+
+    When get_owned() returns None (foreign job_id), analysis must stay None
+    so the agent uses its no-song-loaded path rather than leaking the data.
+    """
+    # No sessions → fresh session; no owned analysis.
+    mock_mongo.chat_sessions.find_one = AsyncMock(return_value=None)
+
+    captured: dict = {}
+
+    async def _fake_run_aura(*, message, history, analysis, profile, tutor_mode):
+        captured["analysis"] = analysis
+        return "ok"
+
+    monkeypatch.setattr("backend.main.run_aura", _fake_run_aura)
+
+    # get_owned returns None (caller doesn't own this job).
+    from backend.repositories import AnalysisRepo
+    monkeypatch.setattr(
+        "backend.repositories.AnalysisRepo.get_owned",
+        AsyncMock(return_value=None),
+    )
+    # Ensure there's no public get() fallback by asserting it isn't called.
+    get_mock = AsyncMock(return_value={"_id": "job-other", "title": "Secret Song"})
+    monkeypatch.setattr("backend.repositories.AnalysisRepo.get", get_mock)
+
+    r = as_user.post(
+        "/api/v1/chat",
+        json={"message": "hi", "analysis_job_id": "job-other"},
+    )
+    assert r.status_code == 200
+    assert captured["analysis"] is None, "Foreign analysis must not reach the agent"
+    get_mock.assert_not_awaited()

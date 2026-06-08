@@ -65,9 +65,11 @@ class Settings(BaseSettings):
     # --- App Config ---
     max_upload_mb: int = 50
     # Rate limits — slowapi syntax ("<count>/<period>"; period in {second, minute, hour, day}).
-    # Applied per-IP today; once D4 auth lands, swap key_func to per-user.
+    # chat_rate_limit is per-user (keyed by JWT user_id, falls back to IP for
+    # anonymous callers). 30/minute matches the .env.example production default;
+    # the old 600/minute value was accidentally left from a pre-auth draft.
     analyze_rate_limit: str = "1000/day"
-    chat_rate_limit: str = "600/minute"
+    chat_rate_limit: str = "30/minute"
     enable_stems: bool = True
     log_level: str = "INFO"
 

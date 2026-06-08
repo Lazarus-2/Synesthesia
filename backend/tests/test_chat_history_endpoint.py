@@ -2,6 +2,9 @@
 
 The legacy handler had NO auth (anyone could read any session). It now
 requires a JWT and only returns history for sessions the caller owns.
+
+I3: the handler must use repo.recent_turns() for the windowed read rather
+than pulling the full messages array and Python-slicing it.
 """
 
 from __future__ import annotations
@@ -58,7 +61,9 @@ def test_history_requires_auth(api_client):
     assert r.status_code == 401
 
 
-def test_history_returns_owned_session(as_user, mock_mongo):
+def test_history_returns_owned_session(as_user, mock_mongo, monkeypatch):
+    """I3: recent_turns (windowed $slice) is the call that returns history."""
+    # get_owned_session: ownership check passes.
     mock_mongo.chat_sessions.find_one = AsyncMock(
         return_value={
             "_id": "sess-1",
@@ -66,9 +71,21 @@ def test_history_returns_owned_session(as_user, mock_mongo):
             "messages": [{"role": "user", "content": "hi"}],
         }
     )
+    # recent_turns: windowed read returns the expected slice.
+    recent_turns_mock = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
+    monkeypatch.setattr(
+        "backend.repositories.ChatSessionRepo.recent_turns", recent_turns_mock
+    )
+
+    from backend.config import get_settings
+    settings = get_settings()
+
     r = as_user.get("/api/v1/chat/history/sess-1")
     assert r.status_code == 200
     assert r.json()["history"] == [{"role": "user", "content": "hi"}]
+
+    # Lock-in: recent_turns was called with the right session_id and window.
+    recent_turns_mock.assert_awaited_once_with("sess-1", settings.chat_history_turns)
 
 
 def test_history_rejects_foreign_session(as_user, mock_mongo):

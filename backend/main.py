@@ -256,27 +256,61 @@ app.state.limiter = limiter
 def _chat_rate_limit_key(request: Request) -> str:
     """Rate-limit key for chat: authenticated user_id, else client IP.
 
-    The chat endpoints stash the resolved principal on ``request.state`` (see
-    the endpoints below) before slowapi evaluates the limit. Keying by user_id
-    means the limit is per-account, not per-IP, so shared NATs and IP rotation
-    don't distort it.
+    slowapi's ``key_func`` runs BEFORE the endpoint body executes, so we
+    cannot rely on ``request.state.principal`` being populated yet.  Instead
+    we decode the JWT directly from the ``Authorization`` header here — same
+    call :func:`backend.auth.decode_token` does, just early.  Any decode
+    failure (missing token, bad signature, expired) falls back silently to IP.
     """
-    principal = getattr(request.state, "principal", None)
-    if principal is not None and getattr(principal, "user_id", None):
-        return f"user:{principal.user_id}"
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        try:
+            from backend.auth import decode_token
+
+            principal = decode_token(auth.split(" ", 1)[1])
+            if principal and getattr(principal, "user_id", None):
+                return f"user:{principal.user_id}"
+        except Exception:
+            pass
     return get_remote_address(request)
 
 
 async def _session_exists(db, session_id: str) -> bool:
     """True if a chat_sessions doc with this id exists (any owner).
 
-    Lets the endpoint distinguish "client supplied an id we've never seen"
-    (treat as a fresh server-owned session) from "client supplied an id that
-    belongs to someone else" (403). Patched in tests.
+    Kept for backwards-compat with tests that monkeypatch it.  The production
+    code now uses the single-query path in :func:`_resolve_session`.
     """
-    return await db.chat_sessions.find_one(
-        {"_id": session_id}, {"_id": 1}
-    ) is not None
+    return await db.chat_sessions.find_one({"_id": session_id}, {"_id": 1}) is not None
+
+
+async def _resolve_session(
+    repo: ChatSessionRepo, db, session_id: str | None, user_id: str
+) -> tuple[str, list[dict], bool]:
+    """Return ``(session_id, history, session_is_new)``.
+
+    M5: single ``find_one({"_id": session_id})`` — avoids the two-roundtrip
+    ``get_owned_session`` + ``_session_exists`` pattern while preserving the
+    same 403-on-foreign vs adopt-unknown-as-new semantics.
+
+    If ``session_id`` is None a fresh UUID is minted (always "new").
+    """
+    from backend.config import get_settings as _gs
+
+    if not session_id:
+        return str(uuid.uuid4()), [], True
+
+    doc = await db.chat_sessions.find_one({"_id": session_id})
+    if doc is None:
+        # Never-seen id — adopt it as a fresh server-owned session.
+        return session_id, [], True
+    if doc.get("user_id") != user_id:
+        # Exists but belongs to a different user.
+        raise HTTPException(status_code=403, detail="Session not found")
+    # Owned by caller — retrieve the windowed history.
+    settings = _gs()
+    history = await repo.recent_turns(session_id, settings.chat_history_turns)
+    return session_id, history, False
 
 
 def _estimate_tokens(message: str, history: list[dict]) -> int:
@@ -1213,38 +1247,28 @@ async def chat(
 ) -> ChatResponse:
     """Grounded AURA chat (non-stream). Identity from the JWT; session +
     history are server-owned; over-budget turns refuse before the model."""
-    # Expose the principal for the rate-limit key_func (evaluated by slowapi
-    # around this call). Safe to set before the limit fires on the next call.
-    request.state.principal = principal
     user_id = principal.user_id
     settings = get_settings()
 
     # 1. Resolve a server-owned session id (generate if absent; ownership-check
     #    if supplied). Degrade to no-history on Mongo errors rather than 500.
+    # M5: single-query path via _resolve_session.
     history: list[dict] = []
     analysis: dict | None = None
     mongo_ok = True
     session_id = payload.session_id
     repo = ChatSessionRepo(db)
     try:
-        if session_id:
-            owned = await repo.get_owned_session(session_id, user_id)
-            if owned is None and await _session_exists(db, session_id):
-                # Exists but not ours → forbidden.
-                raise HTTPException(status_code=403, detail="Session not found")
-            if owned is None:
-                # Unknown id: adopt it as a fresh server-owned session.
-                history = []
-            else:
-                history = await ChatSessionRepo(db).recent_turns(
-                    session_id, settings.chat_history_turns
-                )
-        else:
-            session_id = str(uuid.uuid4())
+        session_id, history, _ = await _resolve_session(
+            repo, db, session_id, user_id
+        )
         if payload.analysis_job_id:
+            # I1: drop the public get() fallback — never expose another user's
+            # analysis.  If the caller doesn't own the job, analysis stays None
+            # and the agent uses its no-song-loaded path.
             analysis = await AnalysisRepo(db).get_owned(
                 payload.analysis_job_id, user_id
-            ) or await AnalysisRepo(db).get(payload.analysis_job_id)
+            )
     except HTTPException:
         raise
     except Exception:
@@ -1308,7 +1332,6 @@ async def chat_stream(
     """Grounded AURA chat (SSE). Same resolution as /chat; streams
     context/tool/chunk/done/error frames from stream_aura via
     EventSourceResponse (client-disconnect + keepalive for free)."""
-    request.state.principal = principal
     user_id = principal.user_id
     settings = get_settings()
 
@@ -1318,20 +1341,16 @@ async def chat_stream(
     session_id = payload.session_id
     repo = ChatSessionRepo(db)
     try:
-        if session_id:
-            owned = await repo.get_owned_session(session_id, user_id)
-            if owned is None and await _session_exists(db, session_id):
-                raise HTTPException(status_code=403, detail="Session not found")
-            if owned is not None:
-                history = await ChatSessionRepo(db).recent_turns(
-                    session_id, settings.chat_history_turns
-                )
-        else:
-            session_id = str(uuid.uuid4())
+        # M5: single-query path via _resolve_session.
+        session_id, history, _ = await _resolve_session(
+            repo, db, session_id, user_id
+        )
         if payload.analysis_job_id:
+            # I1: drop the public get() fallback — never expose another user's
+            # analysis.  If the caller doesn't own the job, analysis stays None.
             analysis = await AnalysisRepo(db).get_owned(
                 payload.analysis_job_id, user_id
-            ) or await AnalysisRepo(db).get(payload.analysis_job_id)
+            )
     except HTTPException:
         raise
     except Exception:
@@ -1350,7 +1369,10 @@ async def chat_stream(
                      "message": "Daily chat limit reached; resets at midnight UTC."}
                 ),
             )
-        return EventSourceResponse(_refused(), headers={"X-Accel-Buffering": "no"})
+        return EventSourceResponse(
+            _refused(),
+            headers={"X-Accel-Buffering": "no", "X-Session-Id": session_id},
+        )
 
     profile: dict | None = None
     if mongo_ok:
@@ -1360,6 +1382,14 @@ async def chat_stream(
             profile = None
 
     tutor_mode = payload.tutor_mode or settings.chat_tutor_default
+
+    # I2: persist the user turn BEFORE streaming starts — it's known now and
+    # must survive even a mid-stream error.
+    if mongo_ok:
+        try:
+            await repo.append_turn(session_id, "user", payload.message, user_id=user_id)
+        except Exception:
+            logger.warning("chat/stream: failed to persist user turn", exc_info=True)
 
     async def event_generator():
         assistant_text_parts: list[str] = []
@@ -1381,7 +1411,17 @@ async def chat_stream(
                         pass
                 yield frame
         except Exception:
+            # I2: persist whatever partial assistant text accumulated before
+            # re-raising the error frame, so mid-stream failures don't lose turns.
             logger.exception("chat/stream: aura stream failed")
+            if mongo_ok:
+                partial = "".join(assistant_text_parts)
+                try:
+                    await repo.append_turn(
+                        session_id, "assistant", partial, user_id=user_id
+                    )
+                except Exception:
+                    logger.warning("chat/stream: failed to persist partial assistant turn", exc_info=True)
             yield ServerSentEvent(
                 event="error",
                 data=json.dumps(
@@ -1392,14 +1432,13 @@ async def chat_stream(
             return
         finally:
             current_user_id.reset(_token)
-        # Persist both turns once the stream drains cleanly.
+        # Persist the assistant turn once the stream drains cleanly.
         if mongo_ok:
             reply = "".join(assistant_text_parts)
             try:
-                await repo.append_turn(session_id, "user", payload.message, user_id=user_id)
                 await repo.append_turn(session_id, "assistant", reply, user_id=user_id)
             except Exception:
-                logger.warning("chat/stream: failed to persist turns", exc_info=True)
+                logger.warning("chat/stream: failed to persist assistant turn", exc_info=True)
 
     return EventSourceResponse(
         event_generator(),
@@ -1417,13 +1456,12 @@ async def get_chat_history(
     """Owner-only chat history. Returns 404 (not 403) for a session the caller
     doesn't own so we don't confirm the existence of someone else's session."""
     repo = ChatSessionRepo(db)
+    # I3: verify ownership first (cheap _id+user_id query), then use the
+    # windowed repo read — never pulls the full messages array.
     owned = await repo.get_owned_session(session_id, principal.user_id)
     if owned is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    history = [
-        {"role": m["role"], "content": m["content"]}
-        for m in owned.get("messages", [])
-    ][-get_settings().chat_history_turns :]
+    history = await repo.recent_turns(session_id, get_settings().chat_history_turns)
     return {"history": history}
 
 
