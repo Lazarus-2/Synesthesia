@@ -129,3 +129,79 @@ class TestUserRepo:
         assert update["$setOnInsert"]["_id"] == "usr_1"
         assert "created_at" in update["$setOnInsert"]
         assert call.kwargs == {"upsert": True}
+
+
+class TestChatSessionRepo:
+    @pytest.mark.asyncio
+    async def test_get_owned_session_returns_none_on_mismatch(self, mock_mongo):
+        from backend.repositories import ChatSessionRepo
+
+        mock_mongo.chat_sessions.find_one.return_value = None
+        repo = ChatSessionRepo(mock_mongo)
+        doc = await repo.get_owned_session("sess_1", "intruder")
+
+        assert doc is None
+        mock_mongo.chat_sessions.find_one.assert_awaited_once_with(
+            {"_id": "sess_1", "user_id": "intruder"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_owned_session_returns_doc(self, mock_mongo):
+        from backend.repositories import ChatSessionRepo
+
+        mock_mongo.chat_sessions.find_one.return_value = {
+            "_id": "sess_1",
+            "user_id": "usr_1",
+            "messages": [],
+        }
+        repo = ChatSessionRepo(mock_mongo)
+        doc = await repo.get_owned_session("sess_1", "usr_1")
+        assert doc["_id"] == "sess_1"
+
+    @pytest.mark.asyncio
+    async def test_append_turn_pushes_message(self, mock_mongo):
+        from backend.repositories import ChatSessionRepo
+
+        repo = ChatSessionRepo(mock_mongo)
+        await repo.append_turn("sess_1", "user", "How do I play C?")
+
+        mock_mongo.chat_sessions.update_one.assert_awaited_once()
+        call = mock_mongo.chat_sessions.update_one.call_args
+        assert call.args[0] == {"_id": "sess_1"}
+        pushed = call.args[1]["$push"]["messages"]
+        assert pushed["role"] == "user"
+        assert pushed["content"] == "How do I play C?"
+        assert "timestamp" in pushed
+
+    @pytest.mark.asyncio
+    async def test_recent_turns_windows_via_slice_projection(self, mock_mongo):
+        from backend.repositories import ChatSessionRepo
+
+        # Mongo applies the $slice; the mock just returns the already-windowed
+        # tail. We assert BOTH the projection (server-side window) and output.
+        mock_mongo.chat_sessions.find_one.return_value = {
+            "_id": "sess_1",
+            "messages": [
+                {"role": "user", "content": "m4"},
+                {"role": "assistant", "content": "m5"},
+            ],
+        }
+        repo = ChatSessionRepo(mock_mongo)
+        turns = await repo.recent_turns("sess_1", 2)
+
+        # Windowing happens in the query, not a Python slice of a full doc.
+        mock_mongo.chat_sessions.find_one.assert_awaited_once_with(
+            {"_id": "sess_1"}, {"messages": {"$slice": -2}}
+        )
+        assert turns == [
+            {"role": "user", "content": "m4"},
+            {"role": "assistant", "content": "m5"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_recent_turns_empty_for_missing_session(self, mock_mongo):
+        from backend.repositories import ChatSessionRepo
+
+        mock_mongo.chat_sessions.find_one.return_value = None
+        repo = ChatSessionRepo(mock_mongo)
+        assert await repo.recent_turns("sess_nope", 5) == []
