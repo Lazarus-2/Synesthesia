@@ -196,3 +196,109 @@ def test_ci_runs_full_suite():
     assert "test_graph_routing.py" not in run, (
         "CI should run the whole directory, not enumerate individual files"
     )
+
+
+@pytest.mark.asyncio
+async def test_progress_frames_not_suppressed_by_queued_result(monkeypatch):
+    """Bug A regression: a :result with status='queued' must NOT suppress :progress frames.
+
+    Before the fix, event_generator() treated ANY non-empty :result as terminal
+    (job_finished=True), so worker :progress writes (5%→80%) were never
+    streamed — the client jumped from 'queued' straight to 'done'.
+
+    This test models the real sequence:
+      1. :result holds status='queued' (written by POST /analyze immediately).
+      2. :progress holds advancing frames (5%, then 80% — written by the worker).
+      3. :result is updated to status='done' (written by the worker at the end).
+
+    Expected SSE frames: at least one 'chunk' frame from :progress AND one
+    terminal 'done' frame. The intermediate progress frames must NOT be skipped.
+    """
+    import json
+    import itertools
+
+    from sse_starlette.sse import ServerSentEvent
+
+    import backend.main as main
+
+    queued_result = json.dumps({"job_id": "job-bug-a", "status": "queued"})
+    done_result = json.dumps({"job_id": "job-bug-a", "status": "done", "analysis": {}})
+    progress_frames = [
+        {"job_id": "job-bug-a", "status": "processing", "progress": 5, "message": "Loading audio file..."},
+        {"job_id": "job-bug-a", "status": "processing", "progress": 80, "message": "Building analysis results..."},
+    ]
+
+    # The store cycles through phases:
+    # Phase 0 & 1: :result="queued", :progress advances (5%, 80%)
+    # Phase 2+: :result="done"
+    call_count = {"n": 0}
+
+    class _Store:
+        async def get_cached_response(self, job_id):
+            n = call_count["n"]
+            # First two polls: still queued; third+ poll: done
+            if n < 2:
+                return queued_result
+            return done_result
+
+        async def get_progress(self, job_id):
+            n = call_count["n"]
+            if n < len(progress_frames):
+                return progress_frames[n]
+            return progress_frames[-1]  # keep returning last frame once done
+
+        async def is_stale(self, job_id, *, timeout_s=0):
+            return False
+
+    _real_sleep = asyncio.sleep
+
+    async def _fast_sleep(_s):
+        # Advance the call counter on each sleep so phases progress.
+        call_count["n"] += 1
+        await _real_sleep(0)
+
+    monkeypatch.setattr(main, "get_job_store", lambda: _Store())
+    monkeypatch.setattr(main.asyncio, "sleep", _fast_sleep)
+
+    class _Req:
+        async def is_disconnected(self):
+            return False
+
+    resp = await main.get_analysis_progress("job-bug-a", _Req())
+    gen = resp.body_iterator
+
+    frames = []
+
+    async def _drain():
+        async for frame in gen:
+            frames.append(frame)
+
+    await asyncio.wait_for(_drain(), timeout=5.0)
+
+    sse_frames = [f for f in frames if isinstance(f, ServerSentEvent)]
+    assert sse_frames, "Expected at least one SSE frame"
+
+    events = [f.event for f in sse_frames]
+
+    # Must have received at least one 'chunk' frame (intermediate progress)
+    chunk_frames = [f for f in sse_frames if f.event == "chunk"]
+    assert chunk_frames, (
+        f"Expected at least one 'chunk' frame from :progress but got events: {events}. "
+        "The :result status='queued' must not suppress :progress frames."
+    )
+
+    # Must terminate with a 'done' frame
+    done_frames = [f for f in sse_frames if f.event == "done"]
+    assert done_frames, (
+        f"Expected a terminal 'done' frame but got events: {events}"
+    )
+    assert len(done_frames) == 1, f"Expected exactly one 'done' frame; got {len(done_frames)}"
+
+    # Verify that at least one chunk carries a progress percentage
+    chunk_with_progress = [
+        f for f in chunk_frames
+        if json.loads(f.data).get("progress") is not None
+    ]
+    assert chunk_with_progress, (
+        "chunk frames must carry a 'progress' field from the worker's :progress writes"
+    )

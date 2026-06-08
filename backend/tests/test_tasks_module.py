@@ -98,3 +98,118 @@ def test_main_no_longer_defines_write_dlq_or_clean_title():
     assert "def _write_dlq" not in main_src, "main.py must not define _write_dlq"
     assert "def _clean_audio_title" not in main_src, "main.py must not define _clean_audio_title"
     assert "def run_analysis_pipeline" not in main_src, "main.py must not define run_analysis_pipeline"
+
+
+# ---------------------------------------------------------------------------
+# Bug B regression: user_id must be persisted on the SongAnalysisModel doc
+# ---------------------------------------------------------------------------
+
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+@pytest.mark.asyncio
+async def test_run_analysis_pipeline_persists_user_id():
+    """Bug B regression: user_id passed to the task must be saved on SongAnalysisModel.
+
+    Before the fix, user_id was threaded into initial_state and the task
+    signature but was never forwarded to the SongAnalysisModel(...) constructor,
+    so every analysis was stored with user_id=None, defeating the ownership model
+    (AnalysisRepo.get_owned, /library?user_id= filter).
+
+    This test mocks the graph, DB, and JobStore so only the tasks.py code path
+    runs, then asserts the captured SongAnalysisModel carries the user_id.
+    """
+    import json
+
+    from backend.models import SongAnalysisModel
+
+    captured_records: list[SongAnalysisModel] = []
+
+    # --- Mock DB ----------------------------------------------------------------
+    mock_db = MagicMock()
+    mock_db.song_analyses.find_one = AsyncMock(return_value=None)  # no existing record
+
+    async def _replace_one(filter_, doc, *, upsert=False):
+        # Reconstruct the model from what tasks.py passes so we can assert on it.
+        record = SongAnalysisModel.model_validate(doc)
+        captured_records.append(record)
+        result = MagicMock()
+        result.matched_count = 0
+        result.upserted_id = "fake-upsert-id"
+        return result
+
+    mock_db.song_analyses.replace_one = AsyncMock(side_effect=_replace_one)
+    mock_db.failed_jobs.insert_one = AsyncMock()
+
+    # --- Mock graph result -------------------------------------------------------
+    # A minimal graph result that satisfies all the tasks.py assertions.
+    from backend.schemas import ChordEvent, BeatEvent
+
+    fake_chord = ChordEvent(chord="C", start=0.0, end=2.0, confidence=0.9)
+    graph_result = {
+        "key": "C major",
+        "tempo": 120.0,
+        "chords": [fake_chord],
+        "beats": [],
+        "sections": [],
+        "roman": None,
+        "stems": {},
+        "errors": [],
+        "theory_explanation": "Test theory",
+        "instrument_guide": None,
+        "user_id": "user-abc",
+    }
+
+    mock_graph = MagicMock()
+    mock_graph.ainvoke = AsyncMock(return_value=graph_result)
+
+    # --- Mock JobStore -----------------------------------------------------------
+    class _MockStore:
+        async def set_progress(self, job_id, payload):
+            pass
+
+        async def get_cached_response(self, job_id):
+            return None
+
+        async def cache_response(self, job_id, response_json):
+            pass
+
+        async def get_progress(self, job_id):
+            return None
+
+    # --- Patch everything --------------------------------------------------------
+    # get_job_store is module-level in backend.tasks; get_mongodb and get_graph
+    # are imported lazily inside the task body so we patch their source modules.
+    with (
+        patch("backend.tasks.get_job_store", return_value=_MockStore()),
+        patch("backend.graph.graph.get_graph", return_value=mock_graph),
+        patch("backend.graph.status.derive_status", return_value="ok"),
+        patch("backend.database.get_mongodb", return_value=mock_db),
+    ):
+        # Reconstruct the task function directly (bypassing Taskiq broker).
+        from backend.tasks import run_analysis_pipeline
+
+        context = MagicMock()
+        context.message.labels = {"_retries": "0", "max_retries": "2"}
+
+        await run_analysis_pipeline.__wrapped__(
+            "job-user-test",
+            None,          # youtube_url
+            "/tmp/test.mp3",  # audio_path
+            "guitar",      # instrument
+            "beginner",    # difficulty
+            "user-abc",    # user_id  ← the field under test
+            None,          # file_hash
+            context=context,
+        )
+
+    # Assert that exactly one record was written and it carries the user_id.
+    assert len(captured_records) == 1, (
+        f"Expected replace_one to be called once; called {len(captured_records)} times"
+    )
+    record = captured_records[0]
+    assert record.user_id == "user-abc", (
+        f"SongAnalysisModel.user_id should be 'user-abc' but got {record.user_id!r}. "
+        "The user_id is not being persisted — Bug B is present."
+    )

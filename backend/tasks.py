@@ -246,6 +246,7 @@ async def run_analysis_pipeline(
         analysis_record = SongAnalysisModel(
             id=job_id,
             file_hash=file_hash,
+            user_id=user_id,
             title=analysis.title,
             artist=analysis.artist,
             duration=analysis.duration,

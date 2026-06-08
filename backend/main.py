@@ -1001,21 +1001,30 @@ async def get_analysis_progress(job_id: str, request: Request):
             if await request.is_disconnected():
                 return
 
-            # Fix 5 (SSE efficiency): fetch :result first; only fetch
-            # :progress when :result is absent; skip is_stale when :result
-            # is present (a done result needs no staleness check).
-            # FT-03: terminal AnalyzeResponse lands on :result; incremental
-            # frames land on :progress.
+            # FT-03: :result key holds the final AnalyzeResponse; :progress
+            # key holds incremental worker frames.  We must NOT treat a
+            # :result with status "queued" as terminal — that's the stub
+            # written by POST /analyze so GET /analyze/{job_id} responds
+            # immediately.  Only status=="done" on :result ends the stream.
             result_data = await _await_if_needed(job_store.get_cached_response(job_id))
+            result_status: str | None = None
             if result_data:
+                try:
+                    result_status = json.loads(result_data).get("status")
+                except (json.JSONDecodeError, AttributeError):
+                    result_status = None
+
+            if result_data and result_status == "done":
                 # Job is done — emit the terminal frame immediately without
                 # touching :progress or the heartbeat key.
                 cached_data = result_data
                 job_finished = True
             else:
-                # ``get_progress`` may be absent on a minimal store (test
-                # stubs only need the terminal :result path); treat that as
-                # "no incremental frame yet" rather than crashing the stream.
+                # :result is absent or not yet "done" (e.g. status="queued").
+                # Read the incremental progress frame the worker writes via
+                # _progress() → job_store.set_progress() → :progress key.
+                # ``get_progress`` may be absent on minimal test stubs; treat
+                # that as "no incremental frame yet" rather than crashing.
                 get_progress = getattr(job_store, "get_progress", None)
                 progress_data = (
                     await _await_if_needed(get_progress(job_id))
@@ -1023,7 +1032,9 @@ async def get_analysis_progress(job_id: str, request: Request):
                     else None
                 )
                 cached_data = json.dumps(progress_data) if progress_data else None
-                job_finished = False
+                # Only error frames on :progress terminate the stream —
+                # the worker crash path writes status="error" via _progress().
+                job_finished = bool(progress_data and progress_data.get("status") == "error")
 
             if cached_data and cached_data != last_emitted:
                 last_emitted = cached_data
