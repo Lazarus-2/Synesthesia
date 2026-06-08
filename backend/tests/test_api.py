@@ -71,8 +71,11 @@ class TestErrorEnvelope:
         assert body["code"] == "NOT_FOUND"
 
     def test_validation_error_envelope(self, api_client):
-        # Sending invalid body to a route that expects ChatRequest.
-        r = api_client.post("/api/v1/chat", json={"history": "not-a-list"})
+        # message is required; an empty body 422s. /chat now also requires
+        # auth, but FastAPI validates the body before the route body runs only
+        # when the dependency passes — so assert against a route that doesn't
+        # gate on auth first. Use /user POST which still validates UserRequest.
+        r = api_client.post("/api/v1/user", json={"username": "x"})
         assert r.status_code == 422
         body = r.json()
         assert body["code"] == "VALIDATION_ERROR"

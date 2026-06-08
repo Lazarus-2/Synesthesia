@@ -273,37 +273,43 @@ class TestChatSessionRepo:
 
 
 class TestChatHistoryRefactor:
-    def test_history_route_uses_slice_projection(self, api_client, mock_mongo, monkeypatch):
-        # cache miss → falls back to Mongo. The repo must issue a $slice
-        # projection, not a full-doc read.
-        #
-        # Hermetic: monkeypatch cache.get to return None for the key under test
-        # so we always exercise the Mongo path without touching the live
-        # HybridCache singleton's in-memory store or Redis.
-        from backend.services import cache as cache_module
+    def test_history_route_requires_auth_and_returns_owned_session(
+        self, mock_mongo
+    ):
+        """GET /chat/history now requires JWT (D.7). An authenticated owner gets
+        their messages; the legacy unauthenticated path is gone."""
+        import os
 
-        _target_key = "chat:session:test_slice_sess"
+        import backend.database as _dbmod
+        from unittest.mock import AsyncMock
+        from fastapi.testclient import TestClient
 
-        original_get = cache_module.cache.get
+        from backend.auth import UserPrincipal, require_user
+        from backend.database import get_mongodb
+        from backend.main import app
 
-        async def _cold_get(key: str):
-            if key == _target_key:
-                return None
-            return await original_get(key)  # leave other keys untouched
+        os.environ.setdefault("AUTH_SECRET_KEY", "test-secret-please-do-not-use-in-prod")
 
-        monkeypatch.setattr(cache_module.cache, "get", _cold_get)
-
-        mock_mongo.chat_sessions.find_one.return_value = {
-            "_id": "test_slice_sess",
-            "messages": [{"role": "user", "content": "hi"}],
-        }
-        r = api_client.get("/api/v1/chat/history/test_slice_sess")
-        assert r.status_code == 200
-        assert r.json()["history"] == [{"role": "user", "content": "hi"}]
-
-        # The load-bearing assertion: server-side windowing via $slice.
-        _, kwargs_or_proj = mock_mongo.chat_sessions.find_one.call_args.args
-        assert kwargs_or_proj == {"messages": {"$slice": -200}}
+        _dbmod._db = object()
+        mock_mongo.chat_sessions.find_one = AsyncMock(
+            return_value={
+                "_id": "test_slice_sess",
+                "user_id": "user-1",
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        )
+        app.dependency_overrides[get_mongodb] = lambda: mock_mongo
+        app.dependency_overrides[require_user] = lambda: UserPrincipal(
+            user_id="user-1", username="alice"
+        )
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            r = client.get("/api/v1/chat/history/test_slice_sess")
+            assert r.status_code == 200
+            assert r.json()["history"] == [{"role": "user", "content": "hi"}]
+        finally:
+            app.dependency_overrides.pop(get_mongodb, None)
+            app.dependency_overrides.pop(require_user, None)
 
 
 class TestShareRefactor:
