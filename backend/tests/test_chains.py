@@ -223,3 +223,67 @@ class TestTheoryFlattener:
         assert "**Pattern:**" in out
         assert "modal mixture" in out
         assert "Let It Be" in out
+
+
+# ---------------------------------------------------------------------------
+# llm_factory provider-agnostic binding (Group 1)
+# ---------------------------------------------------------------------------
+
+
+class TestBindBeforeFallback:
+    def test_transform_applied_to_each_model_then_composed(self):
+        """transform must hit BOTH primary and fallback bare models, and the
+        result must still be a fallback-routing Runnable (primary fails ->
+        fallback rescues)."""
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains.llm_factory import (
+            _bind_before_fallback,
+            get_fallback_stats,
+            reset_fallback_stats,
+        )
+
+        seen: list[str] = []
+
+        def _make_primary():
+            return RunnableLambda(
+                lambda _x: (_ for _ in ()).throw(RuntimeError("primary down"))
+            )
+
+        def _make_fallback():
+            return RunnableLambda(lambda x: f"fb:{x}")
+
+        def _transform(model):
+            # Tag every model the transform touches so we can assert both ran.
+            seen.append(id(model).__class__.__name__)  # type: ignore[attr-defined]
+            return model | RunnableLambda(lambda v: v)
+
+        reset_fallback_stats()
+        runnable = _bind_before_fallback(
+            _make_primary,
+            _make_fallback,
+            transform=_transform,
+        )
+        # transform ran on primary AND fallback => two calls.
+        assert len(seen) == 2
+        # Fallback routing still works.
+        assert runnable.invoke("hi") == "fb:hi"
+
+    def test_no_fallback_returns_transformed_primary_only(self):
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains.llm_factory import _bind_before_fallback
+
+        calls: list[int] = []
+
+        def _transform(model):
+            calls.append(1)
+            return model
+
+        runnable = _bind_before_fallback(
+            lambda: RunnableLambda(lambda x: f"ok:{x}"),
+            None,  # no fallback configured
+            transform=_transform,
+        )
+        assert len(calls) == 1  # only the primary was transformed
+        assert runnable.invoke("z") == "ok:z"

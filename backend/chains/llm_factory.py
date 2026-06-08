@@ -22,10 +22,11 @@ currently can't tell the difference between a "primary worked" and
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable, RunnableLambda
 
 from backend.config import get_settings
 
@@ -90,6 +91,45 @@ def _wrap_with_observable_fallback(
 
     logged_primary = RunnableLambda(_invoke_with_logging, afunc=_ainvoke_with_logging)
     return logged_primary.with_fallbacks([fallback])
+
+
+def _bind_before_fallback(
+    build_primary: Callable[[], BaseChatModel],
+    build_fallback_or_none: Callable[[], BaseChatModel] | None,
+    *,
+    transform: Callable[[BaseChatModel], Runnable],
+) -> Runnable:
+    """Apply ``transform`` to each *bare* provider model, then compose fallbacks.
+
+    ``RunnableWithFallbacks`` (what ``.with_fallbacks()`` returns) exposes
+    neither ``.bind_tools`` nor ``.with_structured_output``. So provider-level
+    bindings MUST happen on the bare ``BaseChatModel`` *before* composition.
+    This helper builds the primary (and fallback, if configured), applies
+    ``transform`` to each, and then wires them through the existing observable
+    fallback path so fallback activations stay logged + counted.
+
+    ``build_primary`` / ``build_fallback_or_none`` are zero-arg builders so the
+    bare models are constructed lazily and exactly once each.
+    """
+    s = get_settings()
+    primary_name = (s.llm_provider or "ollama").lower()
+
+    primary_bare = build_primary()
+    primary_bound = transform(primary_bare)
+
+    if build_fallback_or_none is None:
+        return primary_bound
+
+    fallback_name = (s.llm_fallback_provider or "").lower()
+    fallback_bare = build_fallback_or_none()
+    fallback_bound = transform(fallback_bare)
+
+    return _wrap_with_observable_fallback(
+        primary_bound,
+        fallback_bound,
+        primary_name=primary_name,
+        fallback_name=fallback_name,
+    )
 
 
 # Provider → default model mapping (May 2026)
