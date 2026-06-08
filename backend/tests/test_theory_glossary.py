@@ -146,3 +146,145 @@ class TestGlossaryReachability:
     def test_terms_are_unique(self):
         terms = [e["term"].lower() for e in load_glossary()]
         assert len(terms) == len(set(terms)), "duplicate term keys shadow lookups"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for Group A review fixes
+# ---------------------------------------------------------------------------
+
+
+class TestC1TritoneResolution:
+    """C1: tritone explanation must describe inward resolution."""
+
+    def test_tritone_says_inward_not_outward(self):
+        out = _invoke("tritone")
+        assert out.startswith("[theory:int-tritone]")
+        assert "inward" in out.lower(), "tritone explanation should say 'inward'"
+        assert "outward" not in out.lower(), "stale 'outward' wording must be removed"
+
+    def test_tritone_mentions_leading_tone_and_seventh(self):
+        out = _invoke("tritone")
+        # The new copy specifically mentions leading tone rising and seventh falling
+        assert "leading tone" in out.lower() or "half step" in out.lower()
+
+
+class TestI1HalfDiminishedAlias:
+    """I1: 'half diminished seventh' must resolve to chq-m7b5, NOT chq-dim7."""
+
+    def test_half_diminished_seventh_resolves_to_m7b5(self):
+        out = _invoke("half diminished seventh")
+        assert out.startswith("[theory:chq-m7b5]"), (
+            f"'half diminished seventh' resolved to wrong entry: {out[:60]}"
+        )
+
+    def test_half_diminished_seventh_hyphenated(self):
+        out = _invoke("half-diminished seventh")
+        assert out.startswith("[theory:chq-m7b5]"), (
+            f"'half-diminished seventh' resolved to wrong entry: {out[:60]}"
+        )
+
+    def test_half_diminished_seventh_not_dim7(self):
+        out = _invoke("half diminished seventh")
+        assert "[theory:chq-dim7]" not in out
+
+
+class TestI2WholeWordMatching:
+    """I2: whole-word lookup prevents generic-word false matches."""
+
+    def test_diatonic_does_not_cite_tonic(self):
+        # "diatonic" contains "tonic" as a substring but not as a whole word
+        out = _invoke("diatonic")
+        assert "[theory:fn-tonic]" not in out, (
+            "'diatonic' must not cite the tonic entry"
+        )
+
+    def test_picardy_third_does_not_cite_major_third(self):
+        # "Picardy third" contains "third" but that is not a word-boundary match
+        # for "M3" or "3rd"; the query should return not-found or a correct entry,
+        # but never int-m3.
+        out = _invoke("Picardy third")
+        assert "[theory:int-m3]" not in out, (
+            "'Picardy third' must not cite the major-third interval entry"
+        )
+
+    def test_the_fourth_measure_does_not_cite_perfect_fourth(self):
+        out = _invoke("the fourth measure")
+        assert "[theory:int-p4]" not in out, (
+            "'the fourth measure' must not cite the perfect-fourth entry"
+        )
+
+    def test_tritone_real_lookup_still_works(self):
+        out = _invoke("tritone")
+        assert out.startswith("[theory:int-tritone]")
+
+    def test_secondary_dominant_real_lookup_still_works(self):
+        out = _invoke("secondary dominant")
+        assert out.startswith("[theory:fn-secondary-dominant]")
+
+    def test_ii_v_i_real_lookup_still_works(self):
+        out = _invoke("ii-V-I")
+        assert out.startswith("[theory:prog-ii-v-i]")
+
+    def test_amen_cadence_real_lookup_still_works(self):
+        out = _invoke("amen cadence")
+        assert out.startswith("[theory:cad-plagal]")
+
+    def test_dorian_mode_real_lookup_still_works(self):
+        out = _invoke("dorian mode")
+        assert out.startswith("[theory:mode-dorian]")
+
+
+class TestI3ToolDescription:
+    """I3: @tool docstring must guide the agent correctly."""
+
+    def test_description_mentions_canonical_label(self):
+        desc = lookup_theory.description.lower()
+        assert "canonical" in desc or "label" in desc or "short" in desc
+
+    def test_description_mentions_not_found_behavior(self):
+        desc = lookup_theory.description.lower()
+        assert "general knowledge" in desc or "not a cited fact" in desc
+
+    def test_description_lists_concept_types(self):
+        desc = lookup_theory.description.lower()
+        # Should mention multiple concept types
+        assert "interval" in desc
+        assert "cadence" in desc or "progression" in desc
+
+
+class TestM2LoadGlossaryValidation:
+    """m2: load_glossary must validate entries at load time."""
+
+    def test_all_entries_have_non_empty_term(self):
+        # Indirectly verified: load_glossary() would raise if any entry was bad
+        entries = load_glossary()
+        for e in entries:
+            assert e["term"].strip(), f"empty term: {e!r}"
+
+    def test_all_entries_have_non_empty_explanation(self):
+        entries = load_glossary()
+        for e in entries:
+            assert e["explanation"].strip(), f"empty explanation for {e['term']!r}"
+
+    def test_all_entries_have_non_empty_snippet_id(self):
+        entries = load_glossary()
+        for e in entries:
+            assert e["snippet_id"].strip(), f"empty snippet_id for {e['term']!r}"
+
+    def test_all_entries_have_list_aliases(self):
+        entries = load_glossary()
+        for e in entries:
+            assert isinstance(e["aliases"], list), (
+                f"aliases must be a list for {e['term']!r}"
+            )
+
+
+class TestM5AuthenticCadenceIAC:
+    """m5: authentic cadence entry must mention IAC."""
+
+    def test_authentic_cadence_mentions_iac(self):
+        out = _invoke("perfect authentic cadence")
+        assert out.startswith("[theory:cad-authentic]")
+        assert "iac" in out.lower() or "imperfect authentic" in out.lower(), (
+            "authentic cadence entry should mention IAC"
+        )

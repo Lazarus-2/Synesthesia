@@ -6,19 +6,19 @@
 
 # --- intervals ---
 - term: perfect fifth
-  aliases: ["P5", "fifth", "5th"]
+  aliases: ["P5", "5th"]
   explanation: >-
     An interval spanning seven semitones, the most consonant interval after the
     octave. It is the backbone of the circle of fifths and of power chords.
   snippet_id: int-p5
 - term: perfect fourth
-  aliases: ["P4", "fourth", "4th"]
+  aliases: ["P4", "4th"]
   explanation: >-
     An interval of five semitones; the inversion of the perfect fifth. Consonant,
     but treated as a mild dissonance when it sits above the bass in counterpoint.
   snippet_id: int-p4
 - term: major third
-  aliases: ["M3", "third", "3rd"]
+  aliases: ["M3", "3rd"]
   explanation: >-
     An interval of four semitones. The presence of a major third over the root is
     what makes a triad sound major (bright) rather than minor.
@@ -32,8 +32,9 @@
 - term: tritone
   aliases: ["augmented fourth", "diminished fifth", "A4", "d5", "devils interval"]
   explanation: >-
-    An interval of six semitones that bisects the octave. Highly unstable; its urge
-    to resolve outward (to a third) is the engine of the dominant-to-tonic cadence.
+    An interval of six semitones that bisects the octave. Highly unstable; in a
+    dominant-seventh chord it resolves inward — the leading tone rises a half step
+    while the chordal seventh falls a half step — driving the pull to the tonic.
   snippet_id: int-tritone
 - term: octave
   aliases: ["P8", "8ve"]
@@ -98,7 +99,7 @@
     ii and vi seventh chords in a major key.
   snippet_id: chq-min7
 - term: half-diminished seventh
-  aliases: ["half diminished", "m7b5", "min7b5", "ø", "ø7"]
+  aliases: ["half diminished", "half diminished seventh", "half-diminished seventh", "m7b5", "min7b5", "ø", "ø7"]
   explanation: >-
     A diminished triad plus a minor seventh (e.g. B-D-F-A). The ii chord of a minor
     key; less tense than a fully diminished seventh.
@@ -192,7 +193,7 @@
     case = major, lower case = minor, ° = diminished. It shows function independent of key.
   snippet_id: fn-roman
 - term: tonic
-  aliases: ["tonic chord", "i chord", "home chord", "I"]
+  aliases: ["tonic chord", "i chord", "home chord", "I", "tonic harmony"]
   explanation: >-
     The first scale degree and its chord — the harmonic "home" that a progression resolves
     to. It provides rest and stability.
@@ -245,7 +246,8 @@
   aliases: ["authentic cadence", "PAC", "V-I", "V-i"]
   explanation: >-
     A V-to-I motion with both chords in root position and the tonic in the top voice. The
-    strongest, most conclusive cadence — a full stop.
+    strongest, most conclusive cadence — a full stop. Compare the imperfect authentic
+    cadence (IAC), where the tonic is not in the top voice or a chord is inverted.
   snippet_id: cad-authentic
 - term: plagal cadence
   aliases: ["amen cadence", "IV-I", "iv-i"]
