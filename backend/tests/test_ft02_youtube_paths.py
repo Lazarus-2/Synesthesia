@@ -79,3 +79,48 @@ def test_analysis_state_has_job_id_key():
     # get_type_hints() which resolves them so we can assert the concrete type.
     resolved = typing.get_type_hints(AnalysisState)
     assert resolved["job_id"] is str
+
+
+def test_stems_node_keys_output_dir_on_job_id(monkeypatch, tmp_path):
+    """stems_node must put stems under stems_dir/{job_id}/, derived from the
+    job_id on state — NOT from splitting the (video-id-named) audio filename."""
+    from backend.config import get_settings
+    from backend.graph import nodes
+
+    stems_dir = tmp_path / "stems"
+    stems_dir.mkdir()
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "stems_dir", stems_dir, raising=False)
+    monkeypatch.setattr(settings, "enable_stems", True, raising=False)
+
+    # Audio file is named by video_id (the historical YouTube layout) to prove
+    # we are NOT splitting the filename to find the job id.
+    audio = tmp_path / "vid1234.mp3"
+    audio.write_bytes(b"ID3fake")
+
+    def _fake_separate(src, out_dir):
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        produced = {}
+        for name in ("vocals", "drums", "bass", "other"):
+            p = out_dir / f"{name}.wav"
+            p.write_bytes(b"RIFFfake")
+            produced[name] = p
+        return produced
+
+    monkeypatch.setattr(
+        "backend.ml.stem_separation.separate_stems", _fake_separate
+    )
+
+    state = {
+        "job_id": "job-abc",
+        "audio_path": str(audio),
+    }
+    out = nodes.stems_node(state)
+
+    # Stems written under {job_id}, returned as relative-under-stems_dir paths.
+    assert (stems_dir / "job-abc" / "vocals.wav").exists()
+    assert out["stems"]["vocals"] == "job-abc/vocals.wav"
+    # The video-id dir must NOT exist — proves we keyed on job_id.
+    assert not (stems_dir / "vid1234").exists()

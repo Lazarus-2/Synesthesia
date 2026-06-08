@@ -606,7 +606,11 @@ def stems_node(state: AnalysisState) -> dict:
     if not audio_path or not settings.enable_stems:
         return {}
 
-    job_id = Path(audio_path).stem.split("_")[0]
+    # Key the output dir on the job_id carried by state — not on splitting the
+    # audio filename, which only happened to work for uploads ({job_id}_{name})
+    # and broke for YouTube downloads (named by video_id). Fall back to the old
+    # filename-split heuristic only when job_id is absent (standalone calls).
+    job_id = state.get("job_id") or Path(audio_path).stem.split("_")[0]
     out_dir = settings.stems_dir / job_id
     try:
         result = separate_stems(audio_path, out_dir)
