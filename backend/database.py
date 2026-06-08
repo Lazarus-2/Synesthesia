@@ -36,8 +36,11 @@ async def _create_indexes(db) -> None:
 
     # Song analyses:
     # - file_hash for upload deduplication.
+    # - user_id for per-user library filtering (sparse: anonymous uploads
+    #   have no owner). See ID-01.
     # - created_at TTL so abandoned analyses age out after 90 days.
     await db.song_analyses.create_index("file_hash", sparse=True)
+    await db.song_analyses.create_index("user_id", sparse=True)
     await db.song_analyses.create_index(
         "created_at",
         expireAfterSeconds=_TTL_SECONDS_90_DAYS,

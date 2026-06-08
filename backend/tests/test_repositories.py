@@ -27,3 +27,21 @@ class TestSongAnalysisUserId:
         )
         assert song.user_id == "usr_9"
         assert song.model_dump()["user_id"] == "usr_9"
+
+
+class TestIndexes:
+    @pytest.mark.asyncio
+    async def test_user_id_index_created(self, mock_mongo):
+        from unittest.mock import AsyncMock
+
+        from backend.database import _create_indexes
+
+        mock_mongo.users.create_index = AsyncMock()
+        mock_mongo.chat_sessions.create_index = AsyncMock()
+        mock_mongo.song_analyses.create_index = AsyncMock()
+        mock_mongo.failed_jobs.create_index = AsyncMock()
+
+        await _create_indexes(mock_mongo)
+
+        created = [c.args[0] for c in mock_mongo.song_analyses.create_index.call_args_list]
+        assert "user_id" in created
