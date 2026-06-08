@@ -6,7 +6,8 @@ Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 5)
 from __future__ import annotations
 
 import colorsys
-import re
+
+from backend.tools.chords import parse_chord
 
 # Base Scriabin Circle of Fifths mapping for note pitch classes
 SCRIABIN_COLORS = {
@@ -50,45 +51,43 @@ def hls_to_hex(h: float, lt: float, s: float) -> str:
 def get_chord_color(chord_symbol: str) -> str:
     """Determine the synesthetic hex color for a given chord symbol.
 
+    Quality is resolved via the canonical ``parse_chord`` so ``maj7`` is no
+    longer mis-classified as minor by a naive ``"m" in suffix`` check.
+
     Rule details:
     - Root note determines the base hue using Scriabin's mapping.
     - Minor chords are darker and cooler (lower lightness and saturation).
-    - Dominant 7th or Augmented/Diminished are vibrant/fluorescent.
+    - Dominant 7th is a fluorescent boost; aug/dim get fixed accent colors.
     """
     chord_symbol = chord_symbol.strip()
     if not chord_symbol or chord_symbol.lower() == "n" or chord_symbol == "N.C.":
         return "#1A1A1A"  # Dark gray/black for No Chord
 
-    # Split root from quality suffix (e.g., Cmaj7 -> C, maj7)
-    match = re.match(r"^([A-G][b#]?)(.*)$", chord_symbol)
-    if not match:
+    parts = parse_chord(chord_symbol)
+    if not parts.root:
         return "#8B5CF6"  # Fallback to electric violet
 
-    root, suffix = match.groups()
-    root_upper = root.upper()
-
-    # Normalize enharmonics (e.g. Db -> C#)
+    root_upper = parts.root.upper()
     norm_root = ENHARMONICS.get(root_upper, root_upper)
     base_hex = SCRIABIN_COLORS.get(norm_root, "#8B5CF6")
 
-    # Detect chord quality from suffix
-    suffix_lower = suffix.lower()
-    h, lt, s = hex_to_hls(base_hex)  # ``lt`` = lightness; ``l`` flagged as ambiguous
+    quality = parts.quality
+    h, lt, s = hex_to_hls(base_hex)  # ``lt`` = lightness
 
-    if "dim" in suffix_lower or "o" in suffix_lower or "ø" in suffix_lower:
-        # Diminished -> vibrating neon pink shift
+    if quality in ("dim", "dim7", "m7b5"):
+        # Diminished / half-diminished -> vibrating neon pink shift
         return "#FF00C8"
-    elif "aug" in suffix_lower or "+" in suffix_lower:
+    elif quality == "aug":
         # Augmented -> radioactive lime shift
         return "#B6FF00"
-    elif "min" in suffix_lower or "m" in suffix_lower:
-        # Minor -> Cooler, deeper, lower lightness & saturation
+    elif quality in ("min", "min7", "min9"):
+        # Minor -> cooler, deeper, lower lightness & saturation
         if norm_root in ("C", "G", "D", "A"):
             h = (h + 0.05) % 1.0  # Shift toward green/blue
         lt = max(0.15, lt * 0.5)  # Darker
         s = max(0.2, s * 0.6)  # Less saturated
-    elif "7" in suffix_lower:
-        # Dominant 7th -> highly saturated neon fluorescent boost
+    elif quality in ("dom7", "9", "11", "13", "maj7", "maj9", "6"):
+        # 7th / extended -> highly saturated neon fluorescent boost
         s = min(1.0, s * 1.3)
         lt = min(0.9, lt * 1.1)
 

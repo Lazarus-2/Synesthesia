@@ -133,3 +133,37 @@ class TestParseChord:
         assert parse_chord("N.C.").root == ""
         assert parse_chord("N").root == ""
         assert parse_chord("").root == ""
+
+
+from backend.tools.synesthesia_colors import get_chord_color
+
+
+class TestChordColorQuality:
+    def test_maj7_is_not_the_minor_color(self):
+        # Historical bug: "m" in "maj7" -> minor branch -> darkened color.
+        # Cmaj7 must read as a *major* color, distinct from Cm.
+        cmaj7 = get_chord_color("Cmaj7")
+        cmin = get_chord_color("Cm")
+        assert cmaj7 != cmin
+
+    def test_maj7_close_to_plain_major(self):
+        # maj7 should be a 7th-boost of C major, not a darkened minor.
+        c_major = get_chord_color("C")
+        c_maj7 = get_chord_color("Cmaj7")
+        # Same hue family: both are red-ish, not the cooled/darkened minor.
+        assert c_maj7 != get_chord_color("Cm")
+        assert c_major != get_chord_color("Cm")
+
+    def test_diminished_neon_pink(self):
+        assert get_chord_color("Bdim") == "#FF00C8"
+        assert get_chord_color("Bo") == "#FF00C8"
+
+    def test_half_diminished_is_dim_family(self):
+        assert get_chord_color("Bm7b5") == "#FF00C8"
+
+    def test_augmented_lime(self):
+        assert get_chord_color("Caug") == "#B6FF00"
+        assert get_chord_color("C+") == "#B6FF00"
+
+    def test_no_chord_dark(self):
+        assert get_chord_color("N.C.") == "#1A1A1A"
