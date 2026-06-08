@@ -352,19 +352,18 @@ async def readiness(db=Depends(get_mongodb)) -> JSONResponse:
     try:
         from backend.services.cache import cache
 
-        if cache.redis_client is None:
-            checks["redis"] = {
-                "ok": False,
-                "error": "no_client",
-                "msg": "Redis fell back to in-memory; counter not shared",
-            }
-            overall_ok = False
-        else:
-            cache.redis_client.ping()
+        if await cache.ping():
             checks["redis"] = {
                 "ok": True,
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
             }
+        else:
+            checks["redis"] = {
+                "ok": False,
+                "error": "unreachable",
+                "msg": "Redis unreachable or breaker open; fell back to in-memory",
+            }
+            overall_ok = False
     except Exception as e:
         overall_ok = False
         checks["redis"] = {"ok": False, "error": type(e).__name__, "msg": str(e)[:120]}
@@ -728,11 +727,11 @@ async def search_tracks(request: Request, q: str, limit: int = 10) -> dict:
     from backend.search import merged_search
 
     cache_key = f"search:q={q.lower().strip()}:limit={limit}"
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached:
         return {"results": _json.loads(cached), "cached": True}
     results = await merged_search(q, limit=limit)
-    cache.set(cache_key, _json.dumps(results), ttl_seconds=3600)
+    await cache.set(cache_key, _json.dumps(results), ttl_seconds=3600)
     return {"results": results, "cached": False}
 
 
@@ -764,12 +763,12 @@ async def get_lyrics(
         f"lyrics:t={track_name.lower().strip()}"
         f":a={artist_name.lower().strip()}:d={duration or 'any'}"
     )
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached:
         return _json.loads(cached) | {"cached": True}
     payload = await fetch_lyrics(track_name, artist_name, duration)
     # Cache hits AND misses (both are valuable). 6h TTL.
-    cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
+    await cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
     return payload | {"cached": False}
 
 
@@ -1158,7 +1157,7 @@ async def chat(
 
         # Update cache key
         cache_key = f"chat:session:{payload.session_id}"
-        cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
+        await cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
 
     return ChatResponse(reply=reply)
 
@@ -1252,7 +1251,7 @@ async def chat_stream(
 async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
     """Retrieves standard discussion threads from Cache or drops back to MongoDB."""
     cache_key = f"chat:session:{session_id}"
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached:
         return {"history": json.loads(cached)}
 
@@ -1263,7 +1262,7 @@ async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
     # the same session_id doesn't re-hit Mongo. The early-return that skipped
     # caching when history_payload == [] was a bug (one Mongo query per
     # request for any session that exists but has no messages yet).
-    cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
+    await cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
     return {"history": history_payload}
 
 
