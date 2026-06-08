@@ -1259,10 +1259,10 @@ async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
     # Drop back to MongoDB — window the tail server-side via $slice instead of
     # pulling the full messages array and slicing in Python.
     history_payload = await ChatSessionRepo(db).recent_turns(session_id, 200)
-    if not history_payload:
-        return {"history": []}
-
-    # Save loaded records to caching layer
+    # Always cache — including empty-message sessions — so a second request for
+    # the same session_id doesn't re-hit Mongo. The early-return that skipped
+    # caching when history_payload == [] was a bug (one Mongo query per
+    # request for any session that exists but has no messages yet).
     cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
     return {"history": history_payload}
 

@@ -172,6 +172,38 @@ class TestChatSessionRepo:
         assert pushed["role"] == "user"
         assert pushed["content"] == "How do I play C?"
         assert "timestamp" in pushed
+        # Must upsert so calling append_turn on a non-existent session creates it.
+        assert call.kwargs.get("upsert") is True
+
+    @pytest.mark.asyncio
+    async def test_append_turn_upsert_with_user_id(self, mock_mongo):
+        """user_id must land in $setOnInsert when provided (ownership seeding)."""
+        from backend.repositories import ChatSessionRepo
+
+        repo = ChatSessionRepo(mock_mongo)
+        await repo.append_turn("sess_new", "user", "Hello", user_id="usr_42")
+
+        call = mock_mongo.chat_sessions.update_one.call_args
+        assert call.kwargs.get("upsert") is True
+        set_on_insert = call.args[1]["$setOnInsert"]
+        assert set_on_insert["user_id"] == "usr_42"
+        assert "created_at" in set_on_insert
+        # messages must NOT appear in $setOnInsert — $push handles array creation.
+        assert "messages" not in set_on_insert
+
+    @pytest.mark.asyncio
+    async def test_append_turn_upsert_without_user_id(self, mock_mongo):
+        """user_id must be absent from $setOnInsert when not provided (anonymous session)."""
+        from backend.repositories import ChatSessionRepo
+
+        repo = ChatSessionRepo(mock_mongo)
+        await repo.append_turn("sess_anon", "assistant", "Hi there")
+
+        call = mock_mongo.chat_sessions.update_one.call_args
+        assert call.kwargs.get("upsert") is True
+        set_on_insert = call.args[1]["$setOnInsert"]
+        assert "user_id" not in set_on_insert
+        assert "created_at" in set_on_insert
 
     @pytest.mark.asyncio
     async def test_recent_turns_windows_via_slice_projection(self, mock_mongo):
@@ -206,15 +238,60 @@ class TestChatSessionRepo:
         repo = ChatSessionRepo(mock_mongo)
         assert await repo.recent_turns("sess_nope", 5) == []
 
+    @pytest.mark.asyncio
+    async def test_recent_turns_raises_for_zero_n(self, mock_mongo):
+        """n=0 is silently wrong ($slice: 0 returns nothing); must raise."""
+        from backend.repositories import ChatSessionRepo
+
+        repo = ChatSessionRepo(mock_mongo)
+        with pytest.raises(ValueError, match="n must be positive"):
+            await repo.recent_turns("sess_1", 0)
+
+    @pytest.mark.asyncio
+    async def test_recent_turns_raises_for_negative_n(self, mock_mongo):
+        """n<0 would make $slice: -(-n) = $slice: positive which returns the
+        FIRST messages — silently wrong; must raise."""
+        from backend.repositories import ChatSessionRepo
+
+        repo = ChatSessionRepo(mock_mongo)
+        with pytest.raises(ValueError, match="n must be positive"):
+            await repo.recent_turns("sess_1", -3)
+
+    @pytest.mark.asyncio
+    async def test_recent_turns_empty_when_doc_has_no_messages_key(self, mock_mongo):
+        """Session exists but has no 'messages' field yet → returns [] via doc.get('messages', [])."""
+        from backend.repositories import ChatSessionRepo
+
+        mock_mongo.chat_sessions.find_one.return_value = {
+            "_id": "sess_empty",
+            "user_id": "usr_1",
+            # no 'messages' key at all
+        }
+        repo = ChatSessionRepo(mock_mongo)
+        result = await repo.recent_turns("sess_empty", 10)
+        assert result == []
+
 
 class TestChatHistoryRefactor:
-    def test_history_route_uses_slice_projection(self, api_client, mock_mongo):
+    def test_history_route_uses_slice_projection(self, api_client, mock_mongo, monkeypatch):
         # cache miss → falls back to Mongo. The repo must issue a $slice
         # projection, not a full-doc read.
-        from backend.services.cache import cache
+        #
+        # Hermetic: monkeypatch cache.get to return None for the key under test
+        # so we always exercise the Mongo path without touching the live
+        # HybridCache singleton's in-memory store or Redis.
+        from backend.services import cache as cache_module
 
-        # Ensure the cache key is cold so we exercise the Mongo path.
-        cache.delete("chat:session:test_slice_sess")
+        _target_key = "chat:session:test_slice_sess"
+
+        original_get = cache_module.cache.get
+
+        def _cold_get(key: str):
+            if key == _target_key:
+                return None
+            return original_get(key)  # leave other keys untouched
+
+        monkeypatch.setattr(cache_module.cache, "get", _cold_get)
 
         mock_mongo.chat_sessions.find_one.return_value = {
             "_id": "test_slice_sess",

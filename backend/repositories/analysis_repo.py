@@ -31,5 +31,12 @@ class AnalysisRepo:
         return await self._coll.find_one({"_id": job_id})
 
     async def save(self, job_id: str, doc: dict[str, Any]) -> None:
-        """Upsert ``doc`` keyed by ``job_id`` (replace whole document)."""
+        """Upsert ``doc`` keyed by ``job_id`` via a whole-document replace.
+
+        WARNING — this is DESTRUCTIVE: ``replace_one`` replaces the entire
+        document, not just the fields you pass.  Callers MUST supply the
+        complete document including ``user_id``, ``status``, and ``file_hash``
+        or those fields will be lost on re-save.  The canonical source is
+        ``SongAnalysisModel.model_dump(by_alias=True)``.
+        """
         await self._coll.replace_one({"_id": job_id}, doc, upsert=True)
