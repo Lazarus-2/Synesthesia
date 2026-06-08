@@ -131,3 +131,18 @@ class TestLookupTheory:
 
     def test_return_type_is_str(self):
         assert isinstance(_invoke("cadence"), str)
+
+
+class TestGlossaryReachability:
+    def test_every_term_resolves_to_its_own_snippet(self):
+        # Exact-term lookup of each entry must return that entry's own citation.
+        # Guards against duplicate terms shadowing one another.
+        for e in load_glossary():
+            out = lookup_theory.invoke({"term": e["term"]})
+            assert out.startswith(f"[theory:{e['snippet_id']}]"), (
+                f"{e['term']!r} resolved to the wrong entry: {out[:40]}"
+            )
+
+    def test_terms_are_unique(self):
+        terms = [e["term"].lower() for e in load_glossary()]
+        assert len(terms) == len(set(terms)), "duplicate term keys shadow lookups"
