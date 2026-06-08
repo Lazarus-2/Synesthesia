@@ -506,6 +506,7 @@ def theory_node(state: AnalysisState) -> dict:
         roman = song_obj.roman.progression if song_obj.roman else []
         roman_str = " → ".join(roman[:8]) if roman else "(no progression detected)"
         return {
+            "errors": ["theory: LLM commentary engine offline; prose explanation skipped"],
             "theory_explanation": (
                 f"The deterministic part of the analysis ran cleanly: this song "
                 f"is in **{key}** with the progression **{roman_str}**.\n\n"
@@ -513,7 +514,7 @@ def theory_node(state: AnalysisState) -> dict:
                 f"explanation is unavailable for this run. Restart Ollama (or "
                 f"flip ``LLM_PROVIDER`` to a reachable backend) and re-analyze "
                 f"to get the full narrative._"
-            )
+            ),
         }
 
 
@@ -543,6 +544,7 @@ def instrument_node(state: AnalysisState) -> dict:
         chords_list = [c.chord for c in payload["analysis"].chords]
         diagrams = get_chord_diagrams(chords_list, payload["instrument"])
         return {
+            "errors": ["instrument: AI tutor offline; chord shapes shown without personalized tips"],
             "instrument_guide": InstrumentGuide(
                 instrument=payload["instrument"],
                 difficulty=payload["difficulty"],
@@ -551,7 +553,7 @@ def instrument_node(state: AnalysisState) -> dict:
                     "The AI tutor is offline — chord shapes shown but "
                     "personalized strumming/fingering tips were skipped."
                 ],
-            )
+            ),
         }
 
 
@@ -581,7 +583,7 @@ def stems_node(state: AnalysisState) -> dict:
         result = separate_stems(audio_path, out_dir)
     except Exception as e:
         logger.warning("stems_node: separation failed for %s: %s", job_id, e)
-        return {}
+        return {"errors": [f"stems: separation failed for job {job_id} ({e})"]}
 
     # Convert absolute Paths to relative-under-stems_dir strings.
     rel: dict[str, str] = {}
@@ -600,12 +602,23 @@ def similarity_node(state: AnalysisState) -> dict:
 
     Passes the detected key so the v2 sequence-aware embedding can rotate
     progressions into a common tonal frame (Plan 3 A6).
+
+    Degradation: if the similarity index is unavailable, return an empty
+    list and append a clear error so the run is marked ``degraded`` rather
+    than silently shipping zero recommendations.
     """
     from backend.chains.similarity_chain import find_similar
 
     chords_list = [c.chord for c in state.get("chords", [])]
-    similar = find_similar(chords_list, key=state.get("key"))
-    return {"similar_songs": similar}
+    try:
+        similar = find_similar(chords_list, key=state.get("key"))
+        return {"similar_songs": similar}
+    except Exception as e:
+        logger.warning("similarity_node: recommendation engine unavailable: %s", e)
+        return {
+            "errors": [f"similarity: recommendations unavailable ({e})"],
+            "similar_songs": [],
+        }
 
 
 def has_errors_route(state: AnalysisState) -> str:
