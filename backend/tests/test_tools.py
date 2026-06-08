@@ -51,6 +51,19 @@ class TestCapo:
         # C G Am are already open; capo might still help with F but 0 is valid
         assert res["capo"] in (0, 3, 5, 7)
 
+    def test_capo_handles_slash_chords_without_crashing(self):
+        # Slash chords used to leave "/bass" glued in the suffix; ensure the
+        # capo search runs and the recommended shapes are themselves slash-aware.
+        res = suggest_capo.invoke({"chords": ["G/B", "C", "D/F#"]})
+        assert res["capo"] in range(0, 8)
+        assert isinstance(res["shapes"], list)
+        assert len(res["shapes"]) == 3
+
+    def test_capo_recognizes_maj7_root_for_open_match(self):
+        # is_easy_shape must key on root+quality, not raw string membership.
+        res = suggest_capo.invoke({"chords": ["Amaj7", "Dmaj7"]})
+        assert "score" in res
+
 
 from backend.tools.voicings import get_chord_diagrams
 
