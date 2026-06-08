@@ -934,9 +934,26 @@ def _sse_frame(event: str, data: dict | str) -> str:
     name rather than parsing payload shape. Multi-line ``data`` would
     need to be re-line-prefixed; we always pass JSON or a short token, so
     a single ``data:`` line suffices.
+
+    NOTE: used by the chat/stream endpoint which uses StreamingResponse
+    with raw strings.  For the progress SSE endpoint (EventSourceResponse)
+    use :func:`_sse_event` (module-level, returns ServerSentEvent) instead —
+    passing a pre-formatted string into EventSourceResponse would double-prefix
+    every line with ``data:``.
     """
     payload = data if isinstance(data, str) else json.dumps(data)
     return f"event: {event}\ndata: {payload}\n\n"
+
+
+async def _await_if_needed(value):
+    """Await *value* only if it is a coroutine / awaitable; return it otherwise.
+
+    Module-level so it can be reused across request handlers without
+    redefining a closure per request.
+    """
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 @router.get("/jobs/{job_id}/progress")
@@ -955,12 +972,6 @@ async def get_analysis_progress(job_id: str, request: Request):
     """
     job_store = get_job_store()
 
-    async def _await_if_needed(value):
-        """Await the value only if it is a coroutine / awaitable."""
-        if inspect.isawaitable(value):
-            return await value
-        return value
-
     def _sse_event(event: str, data: dict | str) -> ServerSentEvent:
         """Build a ``ServerSentEvent`` carrying the same tagged-event wire
         format the frontend ``consumeSse`` parser expects.
@@ -972,9 +983,14 @@ async def get_analysis_progress(job_id: str, request: Request):
         every line with ``data:`` and corrupt the frame. The emitted bytes
         are ``event: <event>\r\ndata: <json>\r\n\r\n``; ``consumeSse``
         ``.trim()``s each line, so the ``\r`` is harmless.
+
+        NOTE: for the chat/stream endpoint (StreamingResponse with raw strings)
+        use the module-level :func:`_sse_frame` helper instead.
         """
         payload = data if isinstance(data, str) else json.dumps(data)
         return ServerSentEvent(event=event, data=payload)
+
+    # _await_if_needed is module-level (see above _sse_frame); reuse it here.
 
     async def event_generator():
         max_lifetime_s = 30 * 60  # absolute upper bound; protects against bugs
@@ -1035,21 +1051,24 @@ async def get_analysis_progress(job_id: str, request: Request):
                     return
                 yield _sse_event("chunk", parsed)
 
-            # Only run the staleness check when the job isn't finished.
-            stale_result = job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S)
-            if not job_finished and await _await_if_needed(stale_result):
-                yield _sse_event(
-                    "error",
-                    {
-                        "code": "WORKER_STALE",
-                        "message": (
-                            f"Analysis worker has not reported in "
-                            f"{DEFAULT_HEARTBEAT_TIMEOUT_S}s — likely crashed."
-                        ),
-                        "job_id": job_id,
-                    },
-                )
-                return
+            # Only create+await the is_stale coroutine when the job is NOT
+            # finished — avoids an unawaited-coroutine RuntimeWarning and
+            # the 30-min spin that would otherwise continue after "done".
+            if not job_finished:
+                stale = job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S)
+                if await _await_if_needed(stale):
+                    yield _sse_event(
+                        "error",
+                        {
+                            "code": "WORKER_STALE",
+                            "message": (
+                                f"Analysis worker has not reported in "
+                                f"{DEFAULT_HEARTBEAT_TIMEOUT_S}s — likely crashed."
+                            ),
+                            "job_id": job_id,
+                        },
+                    )
+                    return
 
             await asyncio.sleep(1.0)
             elapsed += 1

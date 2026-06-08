@@ -12,6 +12,11 @@ from pathlib import Path
 
 import pytest
 
+# Mark the entire module so ``-m "not ml"`` deselects all tests here.
+# (The CI workflow runs with ``-m "not ml and not integration"`` to avoid
+# pulling in librosa / demucs / basic-pitch in the fast test environment.)
+pytestmark = pytest.mark.ml
+
 # ``librosa`` is required by every test in this file; skip gracefully
 # in environments where it's not installed (e.g. very stripped CI).
 pytest.importorskip("librosa")

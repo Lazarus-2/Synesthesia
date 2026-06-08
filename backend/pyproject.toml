@@ -144,7 +144,7 @@ exclude = ["backend.tests*", "backend.scripts*", "frontend*", "storage*"]
 # functions no longer each need ``@pytest.mark.asyncio`` (existing markers
 # remain valid). Markers below are registered so ``--strict-markers`` stays
 # green and CI can select / deselect heavy suites.
-testpaths = ["backend/tests"]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--strict-markers --tb=short"
 markers = [

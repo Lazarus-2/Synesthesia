@@ -62,15 +62,7 @@ jobs:
       - name: Pytest
         run: >-
           pytest -c backend/pyproject.toml
-          backend/tests/test_tools.py
-          backend/tests/test_db_cache.py
-          backend/tests/test_graph_routing.py
-          backend/tests/test_chains.py
-          backend/tests/test_api.py
-          backend/tests/test_ml.py
-          backend/tests/test_search_and_lyrics.py
-          backend/tests/test_acoustid_enrich.py
-          backend/tests/test_spotify_ingestion.py
-          backend/tests/test_sse_progress.py
+          backend/tests
+          --ignore=backend/tests/e2e_browser
           -m "not ml and not integration"
           -v --tb=short
