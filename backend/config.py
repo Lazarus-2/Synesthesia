@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     auth_jwt_algorithm: str = "HS256"
     auth_jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
 
+    # --- Chat / AURA (Phase 2, spec §9) ---
+    # CHAT_PROVIDER / CHAT_MODEL default to the base LLM provider/model
+    # (empty == "inherit") so chat is provider-agnostic with no separate
+    # default. Resolve via ``effective_chat_provider`` / ``effective_chat_model``.
+    chat_provider: str = ""
+    chat_model: str = ""
+    chat_tools_enabled: bool = True
+    chat_max_tool_iters: int = 4
+    chat_history_turns: int = 10
+    chat_tutor_default: bool = False
+    chat_user_daily_token_budget: int = 200000
+
     # --- LLM Temperatures ---
     theory_temperature: float = 0.2
     instrument_temperature: float = 0.3
@@ -137,6 +149,16 @@ class Settings(BaseSettings):
                 "Set a strong random value (e.g. `openssl rand -hex 32`)."
             )
         return self
+
+    @property
+    def effective_chat_provider(self) -> str:
+        """CHAT_PROVIDER, falling back to LLM_PROVIDER when unset."""
+        return self.chat_provider or self.llm_provider
+
+    @property
+    def effective_chat_model(self) -> str:
+        """CHAT_MODEL, falling back to MODEL_NAME when unset."""
+        return self.chat_model or self.model_name
 
     def ensure_dirs(self) -> None:
         self.audio_upload_dir.mkdir(parents=True, exist_ok=True)
