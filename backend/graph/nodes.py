@@ -335,9 +335,15 @@ def features_node(state: AnalysisState) -> dict:
     conditional edges from ingest/validate get accidentally removed), the
     counter advances and ``should_retry`` will eventually fail rather than
     looping until the 10007-iteration recursion limit fires.
+
+    FT-01: every return path sets ``feature_error`` — ``None`` on success,
+    a message on failure. Because ``feature_error`` is a last-write-wins
+    channel (no reducer), a successful retry overwrites a prior failure, so
+    ``should_retry`` sees the latest attempt's outcome and does NOT treat a
+    recovered run as failed. The failure string is *also* appended to the
+    append-only ``errors`` log for the audit trail.
     """
     audio_path = state.get("audio_path")
-    errors = list(state.get("errors", []))
     next_retries = state.get("retries", 0) + 1
 
     from backend.ml.beat_tracking import track_beats
@@ -357,10 +363,15 @@ def features_node(state: AnalysisState) -> dict:
             "chords": chords,
             "sections": sections,
             "retries": next_retries,
+            "feature_error": None,  # latest attempt succeeded — clear it
         }
     except Exception as e:
-        errors.append(f"Feature extraction failed: {str(e)}")
-        return {"errors": errors, "retries": next_retries}
+        msg = f"Feature extraction failed: {str(e)}"
+        return {
+            "errors": [msg],  # append-only log (operator.add reducer)
+            "feature_error": msg,  # latest attempt failed
+            "retries": next_retries,
+        }
 
 
 def roman_analysis_node(state: AnalysisState) -> dict:
@@ -602,20 +613,20 @@ def has_errors_route(state: AnalysisState) -> str:
 
 
 def should_retry(state: AnalysisState) -> str:
-    """Decide whether to retry feature extraction on error.
+    """Decide whether to retry feature extraction based on the LATEST attempt.
 
-    Only invoked after ``features_node`` — by this point any pre-features
-    errors have already been routed to END via :func:`has_errors_route`, so
-    a non-empty ``errors`` list here is genuinely from features itself and
-    we can retry once before giving up.
+    Reads ``feature_error`` (last-write-wins), NOT the append-only ``errors``
+    log. This is the FT-01 fix: a fail-then-succeed sequence leaves a stale
+    string in ``errors`` but clears ``feature_error`` to ``None``, so a
+    recovered run routes to "ok" instead of being discarded as failed.
 
     Safety bound: ``features_node`` always increments ``retries`` (success
     or failure), so even pathological inputs can't loop more than a handful
     of times before ``retries >= MAX_FEATURE_RETRIES`` flips us to "fail".
     """
     MAX_FEATURE_RETRIES = 2
-    if state.get("errors") and state.get("retries", 0) < MAX_FEATURE_RETRIES:
-        return "retry"
-    if state.get("errors"):
+    if state.get("feature_error"):
+        if state.get("retries", 0) < MAX_FEATURE_RETRIES:
+            return "retry"
         return "fail"
     return "ok"

@@ -61,3 +61,67 @@ class TestErrorsReducer:
 
         result = graph.invoke({"errors": [], "retries": 0})
         assert sorted(result["errors"]) == ["a-down", "b-down"]
+
+
+from backend.graph.nodes import should_retry
+
+
+class TestShouldRetryReadsFeatureError:
+    def test_clean_state_is_ok(self):
+        assert should_retry({}) == "ok"
+        assert should_retry({"feature_error": None}) == "ok"
+
+    def test_latest_attempt_failed_under_cap_retries(self):
+        assert should_retry({"feature_error": "boom", "retries": 0}) == "retry"
+        assert should_retry({"feature_error": "boom", "retries": 1}) == "retry"
+
+    def test_latest_attempt_failed_at_cap_fails(self):
+        assert should_retry({"feature_error": "boom", "retries": 2}) == "fail"
+
+    def test_stale_errors_log_does_not_force_retry(self):
+        """FT-01 heart: a successful retry clears feature_error even though the
+        append-only ``errors`` log still holds the prior failure string."""
+        state = {
+            "errors": ["Feature extraction failed: transient decode error"],
+            "feature_error": None,
+            "retries": 1,
+        }
+        assert should_retry(state) == "ok"
+
+
+class TestFeaturesNodeFailThenSucceed:
+    def test_fail_then_succeed_yields_usable_analysis(self, monkeypatch):
+        """A first attempt that throws, then a second that succeeds, must end
+        with populated features and feature_error cleared to None."""
+        import backend.graph.nodes as nodes_mod
+
+        calls = {"n": 0}
+
+        def flaky_key_tempo(_path):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("transient decode error")
+            return ("C major", 120.0)
+
+        monkeypatch.setattr(
+            "backend.ml.key_estimation.estimate_key_and_tempo", flaky_key_tempo
+        )
+        monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
+        monkeypatch.setattr("backend.ml.chord_detection.detect_chords", lambda _p: [])
+        monkeypatch.setattr(
+            "backend.ml.structure_detection.detect_sections", lambda _p: []
+        )
+
+        # Attempt 1 — fails.
+        out1 = nodes_mod.features_node({"audio_path": "/tmp/x.wav", "retries": 0})
+        assert out1["feature_error"] is not None
+        assert out1["errors"]  # appended to the degradation log
+        assert should_retry({**out1}) == "retry"
+
+        # Attempt 2 — succeeds; feature_error cleared, features present.
+        out2 = nodes_mod.features_node(
+            {"audio_path": "/tmp/x.wav", "retries": out1["retries"]}
+        )
+        assert out2["feature_error"] is None
+        assert out2["key"] == "C major"
+        assert should_retry({**out2}) == "ok"
