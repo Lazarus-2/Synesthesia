@@ -287,3 +287,125 @@ class TestBindBeforeFallback:
         )
         assert len(calls) == 1  # only the primary was transformed
         assert runnable.invoke("z") == "ok:z"
+
+
+class TestPublicBinders:
+    """build_chat_llm / build_structured_llm route through _bind_before_fallback
+    so bind_tools and with_structured_output survive a fallback chain — even
+    when the primary and fallback are DIFFERENT providers (the live P1 bug)."""
+
+    def test_build_structured_llm_survives_cross_provider_fallback(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+        from pydantic import BaseModel
+
+        from backend.chains import llm_factory
+
+        class _Schema(BaseModel):
+            answer: str
+
+        structured_calls: list[object] = []
+
+        def _fake_model(tag: str):
+            # A stand-in bare model: only the binding methods chains use.
+            m = MagicMock(name=tag)
+
+            def _wso(schema):
+                structured_calls.append(schema)
+                return RunnableLambda(lambda _x: _Schema(answer=tag))
+
+            m.with_structured_output.side_effect = _wso
+            return m
+
+        # provider != fallback_provider => exercises the cross-provider path.
+        settings = MagicMock()
+        settings.llm_provider = "openai"
+        settings.llm_fallback_provider = "anthropic"
+        settings.llm_fallback_model = "claude-x"
+        settings.model_name = "gpt-x"
+
+        with (
+            patch.object(llm_factory, "get_settings", return_value=settings),
+            patch.object(
+                llm_factory,
+                "_build_provider_llm",
+                side_effect=lambda provider, **kw: _fake_model(provider),
+            ),
+        ):
+            runnable = llm_factory.build_structured_llm(_Schema, temperature=0.2)
+
+        # with_structured_output was applied to BOTH bare models.
+        assert structured_calls == [_Schema, _Schema]
+        # Primary path returns the structured object (no AttributeError).
+        assert runnable.invoke("q").answer == "openai"
+
+    def test_build_chat_llm_binds_tools_on_bare_model(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains import llm_factory
+
+        bound_tools: list[object] = []
+
+        def _fake_model(tag: str):
+            m = MagicMock(name=tag)
+
+            def _bt(tools):
+                bound_tools.append(tools)
+                return RunnableLambda(lambda x: f"{tag}:{x}")
+
+            m.bind_tools.side_effect = _bt
+            return m
+
+        settings = MagicMock()
+        settings.llm_provider = "openai"
+        settings.llm_fallback_provider = ""  # no fallback
+        settings.llm_fallback_model = ""
+        settings.model_name = "gpt-x"
+
+        sentinel_tools = [object()]
+        with (
+            patch.object(llm_factory, "get_settings", return_value=settings),
+            patch.object(
+                llm_factory,
+                "_build_provider_llm",
+                side_effect=lambda provider, **kw: _fake_model(provider),
+            ),
+        ):
+            runnable = llm_factory.build_chat_llm(temperature=0.7, tools=sentinel_tools)
+
+        assert bound_tools == [sentinel_tools]
+        assert runnable.invoke("hi") == "openai:hi"
+
+    def test_build_chat_llm_without_tools_returns_plain_model(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains import llm_factory
+
+        def _fake_model(tag: str):
+            m = MagicMock(name=tag)
+            # If bind_tools is wrongly called, the test would see it.
+            m.bind_tools.side_effect = AssertionError("bind_tools should not run")
+            return m
+
+        settings = MagicMock()
+        settings.llm_provider = "openai"
+        settings.llm_fallback_provider = ""
+        settings.llm_fallback_model = ""
+        settings.model_name = "gpt-x"
+
+        with (
+            patch.object(llm_factory, "get_settings", return_value=settings),
+            patch.object(
+                llm_factory,
+                "_build_provider_llm",
+                side_effect=lambda provider, **kw: RunnableLambda(lambda x: f"plain:{x}"),
+            ),
+        ):
+            runnable = llm_factory.build_chat_llm(temperature=0.7)
+
+        assert runnable.invoke("hi") == "plain:hi"

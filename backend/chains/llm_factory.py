@@ -307,3 +307,73 @@ def build_llm(temperature: float = 0.2) -> BaseChatModel:
         )
 
     return primary
+
+
+def _provider_builders(
+    temperature: float,
+) -> tuple[Callable[[], BaseChatModel], Callable[[], BaseChatModel] | None]:
+    """Return zero-arg builders for the primary and (optional) fallback models.
+
+    Shared by :func:`build_chat_llm` and :func:`build_structured_llm` so they
+    resolve provider/model/key exactly like :func:`build_llm` does.
+    """
+    s = get_settings()
+    provider = (s.llm_provider or "ollama").lower()
+
+    def _build_primary() -> BaseChatModel:
+        return _build_provider_llm(
+            provider=provider,
+            model=s.model_name,
+            temperature=temperature,
+            api_key=_get_api_key(provider),
+        )
+
+    fallback_provider = (s.llm_fallback_provider or "").lower()
+    if fallback_provider and fallback_provider != provider:
+
+        def _build_fallback() -> BaseChatModel:
+            return _build_provider_llm(
+                provider=fallback_provider,
+                model=s.llm_fallback_model,
+                temperature=temperature,
+                api_key=_get_api_key(fallback_provider),
+            )
+
+        return _build_primary, _build_fallback
+
+    return _build_primary, None
+
+
+def build_chat_llm(temperature: float = 0.7, tools: list | None = None) -> Runnable:
+    """Plain-or-tool-bound chat LLM with provider fallback.
+
+    When ``tools`` is given, ``bind_tools`` is applied to EACH bare provider
+    model before ``.with_fallbacks()`` composes them — so the fallback model is
+    tool-aware too. When ``tools`` is None the bare model passes through
+    untouched.
+    """
+    build_primary, build_fallback = _provider_builders(temperature)
+
+    def _transform(model: BaseChatModel) -> Runnable:
+        if tools:
+            return model.bind_tools(tools)
+        return model
+
+    return _bind_before_fallback(build_primary, build_fallback, transform=_transform)
+
+
+def build_structured_llm(schema: Any, temperature: float = 0.2) -> Runnable:
+    """Structured-output LLM with provider fallback.
+
+    ``with_structured_output(schema)`` is applied to EACH bare provider model
+    before ``.with_fallbacks()``. This is the fix for the P1 ``AttributeError``
+    chains hit when a fallback provider is configured: ``RunnableWithFallbacks``
+    has no ``with_structured_output``, so the binding must happen on the bare
+    models first.
+    """
+    build_primary, build_fallback = _provider_builders(temperature)
+
+    def _transform(model: BaseChatModel) -> Runnable:
+        return model.with_structured_output(schema)
+
+    return _bind_before_fallback(build_primary, build_fallback, transform=_transform)
