@@ -27,6 +27,11 @@ def _is_easy_open(chord: str) -> bool:
     return (parts.root, parts.quality) in _EASY_OPEN_PARTS
 
 
+# Public alias: consumers (e.g. instrument_chain) judge a single chord on its
+# parsed identity rather than raw-string membership in the old EASY_OPEN set.
+is_easy_open = _is_easy_open
+
+
 @tool
 def suggest_capo(chords: list[str]) -> dict:
     """Find capo fret (0-7) that maximizes number of easy open-shape chords.

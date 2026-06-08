@@ -11,7 +11,7 @@ from backend.chains.llm_factory import build_structured_llm
 from backend.config import get_settings
 from backend.prompts.instrument_prompt import instrument_prompt
 from backend.schemas import InstrumentGuide, SongAnalysis
-from backend.tools.capo import EASY_OPEN
+from backend.tools.capo import is_easy_open
 from backend.tools.transpose import transpose_chord
 from backend.tools.voicings import get_chord_diagrams
 
@@ -26,12 +26,12 @@ def _auto_capo(chords: list[str]) -> int | None:
     """
     if not chords:
         return None
-    open_score = sum(c in EASY_OPEN for c in chords)
+    open_score = sum(is_easy_open(c) for c in chords)
     best_fret = 0
     best_score = open_score
     for fret in range(1, 8):
         shapes = [transpose_chord(c, -fret) for c in chords]
-        score = sum(s in EASY_OPEN for s in shapes)
+        score = sum(is_easy_open(s) for s in shapes)
         if score > best_score:
             best_score = score
             best_fret = fret
