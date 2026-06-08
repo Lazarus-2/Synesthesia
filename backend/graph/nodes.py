@@ -92,6 +92,7 @@ def ingest_node(state: AnalysisState) -> dict:
     # with the existing channel value automatically.
     new_errors: list[str] = []
     metadata_extras: dict = {}  # title/artist/etc. from yt-dlp info to merge
+    job_id = state.get("job_id", "")
 
     if youtube_url:
         # Branch by platform. Spotify gets its own flow: metadata-only
@@ -148,7 +149,7 @@ def ingest_node(state: AnalysisState) -> dict:
 
             import yt_dlp
 
-            out_dir = Path("./storage/uploads")
+            out_dir = Path(os.environ.get("FT02_UPLOAD_DIR", "./storage/uploads"))
             out_dir.mkdir(parents=True, exist_ok=True)
 
             # In 2026 yt-dlp needs an EJS JS runtime to solve YouTube's
@@ -224,7 +225,18 @@ def ingest_node(state: AnalysisState) -> dict:
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
-                downloaded_file = out_dir / f"{info['id']}.mp3"
+                # yt-dlp wrote {video_id}.mp3 (outtmpl is %(id)s). Rename it to
+                # {job_id}_{video_id}.mp3 so serve_audio / serve_stem / export_midi
+                # — all of which key on job_id — can resolve it. Fall back to the
+                # raw video-id name if job_id is somehow absent (shouldn't happen
+                # in the pipeline, but keep ingest robust when called standalone).
+                raw_file = out_dir / f"{info['id']}.mp3"
+                if job_id:
+                    downloaded_file = out_dir / f"{job_id}_{info['id']}.mp3"
+                    if raw_file.exists():
+                        raw_file.replace(downloaded_file)
+                else:
+                    downloaded_file = raw_file
                 audio_path = str(downloaded_file)
                 # Persist title/uploader as metadata so the player header
                 # can show something nicer than the video ID. LangGraph
