@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # C.1 grounded_system_prompt
 # ---------------------------------------------------------------------------
@@ -342,10 +341,12 @@ class TestRunAura:
     async def test_degrades_when_tools_disabled(self, monkeypatch):
         from backend.chains import aura_agent
 
+        async def _fake_stream(message, history, analysis=None):
+            yield "DEGRADED ANSWER"
+
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: False)
         monkeypatch.setattr(
-            aura_agent.chat_chain, "get_chat_response",
-            lambda message, history, analysis=None: "DEGRADED ANSWER",
+            aura_agent.chat_chain, "get_chat_response_stream", _fake_stream
         )
 
         answer = await aura_agent.run_aura(
@@ -437,6 +438,9 @@ class TestDegradePath:
     async def test_stream_degrades_on_agent_error(self, monkeypatch):
         from backend.chains import aura_agent
 
+        async def _fake_stream(message, history, analysis=None):
+            yield "FALLBACK TEXT"
+
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
 
         def _boom(tools=None, tutor_mode=False):
@@ -444,8 +448,7 @@ class TestDegradePath:
 
         monkeypatch.setattr(aura_agent, "build_aura_agent", _boom)
         monkeypatch.setattr(
-            aura_agent.chat_chain, "get_chat_response",
-            lambda message, history, analysis=None: "FALLBACK TEXT",
+            aura_agent.chat_chain, "get_chat_response_stream", _fake_stream
         )
 
         frames = [
@@ -473,6 +476,9 @@ class TestDegradePath:
     async def test_stream_degrades_when_tools_disabled(self, monkeypatch):
         from backend.chains import aura_agent
 
+        async def _fake_stream(message, history, analysis=None):
+            yield "NO-TOOLS PATH"
+
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: False)
         called = {"agent": False}
 
@@ -482,8 +488,7 @@ class TestDegradePath:
 
         monkeypatch.setattr(aura_agent, "build_aura_agent", _should_not_run)
         monkeypatch.setattr(
-            aura_agent.chat_chain, "get_chat_response",
-            lambda message, history, analysis=None: "NO-TOOLS PATH",
+            aura_agent.chat_chain, "get_chat_response_stream", _fake_stream
         )
 
         frames = [
@@ -506,6 +511,9 @@ class TestDegradePath:
     async def test_run_aura_degrade_emits_no_exception(self, monkeypatch):
         from backend.chains import aura_agent
 
+        async def _fake_stream(message, history, analysis=None):
+            yield "SAFE"
+
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
 
         def _boom(tools=None, tutor_mode=False):
@@ -513,8 +521,7 @@ class TestDegradePath:
 
         monkeypatch.setattr(aura_agent, "build_aura_agent", _boom)
         monkeypatch.setattr(
-            aura_agent.chat_chain, "get_chat_response",
-            lambda message, history, analysis=None: "SAFE",
+            aura_agent.chat_chain, "get_chat_response_stream", _fake_stream
         )
 
         answer = await aura_agent.run_aura(
@@ -522,3 +529,232 @@ class TestDegradePath:
             profile=None, tutor_mode=False, tools=[_spy_tool],
         )
         assert answer == "SAFE"
+
+
+# ---------------------------------------------------------------------------
+# C.7 S1 regression — delimiter sanitization
+# ---------------------------------------------------------------------------
+
+
+class TestDelimiterSanitization:
+    """S1: a lyric or title that IS the close-delimiter must not break the block."""
+
+    def test_close_delimiter_in_lyrics_is_neutralized(self):
+        from backend.chains.aura_agent import (
+            _UNTRUSTED_CLOSE,
+            _UNTRUSTED_OPEN,
+            grounded_system_prompt,
+        )
+
+        # Lyric set to exactly the close-delimiter string.
+        evil = dict(_ANALYSIS, lyrics=_UNTRUSTED_CLOSE)
+        prompt = grounded_system_prompt(evil, profile=None, tutor_mode=False)
+
+        # The block must open exactly once and close exactly once.
+        assert prompt.count(_UNTRUSTED_OPEN) == 1, "UNTRUSTED block opened more than once"
+        assert prompt.count(_UNTRUSTED_CLOSE) == 1, (
+            "UNTRUSTED block closed more than once — delimiter injection succeeded"
+        )
+        # The raw delimiter must not appear as lyric content (it was replaced).
+        _, _, after_open = prompt.partition(_UNTRUSTED_OPEN)
+        # Everything between OPEN and the single CLOSE is the block body.
+        body, _, _ = after_open.partition(_UNTRUSTED_CLOSE)
+        # The close-delimiter cannot appear raw inside the body.
+        assert _UNTRUSTED_CLOSE not in body
+
+    def test_open_delimiter_in_title_is_neutralized(self):
+        from backend.chains.aura_agent import (
+            _UNTRUSTED_OPEN,
+            grounded_system_prompt,
+        )
+
+        evil = dict(_ANALYSIS, title=_UNTRUSTED_OPEN)
+        prompt = grounded_system_prompt(evil, profile=None, tutor_mode=False)
+        # Only one open delimiter allowed — the injected one must have been replaced.
+        assert prompt.count(_UNTRUSTED_OPEN) == 1
+
+    def test_sanitize_untrusted_removes_all_delimiter_variants(self):
+        from backend.chains.aura_agent import (
+            _ALL_DELIMITERS,
+            _sanitize_untrusted,
+        )
+
+        for delim in _ALL_DELIMITERS:
+            result = _sanitize_untrusted(delim)
+            assert "[delimiter removed]" in result, f"Delimiter not sanitized: {delim!r}"
+            assert delim not in result, f"Raw delimiter survived sanitization: {delim!r}"
+
+    def test_facts_delimiters_in_lyrics_are_also_sanitized(self):
+        from backend.chains.aura_agent import (
+            _FACTS_CLOSE,
+            _FACTS_OPEN,
+            grounded_system_prompt,
+        )
+
+        # Inject the FACTS_CLOSE into lyrics — it must be neutralized so the
+        # facts block appears to close only where it should.
+        evil = dict(_ANALYSIS, lyrics=_FACTS_CLOSE)
+        prompt = grounded_system_prompt(evil, profile=None, tutor_mode=False)
+        assert prompt.count(_FACTS_OPEN) == 1
+        assert prompt.count(_FACTS_CLOSE) == 1
+
+
+# ---------------------------------------------------------------------------
+# C.8 S2 regression — per-turn streaming flag reset
+# ---------------------------------------------------------------------------
+
+
+class TestPerTurnStreamReset:
+    """S2: multi-turn event sequences where turn1 streams but turn2 only uses
+    on_chat_model_end must still emit the final answer."""
+
+    @pytest.mark.asyncio
+    async def test_multiturn_final_answer_emitted_when_turn2_no_stream(self, monkeypatch):
+        """Simulate: turn1 emits on_chat_model_stream tokens (tool-call reasoning),
+        turn2 emits only on_chat_model_end (final answer, non-streaming provider).
+        The S2 fix ensures turn2's on_chat_model_end IS emitted as a chunk."""
+        # Craft a fake event sequence:
+        #   - on_chat_model_start  (turn 1)
+        #   - on_chat_model_stream (turn 1 — streams a token, sets flag)
+        #   - on_chat_model_start  (turn 2 — flag must RESET here)
+        #   - on_chat_model_end    (turn 2 — no streaming, but content present)
+        from langchain_core.messages import AIMessage as _AI
+
+        from backend.chains import aura_agent
+
+        _turn2_answer = "The tonic in Eb major is Eb."
+
+        async def _fake_astream_events(payload, version, **kwargs):
+            # Turn 1: a model call that streams a token (tool reasoning).
+            yield {"event": "on_chat_model_start", "name": "llm", "data": {}}
+            from unittest.mock import MagicMock
+
+            chunk1 = MagicMock()
+            chunk1.content = "thinking…"
+            yield {"event": "on_chat_model_stream", "name": "llm", "data": {"chunk": chunk1}}
+            # Turn 2: final answer delivered only via on_chat_model_end.
+            yield {"event": "on_chat_model_start", "name": "llm", "data": {}}
+            final_msg = _AI(content=_turn2_answer)
+            yield {
+                "event": "on_chat_model_end",
+                "name": "llm",
+                "data": {"output": final_msg},
+            }
+
+        class _FakeAgent:
+            def astream_events(self, payload, version, **kwargs):
+                return _fake_astream_events(payload, version, **kwargs)
+
+        monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
+        monkeypatch.setattr(
+            aura_agent, "build_aura_agent", lambda tools=None, tutor_mode=False: _FakeAgent()
+        )
+
+        frames = [
+            _decode(f)
+            async for f in aura_agent.stream_aura(
+                message="what's the tonic?",
+                history=[],
+                analysis=_ANALYSIS,
+                profile=None,
+                tutor_mode=False,
+                tools=[_spy_tool],
+            )
+        ]
+        chunk_texts = [d.get("text", "") for e, d in frames if e == "chunk" and isinstance(d, dict)]
+        # turn2's final answer must appear in the chunks.
+        assert any(_turn2_answer in t for t in chunk_texts), (
+            f"Turn-2 final answer missing from chunks. Got: {chunk_texts!r}"
+        )
+        # done frame must accumulate both turns.
+        done_frames = [d for e, d in frames if e == "done"]
+        assert done_frames, "No done frame emitted"
+        assert _turn2_answer in done_frames[-1].get("text", "")
+
+
+# ---------------------------------------------------------------------------
+# C.9 M-3 — config drift guard
+# ---------------------------------------------------------------------------
+
+
+class TestConfigHelpers:
+    """M-3: _max_tool_iters() / _tools_enabled() must read from settings.
+
+    Env vars: CHAT_MAX_TOOL_ITERS controls _max_tool_iters();
+              CHAT_TOOLS_ENABLED controls _tools_enabled().
+    """
+
+    def test_max_tool_iters_reads_from_settings(self, monkeypatch):
+        from backend.chains import aura_agent
+
+        fake_settings = type("S", (), {"chat_max_tool_iters": 7, "chat_tools_enabled": True})()
+        monkeypatch.setattr(aura_agent, "get_settings", lambda: fake_settings)
+        assert aura_agent._max_tool_iters() == 7
+
+    def test_tools_enabled_reads_from_settings(self, monkeypatch):
+        from backend.chains import aura_agent
+
+        fake_settings = type("S", (), {"chat_max_tool_iters": 4, "chat_tools_enabled": False})()
+        monkeypatch.setattr(aura_agent, "get_settings", lambda: fake_settings)
+        assert aura_agent._tools_enabled() is False
+
+    def test_tools_enabled_defaults_to_true(self, monkeypatch):
+        from backend.chains import aura_agent
+
+        # settings object with NO chat_tools_enabled attr → should default True.
+        fake_settings = type("S", (), {"chat_max_tool_iters": 4})()
+        monkeypatch.setattr(aura_agent, "get_settings", lambda: fake_settings)
+        assert aura_agent._tools_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# C.10 M-1/M-2 — tutor persona citation + wait instruction
+# ---------------------------------------------------------------------------
+
+
+class TestTutorPersona:
+    def test_tutor_persona_contains_citation_instruction(self):
+        from backend.chains.aura_agent import grounded_system_prompt
+
+        prompt = grounded_system_prompt(_ANALYSIS, profile=None, tutor_mode=True)
+        # M-1: citation instruction must appear in tutor mode.
+        assert "[analysis]" in prompt
+        assert "[theory:" in prompt
+
+    def test_tutor_persona_contains_wait_instruction(self):
+        from backend.chains.aura_agent import grounded_system_prompt
+
+        prompt = grounded_system_prompt(_ANALYSIS, profile=None, tutor_mode=True)
+        # M-2: tutor must not answer before the learner responds.
+        lower = prompt.lower()
+        assert "wait" in lower or "do not answer in the same turn" in lower
+
+
+# ---------------------------------------------------------------------------
+# C.11 M-7 — None-chord / None-roman filtering
+# ---------------------------------------------------------------------------
+
+
+class TestNoneFiltering:
+    def test_none_chords_excluded_from_facts(self):
+        from backend.chains.aura_agent import _render_chords
+
+        result = _render_chords(
+            {"chords": [{"chord": "Eb"}, {"chord": None}, {"chord": ""}, {"chord": "Fm"}]}
+        )
+        assert "None" not in result
+        assert result == "Eb → Fm"
+
+    def test_none_roman_excluded_from_facts(self):
+        from backend.chains.aura_agent import _render_roman
+
+        result = _render_roman({"roman": {"progression": ["I", None, "V", "", "IV"]}})
+        assert "None" not in result
+        assert result == "I → V → IV"
+
+    def test_none_section_excluded_from_facts(self):
+        from backend.chains.aura_agent import _render_sections
+
+        result = _render_sections({"sections": [{"name": "intro"}, {"name": None}, {"name": ""}]})
+        assert "None" not in result
+        assert result == "intro"
