@@ -467,3 +467,102 @@ class TestInstrumentChainFallbackSafe:
 
         assert chain is not None
         assert captured == [instrument_chain.LLMInstrumentTips]
+
+
+class TestBindingsSurviveFallback:
+    """Spec (e): with a primary + DIFFERENT fallback provider, both bind_tools
+    and with_structured_output must survive .with_fallbacks() and remain active
+    on the fallback path when the primary fails."""
+
+    def _settings(self):
+        from unittest.mock import MagicMock
+
+        s = MagicMock()
+        s.llm_provider = "openai"
+        s.llm_fallback_provider = "anthropic"
+        s.llm_fallback_model = "claude-x"
+        s.model_name = "gpt-x"
+        return s
+
+    def test_structured_output_active_on_fallback_path(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+        from pydantic import BaseModel
+
+        from backend.chains import llm_factory
+
+        class _Out(BaseModel):
+            who: str
+
+        def _fake_model(provider: str):
+            m = MagicMock(name=provider)
+            if provider == "openai":
+                # Primary's structured runnable explodes -> fallback rescues.
+                m.with_structured_output.return_value = RunnableLambda(
+                    lambda _x: (_ for _ in ()).throw(RuntimeError("primary 500"))
+                )
+            else:
+                m.with_structured_output.return_value = RunnableLambda(
+                    lambda _x: _Out(who=provider)
+                )
+            return m
+
+        llm_factory.reset_fallback_stats()
+        with (
+            patch.object(llm_factory, "get_settings", return_value=self._settings()),
+            patch.object(
+                llm_factory,
+                "_build_provider_llm",
+                side_effect=lambda provider, **kw: _fake_model(provider),
+            ),
+        ):
+            runnable = llm_factory.build_structured_llm(_Out, temperature=0.2)
+            result = runnable.invoke("prompt")
+
+        # Fallback produced a structured object -> binding survived composition.
+        assert result.who == "anthropic"
+        # Observable-fallback logging/counter still fired (preserved behavior).
+        assert llm_factory.get_fallback_stats() == {"openai->anthropic": 1}
+
+    def test_bind_tools_active_on_fallback_path(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains import llm_factory
+
+        tool_bindings: dict[str, object] = {}
+
+        def _fake_model(provider: str):
+            m = MagicMock(name=provider)
+
+            def _bt(tools, _p=provider):
+                tool_bindings[_p] = tools
+                if _p == "openai":
+                    return RunnableLambda(
+                        lambda _x: (_ for _ in ()).throw(RuntimeError("primary down"))
+                    )
+                return RunnableLambda(lambda x: f"{_p}-tooled:{x}")
+
+            m.bind_tools.side_effect = _bt
+            return m
+
+        sentinel_tools = [object()]
+        llm_factory.reset_fallback_stats()
+        with (
+            patch.object(llm_factory, "get_settings", return_value=self._settings()),
+            patch.object(
+                llm_factory,
+                "_build_provider_llm",
+                side_effect=lambda provider, **kw: _fake_model(provider),
+            ),
+        ):
+            runnable = llm_factory.build_chat_llm(temperature=0.7, tools=sentinel_tools)
+            result = runnable.invoke("hi")
+
+        # bind_tools ran on BOTH providers with the same tool list.
+        assert tool_bindings == {"openai": sentinel_tools, "anthropic": sentinel_tools}
+        # Fallback (tool-aware) produced the answer.
+        assert result == "anthropic-tooled:hi"
+        assert llm_factory.get_fallback_stats() == {"openai->anthropic": 1}
