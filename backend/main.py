@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -37,6 +38,7 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -938,7 +940,7 @@ def _sse_frame(event: str, data: dict | str) -> str:
 
 
 @router.get("/jobs/{job_id}/progress")
-async def get_analysis_progress(job_id: str):
+async def get_analysis_progress(job_id: str, request: Request):
     """Server-Sent Events stream of analysis progress.
 
     Protocol (Plan 2 D6 — tagged events):
@@ -947,30 +949,63 @@ async def get_analysis_progress(job_id: str):
         event: error    data: {code, message}                    (terminal)
 
     Successful jobs end with ``done``; downstream LLM failure or worker
-    crash ends with ``error``. The frontend ``openProgressStream`` consumer
-    in :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy
-    formats; once it ships, the backend can stop emitting untagged frames.
+    crash ends with ``error``. The generator also exits promptly once the
+    HTTP client disconnects (``await request.is_disconnected()``) so a
+    closed browser tab doesn't keep us polling Redis for the full lifetime.
     """
     job_store = get_job_store()
+
+    async def _await_if_needed(value):
+        """Await the value only if it is a coroutine / awaitable."""
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    def _sse_event(event: str, data: dict | str) -> ServerSentEvent:
+        """Build a ``ServerSentEvent`` carrying the same tagged-event wire
+        format the frontend ``consumeSse`` parser expects.
+
+        ``EventSourceResponse`` does the ``event:``/``data:`` line framing
+        itself, so we must hand it a structured ``ServerSentEvent`` (event
+        name + JSON-string payload) rather than a pre-formatted ``_sse_frame``
+        string — passing the raw string would make sse-starlette re-prefix
+        every line with ``data:`` and corrupt the frame. The emitted bytes
+        are ``event: <event>\r\ndata: <json>\r\n\r\n``; ``consumeSse``
+        ``.trim()``s each line, so the ``\r`` is harmless.
+        """
+        payload = data if isinstance(data, str) else json.dumps(data)
+        return ServerSentEvent(event=event, data=payload)
 
     async def event_generator():
         max_lifetime_s = 30 * 60  # absolute upper bound; protects against bugs
         elapsed = 0
         last_emitted: str | None = None
         while elapsed < max_lifetime_s:
+            # Disconnect-detection: exit as soon as the client closes the tab.
+            if await request.is_disconnected():
+                return
+
             # Fix 5 (SSE efficiency): fetch :result first; only fetch
             # :progress when :result is absent; skip is_stale when :result
             # is present (a done result needs no staleness check).
             # FT-03: terminal AnalyzeResponse lands on :result; incremental
             # frames land on :progress.
-            result_data = await job_store.get_cached_response(job_id)
+            result_data = await _await_if_needed(job_store.get_cached_response(job_id))
             if result_data:
                 # Job is done — emit the terminal frame immediately without
                 # touching :progress or the heartbeat key.
                 cached_data = result_data
                 job_finished = True
             else:
-                progress_data = await job_store.get_progress(job_id)
+                # ``get_progress`` may be absent on a minimal store (test
+                # stubs only need the terminal :result path); treat that as
+                # "no incremental frame yet" rather than crashing the stream.
+                get_progress = getattr(job_store, "get_progress", None)
+                progress_data = (
+                    await _await_if_needed(get_progress(job_id))
+                    if get_progress is not None
+                    else None
+                )
                 cached_data = json.dumps(progress_data) if progress_data else None
                 job_finished = False
 
@@ -979,17 +1014,17 @@ async def get_analysis_progress(job_id: str):
                 try:
                     parsed = json.loads(cached_data)
                 except json.JSONDecodeError:
-                    yield _sse_frame("chunk", cached_data)
+                    yield _sse_event("chunk", cached_data)
                     await asyncio.sleep(1.0)
                     elapsed += 1
                     continue
 
                 status = parsed.get("status")
                 if status == "done":
-                    yield _sse_frame("done", parsed)
+                    yield _sse_event("done", parsed)
                     return
                 if status == "error":
-                    yield _sse_frame(
+                    yield _sse_event(
                         "error",
                         {
                             "code": parsed.get("code", "ANALYSIS_FAILED"),
@@ -998,13 +1033,12 @@ async def get_analysis_progress(job_id: str):
                         },
                     )
                     return
-                yield _sse_frame("chunk", parsed)
+                yield _sse_event("chunk", parsed)
 
             # Only run the staleness check when the job isn't finished.
-            if not job_finished and await job_store.is_stale(
-                job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S
-            ):
-                yield _sse_frame(
+            stale_result = job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S)
+            if not job_finished and await _await_if_needed(stale_result):
+                yield _sse_event(
                     "error",
                     {
                         "code": "WORKER_STALE",
@@ -1020,7 +1054,7 @@ async def get_analysis_progress(job_id: str):
             await asyncio.sleep(1.0)
             elapsed += 1
 
-        yield _sse_frame(
+        yield _sse_event(
             "error",
             {
                 "code": "JOB_LIFETIME_EXCEEDED",
@@ -1029,7 +1063,11 @@ async def get_analysis_progress(job_id: str):
             },
         )
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return EventSourceResponse(
+        event_generator(),
+        ping=15,  # keepalive comment frame every 15s to defeat idle proxies
+        headers={"X-Accel-Buffering": "no"},  # disable nginx response buffering
+    )
 
 
 @router.post("/user")
