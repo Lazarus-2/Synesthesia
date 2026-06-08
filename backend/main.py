@@ -250,6 +250,20 @@ limiter = Limiter(
 app.state.limiter = limiter
 
 
+def _chat_rate_limit_key(request: Request) -> str:
+    """Rate-limit key for chat: authenticated user_id, else client IP.
+
+    The chat endpoints stash the resolved principal on ``request.state`` (see
+    the endpoints below) before slowapi evaluates the limit. Keying by user_id
+    means the limit is per-account, not per-IP, so shared NATs and IP rotation
+    don't distort it.
+    """
+    principal = getattr(request.state, "principal", None)
+    if principal is not None and getattr(principal, "user_id", None):
+        return f"user:{principal.user_id}"
+    return get_remote_address(request)
+
+
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded):
     return _api_error_response(
