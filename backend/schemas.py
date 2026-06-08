@@ -158,3 +158,31 @@ class AnalyzeResponse(BaseModel):
     # known; null for YouTube-only flows during the download phase or for
     # cached analyses we never re-staged.
     audio_url: str | None = None
+
+
+# =============================================================================
+# Chat (AURA, Phase 2)
+# =============================================================================
+
+
+class ChatRequest(BaseModel):
+    """Client → /chat payload.
+
+    Phase-2 hardening: identity (``user_id``) comes from the JWT, never the
+    body; conversation ``history`` is reconstructed server-side from Mongo
+    ``chat_sessions`` (a forged body history could otherwise rewrite context).
+    Those two fields are intentionally absent.
+    """
+
+    message: str
+    analysis_job_id: str | None = None
+    session_id: str | None = None
+    tutor_mode: bool = False
+
+
+class ChatResponse(BaseModel):
+    """Non-stream /chat reply. ``session_id`` echoes the server-owned id so a
+    client that omitted it learns which session its turn was persisted to."""
+
+    reply: str
+    session_id: str | None = None

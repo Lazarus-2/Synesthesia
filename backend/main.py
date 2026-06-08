@@ -93,7 +93,7 @@ from backend.config import get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
 from backend.repositories import AnalysisRepo, ChatSessionRepo
-from backend.schemas import AnalyzeResponse, SongAnalysis
+from backend.schemas import AnalyzeResponse, ChatRequest, ChatResponse, SongAnalysis
 from backend.services.cache import cache
 from backend.services.job_store import (
     DEFAULT_HEARTBEAT_TIMEOUT_S,
@@ -267,21 +267,6 @@ async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded):
 # and once at root (legacy alias kept for the existing frontend until it
 # migrates to the versioned base URL).
 router = APIRouter()
-
-
-class ChatRequest(BaseModel):
-    message: str
-    history: list[dict] = []
-    session_id: str | None = None
-    user_id: str | None = None
-    # Optional job id whose persisted SongAnalysis should be injected as
-    # chat context (Plan 3 A4). Looked up server-side so the client can't
-    # spoof a song the user hasn't actually analyzed.
-    analysis_job_id: str | None = None
-
-
-class ChatResponse(BaseModel):
-    reply: str
 
 
 class UserRequest(BaseModel):
