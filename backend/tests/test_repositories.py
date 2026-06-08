@@ -92,3 +92,40 @@ class TestAnalysisRepo:
         mock_mongo.song_analyses.replace_one.assert_awaited_once_with(
             {"_id": "job_7"}, {"_id": "job_7", "key": "G major"}, upsert=True
         )
+
+
+class TestUserRepo:
+    @pytest.mark.asyncio
+    async def test_get_returns_none_for_missing(self, mock_mongo):
+        from backend.repositories import UserRepo
+
+        mock_mongo.users.find_one.return_value = None
+        repo = UserRepo(mock_mongo)
+        assert await repo.get("usr_missing") is None
+        mock_mongo.users.find_one.assert_awaited_once_with({"_id": "usr_missing"})
+
+    @pytest.mark.asyncio
+    async def test_get_returns_doc(self, mock_mongo):
+        from backend.repositories import UserRepo
+
+        mock_mongo.users.find_one.return_value = {"_id": "usr_1", "username": "Ada"}
+        repo = UserRepo(mock_mongo)
+        doc = await repo.get("usr_1")
+        assert doc["username"] == "Ada"
+
+    @pytest.mark.asyncio
+    async def test_upsert_sets_on_insert_only_for_immutable_fields(self, mock_mongo):
+        from backend.repositories import UserRepo
+
+        repo = UserRepo(mock_mongo)
+        await repo.upsert("usr_1", {"username": "Ada", "instrument": "piano"})
+
+        mock_mongo.users.update_one.assert_awaited_once()
+        call = mock_mongo.users.update_one.call_args
+        assert call.args[0] == {"_id": "usr_1"}
+        # $set carries the mutable fields; $setOnInsert seeds _id + created_at.
+        update = call.args[1]
+        assert update["$set"] == {"username": "Ada", "instrument": "piano"}
+        assert update["$setOnInsert"]["_id"] == "usr_1"
+        assert "created_at" in update["$setOnInsert"]
+        assert call.kwargs == {"upsert": True}
