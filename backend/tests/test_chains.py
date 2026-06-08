@@ -409,3 +409,34 @@ class TestPublicBinders:
             runnable = llm_factory.build_chat_llm(temperature=0.7)
 
         assert runnable.invoke("hi") == "plain:hi"
+
+
+class TestTheoryChainFallbackSafe:
+    """Regression: build_theory_chain must build cleanly when a DIFFERENT
+    fallback provider is configured. Before the fix it raised AttributeError
+    because .with_structured_output was called on RunnableWithFallbacks."""
+
+    def test_build_theory_chain_with_cross_provider_fallback(self):
+        from unittest.mock import MagicMock
+
+        from langchain_core.runnables import RunnableLambda
+
+        from backend.chains import theory_chain
+
+        captured: list[object] = []
+
+        def _fake_structured(schema, temperature=0.2):
+            captured.append(schema)
+            return RunnableLambda(lambda _x: _x)
+
+        # If theory_chain still imports build_llm and calls
+        # .with_structured_output itself, this patch wouldn't be consulted and
+        # captured would stay empty.
+        with patch.object(
+            theory_chain, "build_structured_llm", side_effect=_fake_structured
+        ):
+            chain = theory_chain.build_theory_chain()
+
+        assert chain is not None
+        # Schema passed is the chain-local TheoryExplanation.
+        assert captured == [theory_chain.TheoryExplanation]

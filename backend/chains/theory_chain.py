@@ -20,7 +20,7 @@ from __future__ import annotations
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field
 
-from backend.chains.llm_factory import build_llm
+from backend.chains.llm_factory import build_structured_llm
 from backend.config import get_settings
 from backend.prompts.theory_prompt import theory_prompt
 from backend.schemas import SongAnalysis
@@ -93,6 +93,5 @@ def _flatten(explanation: TheoryExplanation) -> str:
 def build_theory_chain() -> Runnable:
     """Build the chain. Call .invoke(SongAnalysis) -> str."""
     s = get_settings()
-    llm = build_llm(temperature=s.theory_temperature)
-    structured = llm.with_structured_output(TheoryExplanation)
+    structured = build_structured_llm(TheoryExplanation, temperature=s.theory_temperature)
     return RunnableLambda(_format_inputs) | theory_prompt | structured | RunnableLambda(_flatten)
