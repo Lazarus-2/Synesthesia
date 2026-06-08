@@ -40,7 +40,7 @@ ensure_worker() {
         echo "[ok] taskiq worker already running"; return
     fi
     echo "[start] taskiq worker"
-    nohup backend/.venv/bin/taskiq worker backend.worker:broker backend.main --workers 1 >logs/worker.log 2>&1 &
+    nohup backend/.venv/bin/taskiq worker backend.worker:broker backend.tasks --workers 1 >logs/worker.log 2>&1 &
     disown
     sleep 3
 }

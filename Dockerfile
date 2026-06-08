@@ -122,4 +122,4 @@ USER app
 # orchestrator should monitor liveness via the broker (Redis queue depth /
 # task result rate) instead of a CMD-based check.
 
-CMD ["taskiq", "worker", "backend.worker:broker", "backend.main"]
+CMD ["taskiq", "worker", "backend.worker:broker", "backend.tasks"]
