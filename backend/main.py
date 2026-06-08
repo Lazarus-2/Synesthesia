@@ -1409,22 +1409,22 @@ async def chat_stream(
 
 
 @router.get("/chat/history/{session_id}")
-async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
-    """Retrieves standard discussion threads from Cache or drops back to MongoDB."""
-    cache_key = f"chat:session:{session_id}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return {"history": json.loads(cached)}
-
-    # Drop back to MongoDB — window the tail server-side via $slice instead of
-    # pulling the full messages array and slicing in Python.
-    history_payload = await ChatSessionRepo(db).recent_turns(session_id, 200)
-    # Always cache — including empty-message sessions — so a second request for
-    # the same session_id doesn't re-hit Mongo. The early-return that skipped
-    # caching when history_payload == [] was a bug (one Mongo query per
-    # request for any session that exists but has no messages yet).
-    await cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
-    return {"history": history_payload}
+async def get_chat_history(
+    session_id: str,
+    principal: UserPrincipal = Depends(require_user),
+    db=Depends(get_mongodb),
+):
+    """Owner-only chat history. Returns 404 (not 403) for a session the caller
+    doesn't own so we don't confirm the existence of someone else's session."""
+    repo = ChatSessionRepo(db)
+    owned = await repo.get_owned_session(session_id, principal.user_id)
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in owned.get("messages", [])
+    ][-get_settings().chat_history_turns :]
+    return {"history": history}
 
 
 # ----------------------------------------------------------------------------
