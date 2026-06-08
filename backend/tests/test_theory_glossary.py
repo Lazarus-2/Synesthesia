@@ -72,3 +72,62 @@ class TestLoadGlossary:
     def test_snippet_ids_unique_via_loader(self):
         ids = [e["snippet_id"] for e in load_glossary()]
         assert len(ids) == len(set(ids))
+
+
+from backend.tools.theory_glossary import lookup_theory
+
+
+def _invoke(term: str) -> str:
+    # @tool produces a StructuredTool; call it the same way the agent will.
+    return lookup_theory.invoke({"term": term})
+
+
+class TestLookupTheory:
+    def test_is_a_langchain_tool(self):
+        # The agent registers this by name; keep the contract stable.
+        assert lookup_theory.name == "lookup_theory"
+
+    def test_exact_term_match_returns_cited_explanation(self):
+        out = _invoke("secondary dominant")
+        assert out.startswith("[theory:fn-secondary-dominant]")
+        assert "tonicizes" in out.lower() or "dominant" in out.lower()
+
+    def test_case_insensitive_term(self):
+        assert _invoke("Circle Of Fifths").startswith("[theory:prog-circle-of-fifths]")
+
+    def test_alias_match(self):
+        # "ii-V-I" is an alias of the "two five one" entry.
+        out = _invoke("ii-V-I")
+        assert out.startswith("[theory:prog-ii-v-i]")
+
+    def test_alias_match_case_insensitive(self):
+        # "PAC" alias -> perfect authentic cadence.
+        assert _invoke("pac").startswith("[theory:cad-authentic]")
+
+    def test_substring_match_against_term(self):
+        # "tritone" is a substring of no other term but the query carries extra
+        # words; substring matching still locates the entry.
+        out = _invoke("what is a tritone")
+        assert out.startswith("[theory:int-tritone]")
+
+    def test_substring_match_against_alias(self):
+        # "amen" is an alias substring of the plagal cadence entry.
+        out = _invoke("the amen cadence at the end")
+        assert out.startswith("[theory:cad-plagal]")
+
+    def test_exact_match_beats_substring(self):
+        # "dominant" is an exact term (fn-dominant); it must NOT return the
+        # longer "secondary dominant" entry just because it appears earlier.
+        assert _invoke("dominant").startswith("[theory:fn-dominant]")
+
+    def test_not_found_is_clear_message(self):
+        out = _invoke("xylophone tuning quantum")
+        assert "[theory:" not in out
+        assert "couldn't find" in out.lower() or "no glossary entry" in out.lower()
+
+    def test_empty_query_is_not_found(self):
+        out = _invoke("")
+        assert "[theory:" not in out
+
+    def test_return_type_is_str(self):
+        assert isinstance(_invoke("cadence"), str)
