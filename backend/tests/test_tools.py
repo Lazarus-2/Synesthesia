@@ -93,6 +93,33 @@ class TestChordDiagrams:
         assert len(diagrams) == 0
 
 
+class TestVoicingFallback:
+    def test_seventh_chord_not_dropped_guitar(self):
+        # Cmaj7 has a real shape; G7/C7 have real shapes; but a 7th with no
+        # table entry must degrade to its triad rather than vanish.
+        diagrams = get_chord_diagrams(["Cmaj7", "G7", "Am7"], instrument="guitar")
+        labels = [d.chord for d in diagrams]
+        assert "Cmaj7" in labels
+        assert "G7" in labels
+        assert "Am7" in labels  # degrades to Am triad, label preserved
+
+    def test_unknown_extension_degrades_to_triad(self):
+        # F#m9 has no table entry -> should degrade to F#m... -> Em-shape family.
+        # At minimum it must NOT be silently dropped.
+        diagrams = get_chord_diagrams(["Am9"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am9"
+
+    def test_slash_chord_uses_root_triad(self):
+        diagrams = get_chord_diagrams(["D/F#"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "D/F#"
+
+    def test_truly_unparseable_still_dropped(self):
+        diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")
+        assert len(diagrams) == 0
+
+
 from backend.tools.chords import ChordParts, parse_chord
 
 

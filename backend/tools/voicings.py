@@ -8,6 +8,7 @@ Vault ref: 03-LangChain-Core/04-Tools-Agents.md
 from __future__ import annotations
 
 from backend.schemas import ChordDiagram, Instrument
+from backend.tools.chords import parse_chord
 
 _GUITAR_SHAPES: dict[str, dict] = {
     "C": {"frets": [-1, 3, 2, 0, 1, 0], "fingers": [0, 3, 2, 0, 1, 0]},
@@ -62,38 +63,71 @@ _PIANO_TRIADS: dict[str, dict] = {
 }
 
 
+# Canonical quality -> the simplest label we keep a shape for. Used only as a
+# *degradation* target so an extended/unknown chord still yields a diagram
+# instead of being silently dropped.
+_DEGRADE_SUFFIX = {
+    "maj": "",
+    "maj7": "maj7",
+    "dom7": "7",
+    "min": "m",
+    "min7": "m7",
+    "m7b5": "m",
+    "dim": "m",
+    "aug": "",
+    "sus2": "",
+    "sus4": "",
+    "6": "",
+    "9": "",
+    "11": "",
+    "13": "",
+    "add9": "",
+    "maj9": "maj7",
+    "min9": "m",
+}
+
+
+def _candidate_labels(label: str) -> list[str]:
+    """Ordered lookup keys for a chord: exact, then degraded toward a triad."""
+    parts = parse_chord(label)
+    if not parts.root:
+        return [label]
+    candidates = [label]  # try the exact label first (e.g. "Cmaj7", "Am7")
+    suffix = _DEGRADE_SUFFIX.get(parts.quality, "")
+    candidates.append(f"{parts.root}{suffix}")  # degraded (e.g. "Am" for "Am9")
+    candidates.append(parts.root)  # last resort: bare triad ("D" for "D/F#")
+    return candidates
+
+
 def get_chord_diagrams(
     chords: list[str],
     instrument: Instrument = "guitar",
 ) -> list[ChordDiagram]:
-    """Return ChordDiagram for each unique chord in the progression."""
+    """Return a ChordDiagram for each unique chord in the progression.
+
+    Extended/unknown chords degrade to their triad shape via ``parse_chord``
+    rather than being silently dropped — only truly unparseable labels (no
+    recognizable root) and roots with no table entry are skipped.
+    """
     unique = list(dict.fromkeys(chords))
     diagrams: list[ChordDiagram] = []
 
-    for c in unique:
-        # Simplify complex extensions if not found
-        base_chord = c
-        if c not in _GUITAR_SHAPES and c not in _PIANO_TRIADS:
-            # Fallback to major or minor
-            base_chord = (
-                c.replace("maj7", "").replace("m7", "m").replace("7", "").replace("sus4", "")
-            )
+    table = {
+        "guitar": _GUITAR_SHAPES,
+        "piano": _PIANO_TRIADS,
+        "ukulele": _UKULELE_SHAPES,
+        "bass": _BASS_SHAPES,
+    }[instrument]
 
-        if instrument == "guitar":
-            shape = _GUITAR_SHAPES.get(base_chord, _GUITAR_SHAPES.get(c))
+    for c in unique:
+        shape = None
+        for key in _candidate_labels(c):
+            shape = table.get(key)
             if shape:
-                diagrams.append(ChordDiagram(chord=c, instrument="guitar", **shape))
-        elif instrument == "piano":
-            notes = _PIANO_TRIADS.get(base_chord, _PIANO_TRIADS.get(c))
-            if notes:
-                diagrams.append(ChordDiagram(chord=c, instrument="piano", **notes))
-        elif instrument == "ukulele":
-            shape = _UKULELE_SHAPES.get(base_chord, _UKULELE_SHAPES.get(c))
-            if shape:
-                diagrams.append(ChordDiagram(chord=c, instrument="ukulele", **shape))
-        elif instrument == "bass":
-            shape = _BASS_SHAPES.get(base_chord, _BASS_SHAPES.get(c))
-            if shape:
-                diagrams.append(ChordDiagram(chord=c, instrument="bass", **shape))
+                break
+        if shape:
+            # Preserve the ORIGINAL label on the diagram even when we fell back
+            # to a degraded shape, so the UI still says "Am7".
+            diagrams.append(ChordDiagram(chord=c, instrument=instrument, **shape))
 
     return diagrams
