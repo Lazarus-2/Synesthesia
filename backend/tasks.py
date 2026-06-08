@@ -202,9 +202,12 @@ async def run_analysis_pipeline(
         )
         _progress(80, "Building analysis results...")
 
+        from backend.graph.status import derive_status
+
+        status = derive_status(result)
         errors = result.get("errors", [])
-        if errors:
-            _progress(0, "; ".join(errors), "error")
+        if status == "failed":
+            _progress(0, "; ".join(errors) or "Analysis failed", "error")
             return
 
         chords = result.get("chords", [])
@@ -256,6 +259,7 @@ async def run_analysis_pipeline(
             theory_explanation=analysis.theory_explanation,
             instrument_guides=guides,
             stems=analysis.stems,
+            status=status,
         )
 
         write_result = await db.song_analyses.replace_one(

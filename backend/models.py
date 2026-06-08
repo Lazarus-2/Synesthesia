@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -70,4 +71,5 @@ class SongAnalysisModel(BaseModel):
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = {}
     stems: dict[str, str] = {}
+    status: Literal["ok", "degraded", "failed"] = "ok"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
