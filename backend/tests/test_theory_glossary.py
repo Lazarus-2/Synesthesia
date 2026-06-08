@@ -48,3 +48,27 @@ class TestGlossaryData:
             "perfect fifth",
         ):
             assert required in terms, f"missing core topic: {required}"
+
+
+from backend.tools.theory_glossary import load_glossary
+
+
+class TestLoadGlossary:
+    def test_returns_list_of_dicts(self):
+        entries = load_glossary()
+        assert isinstance(entries, list)
+        assert len(entries) >= 50
+        assert all(isinstance(e, dict) for e in entries)
+
+    def test_entries_carry_contract_fields(self):
+        for e in load_glossary():
+            assert {"term", "aliases", "explanation", "snippet_id"} <= set(e)
+
+    def test_is_cached_same_object(self):
+        # load_glossary() is cached: repeated calls return the identical object,
+        # so callers (the @tool, on every invocation) never re-read the YAML.
+        assert load_glossary() is load_glossary()
+
+    def test_snippet_ids_unique_via_loader(self):
+        ids = [e["snippet_id"] for e in load_glossary()]
+        assert len(ids) == len(set(ids))
