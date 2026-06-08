@@ -35,16 +35,16 @@ class TestRouteHelpers:
 
     def test_should_retry_returns_ok_for_clean_state(self):
         assert should_retry({}) == "ok"
-        assert should_retry({"errors": []}) == "ok"
+        assert should_retry({"feature_error": None}) == "ok"
 
     def test_should_retry_returns_retry_once(self):
         # First failure: retries=0 (before features bumps it) → retry.
-        assert should_retry({"errors": ["x"], "retries": 0}) == "retry"
+        assert should_retry({"feature_error": "x", "retries": 0}) == "retry"
         # Second failure: retries=1 → still retry (max_retries=2).
-        assert should_retry({"errors": ["x"], "retries": 1}) == "retry"
+        assert should_retry({"feature_error": "x", "retries": 1}) == "retry"
 
     def test_should_retry_returns_fail_after_max(self):
-        assert should_retry({"errors": ["x"], "retries": 2}) == "fail"
+        assert should_retry({"feature_error": "x", "retries": 2}) == "fail"
 
 
 class TestIngestErrorRouting:
@@ -241,7 +241,11 @@ class TestFeaturesRetryStillBounded:
 
         def features_always_fails(state):
             call_count["n"] += 1
-            return {"errors": ["boom"], "retries": state.get("retries", 0) + 1}
+            return {
+                "errors": ["boom"],
+                "feature_error": "boom",
+                "retries": state.get("retries", 0) + 1,
+            }
 
         g.add_node("ingest", ingest_clean)
         g.add_node("validate_audio", validate_no_op)
