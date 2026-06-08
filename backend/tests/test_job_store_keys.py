@@ -46,7 +46,6 @@ async def test_progress_and_result_use_distinct_keys(patched_cache):
 
 @pytest.mark.asyncio
 async def test_get_cached_response_reads_result_key(patched_cache):
-    store = patched_cache
     js = js_mod.HybridJobStore()
     await js.cache_response("job-2", json.dumps({"status": "done", "title": "T"}))
 
