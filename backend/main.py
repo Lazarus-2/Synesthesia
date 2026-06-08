@@ -128,6 +128,12 @@ async def lifespan(application: FastAPI):
         await close_mongodb()
         if not broker.is_worker_process:
             await broker.shutdown()
+        # Fix 1: close the redis.asyncio connection pool on shutdown so we
+        # don't leak sockets on SIGTERM / hot-reload.
+        from backend.services.cache import cache as _cache
+
+        if _cache.redis_client is not None:
+            await _cache.redis_client.aclose()
 
 
 app = FastAPI(title="Synesthesia API", version="0.1.0", lifespan=lifespan)
@@ -952,17 +958,22 @@ async def get_analysis_progress(job_id: str):
         elapsed = 0
         last_emitted: str | None = None
         while elapsed < max_lifetime_s:
-            # FT-03: progress and result now live under distinct keys. The
-            # terminal AnalyzeResponse lands on the :result key via
-            # cache_response; incremental frames (and the worker's error
-            # frame) land on the :progress key via set_progress. Read the
-            # result first so a completed job ends the stream immediately,
-            # then fall back to the in-flight progress payload.
+            # Fix 5 (SSE efficiency): fetch :result first; only fetch
+            # :progress when :result is absent; skip is_stale when :result
+            # is present (a done result needs no staleness check).
+            # FT-03: terminal AnalyzeResponse lands on :result; incremental
+            # frames land on :progress.
             result_data = await job_store.get_cached_response(job_id)
-            progress_data = await job_store.get_progress(job_id)
-            cached_data = result_data or (
-                json.dumps(progress_data) if progress_data else None
-            )
+            if result_data:
+                # Job is done — emit the terminal frame immediately without
+                # touching :progress or the heartbeat key.
+                cached_data = result_data
+                job_finished = True
+            else:
+                progress_data = await job_store.get_progress(job_id)
+                cached_data = json.dumps(progress_data) if progress_data else None
+                job_finished = False
+
             if cached_data and cached_data != last_emitted:
                 last_emitted = cached_data
                 try:
@@ -989,7 +1000,10 @@ async def get_analysis_progress(job_id: str):
                     return
                 yield _sse_frame("chunk", parsed)
 
-            if await job_store.is_stale(job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S):
+            # Only run the staleness check when the job isn't finished.
+            if not job_finished and await job_store.is_stale(
+                job_id, timeout_s=DEFAULT_HEARTBEAT_TIMEOUT_S
+            ):
                 yield _sse_frame(
                     "error",
                     {

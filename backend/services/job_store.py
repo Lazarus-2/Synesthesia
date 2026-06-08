@@ -157,7 +157,7 @@ def get_job_store() -> HybridJobStore:
     return _singleton
 
 
-def set_job_store_for_tests(store: HybridJobStore) -> None:
+def set_job_store_for_tests(store: JobStore) -> None:
     """Override the singleton from a test fixture. No-op in production code."""
     global _singleton
-    _singleton = store
+    _singleton = store  # type: ignore[assignment]
