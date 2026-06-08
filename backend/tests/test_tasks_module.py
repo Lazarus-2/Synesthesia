@@ -11,8 +11,6 @@ from __future__ import annotations
 import importlib
 import sys
 
-import pytest
-
 
 def _purge(*prefixes: str) -> None:
     """Drop the named top-level modules (and submodules) from sys.modules."""
@@ -86,24 +84,17 @@ def test_main_imports_task_from_tasks_not_its_own_def():
 
 
 def test_main_no_longer_defines_write_dlq_or_clean_title():
-    """The moved helpers are gone from main.py's own globals (not redefined)."""
-    import inspect
-
+    """The moved helpers are absent from main.py and the API uses the tasks module object."""
     import backend.main as main_mod
     import backend.tasks as tasks_mod
 
-    # _write_dlq, _clean_audio_title and run_analysis_pipeline must resolve to
-    # objects defined in backend.tasks, never re-defined in backend.main.
-    for name in ("_write_dlq", "_clean_audio_title", "run_analysis_pipeline"):
-        obj = getattr(main_mod, name, None)
-        if obj is None:
-            continue
-        src_mod = getattr(obj, "__module__", None)
-        # .kiq-wrapped task has no __module__; unwrap via the original func.
-        if name == "run_analysis_pipeline":
-            assert obj is tasks_mod.run_analysis_pipeline
-        else:
-            assert src_mod == "backend.tasks", (
-                f"{name} in main.py resolves to {src_mod}, expected backend.tasks "
-                "(it should be moved, not duplicated)"
-            )
+    # (a) The API's run_analysis_pipeline must be exactly the object defined in
+    # backend.tasks — not a second @broker.task definition in main.py.
+    assert main_mod.run_analysis_pipeline.__wrapped__ is tasks_mod.run_analysis_pipeline.__wrapped__
+
+    # (b) main.py source must not (re-)define these private helpers.
+    import pathlib
+    main_src = pathlib.Path(main_mod.__file__).read_text()
+    assert "def _write_dlq" not in main_src, "main.py must not define _write_dlq"
+    assert "def _clean_audio_title" not in main_src, "main.py must not define _clean_audio_title"
+    assert "def run_analysis_pipeline" not in main_src, "main.py must not define run_analysis_pipeline"

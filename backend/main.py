@@ -96,13 +96,14 @@ from backend.services.job_store import (
     DEFAULT_HEARTBEAT_TIMEOUT_S,
     get_job_store,
 )
-from backend.tasks import _clean_audio_title, run_analysis_pipeline  # noqa: F401
+from backend.tasks import run_analysis_pipeline  # noqa: F401
 from backend.worker import broker
 
-# The worker entrypoint now imports backend.tasks (not backend.main), so the
-# FastAPI app is never loaded into the worker process. taskiq_fastapi.init
-# still points at the app so request-scoped TaskiqDepends work API-side.
-taskiq_fastapi.init(broker, "backend.tasks:broker")
+# The worker entrypoint imports backend.tasks (not backend.main), so the
+# FastAPI app is never loaded in the worker. This init runs only when the API
+# process imports main.py; it bridges the broker to the FastAPI lifespan and
+# enables FastAPI-scoped TaskiqDepends resolution, so it points at the FastAPI app.
+taskiq_fastapi.init(broker, "backend.main:app")
 
 
 @asynccontextmanager
