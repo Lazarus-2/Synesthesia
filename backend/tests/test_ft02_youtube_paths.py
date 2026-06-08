@@ -124,3 +124,58 @@ def test_stems_node_keys_output_dir_on_job_id(monkeypatch, tmp_path):
     assert out["stems"]["vocals"] == "job-abc/vocals.wav"
     # The video-id dir must NOT exist — proves we keyed on job_id.
     assert not (stems_dir / "vid1234").exists()
+
+
+class TestServeEndpointsResolveYouTubeJob:
+    """Given the post-3.2/3.3 on-disk layout for a YouTube job, the three serve
+    endpoints must all resolve files under {job_id}."""
+
+    @pytest.fixture
+    def youtube_layout(self, monkeypatch, tmp_path):
+        """Lay down the files an ingested YouTube job leaves on disk:
+        uploads/{job_id}_{video_id}.mp3 and stems/{job_id}/{stem}.wav."""
+        from backend.config import get_settings
+
+        uploads = tmp_path / "uploads"
+        stems = tmp_path / "stems"
+        uploads.mkdir()
+        (stems / "job-abc").mkdir(parents=True)
+
+        (uploads / "job-abc_vid1234.mp3").write_bytes(b"ID3fake-mp3")
+        for name in ("vocals", "drums", "bass", "other"):
+            (stems / "job-abc" / f"{name}.wav").write_bytes(b"RIFFfake")
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "audio_upload_dir", uploads, raising=False)
+        monkeypatch.setattr(settings, "stems_dir", stems, raising=False)
+        return {"job_id": "job-abc", "uploads": uploads, "stems": stems}
+
+    def test_serve_audio_resolves_youtube_job(self, api_client, youtube_layout):
+        r = api_client.get("/api/v1/audio/job-abc")
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"] == "audio/mpeg"
+
+    def test_serve_stem_resolves_youtube_job(self, api_client, youtube_layout):
+        r = api_client.get("/api/v1/stems/job-abc/vocals")
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"] == "audio/wav"
+
+    def test_export_midi_full_finds_youtube_audio(
+        self, api_client, youtube_layout, monkeypatch
+    ):
+        """export_midi(stem='full') globs uploads/{job_id}* for the source —
+        prove it picks up the {job_id}_{video_id}.mp3 file. Stub the actual
+        transcription so the test stays hermetic."""
+
+        def _fake_transcribe(source, out_midi):
+            from pathlib import Path
+
+            Path(out_midi).write_bytes(b"MThd-fake-midi")
+            return out_midi
+
+        monkeypatch.setattr(
+            "backend.ml.midi_transcription.transcribe_to_midi", _fake_transcribe
+        )
+        r = api_client.get("/api/v1/midi/job-abc/full")
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"] == "audio/midi"
