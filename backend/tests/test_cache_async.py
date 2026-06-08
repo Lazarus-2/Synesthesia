@@ -7,7 +7,6 @@ and can be told to start raising to simulate an outage.
 
 from __future__ import annotations
 
-import asyncio
 import time
 
 import pytest
@@ -41,7 +40,7 @@ class FakeAsyncRedis:
         self.store[key] = value
         return True
 
-    async def setex(self, key: str, ttl: int, value: str):
+    async def setex(self, key: str, ttl: int, value: str):  # noqa: ARG002
         self._maybe_fail()
         self.store[key] = value
         return True
@@ -112,3 +111,50 @@ async def test_ping_false_when_no_client():
     cache = HybridCache()
     cache.redis_client = None
     assert await cache.ping() is False
+
+
+@pytest.mark.asyncio
+async def test_breaker_trips_to_memory_on_outage():
+    fake = FakeAsyncRedis()
+    cache = HybridCache()
+    _attach_fake(cache, fake)
+
+    fake.fail = True  # redis goes down
+    # set falls through to memory and still reports success
+    assert await cache.set("k:b", "fallback", ttl_seconds=30) is True
+    assert cache._breaker_is_open() is True
+    # subsequent get does NOT touch redis (breaker open) and reads memory
+    fake.ping_calls = 0
+    assert await cache.get("k:b") == "fallback"
+    assert fake.ping_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_breaker_reopens_after_cooldown_and_reconnects():
+    fake = FakeAsyncRedis()
+    cache = HybridCache()
+    _attach_fake(cache, fake)
+
+    fake.fail = True
+    await cache.set("k:r", "v", ttl_seconds=30)  # trips breaker
+    assert cache._redis_available() is False
+
+    # Redis recovers; force the cooldown to have elapsed.
+    fake.fail = False
+    cache._breaker_open_until = time.time() - 0.1
+
+    # Next op should go back to redis and persist there.
+    assert await cache.set("k:r2", "v2", ttl_seconds=30) is True
+    assert fake.store["k:r2"] == "v2"
+    assert cache._breaker_is_open() is False
+
+
+@pytest.mark.asyncio
+async def test_ping_stays_false_while_breaker_open():
+    fake = FakeAsyncRedis()
+    cache = HybridCache()
+    _attach_fake(cache, fake)
+    cache._breaker_open_until = time.time() + 100  # forced open
+    assert await cache.ping() is False
+    # No real ping attempted while open.
+    assert fake.ping_calls == 0

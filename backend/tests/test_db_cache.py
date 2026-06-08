@@ -55,14 +55,19 @@ def test_song_analysis_model_nesting():
     assert song.chords[0].chord == "C"
 
 
-def test_hybrid_cache_fallback():
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_hybrid_cache_fallback():
     """Verify TTL hybrid caching operations (in-memory execution fallback)."""
     test_cache = HybridCache()
-    test_cache.set("unit:test:key", "SynesthesiaRocks", ttl_seconds=5)
+    test_cache.redis_client = None  # force memory path
+    await test_cache.set("unit:test:key", "SynesthesiaRocks", ttl_seconds=5)
 
-    val = test_cache.get("unit:test:key")
+    val = await test_cache.get("unit:test:key")
     assert val == "SynesthesiaRocks"
 
     # Check invalid key
-    missing = test_cache.get("unit:test:missing")
+    missing = await test_cache.get("unit:test:missing")
     assert missing is None
