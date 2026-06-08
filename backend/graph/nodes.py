@@ -13,7 +13,7 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from backend.graph.state import AnalysisState
+from backend.graph.state import FEATURE_ERROR_PREFIX, NO_CHORDS_MESSAGE, AnalysisState
 from backend.schemas import InstrumentGuide, RomanAnalysis, SongAnalysis
 
 
@@ -244,13 +244,17 @@ def ingest_node(state: AnalysisState) -> dict:
                 "Try a different URL, or upload the audio file directly."
             )
 
-    if not audio_path or not Path(audio_path).exists():
+    # Only fire the "file not found" guard when no earlier error was already
+    # recorded (e.g. a yt-dlp exception above).  Without this check a failed
+    # YouTube download would append TWO errors: the download failure message
+    # AND this "Audio file not found" message, confusing the user.
+    if not new_errors and (not audio_path or not Path(audio_path).exists()):
         new_errors.append(f"Audio file not found or failed to load: {audio_path}")
-    elif not youtube_url:
-        # Pure file upload: try AcoustID fingerprint → MBID enrichment.
-        # Free, graceful no-op if fpcalc or ACOUSTID_API_KEY missing.
-        # Don't run on yt-dlp downloads — we already got title/uploader
-        # from the YouTube info dict above.
+    elif not new_errors and not youtube_url and audio_path and Path(audio_path).exists():
+        # Pure file upload with a valid file: try AcoustID fingerprint → MBID
+        # enrichment.  Free, graceful no-op if fpcalc or ACOUSTID_API_KEY
+        # missing.  Don't run on yt-dlp downloads — we already got
+        # title/uploader from the YouTube info dict above.
         from backend.ingestion.acoustid_enrich import enrich_upload
 
         for k, v in enrich_upload(audio_path).items():
@@ -363,7 +367,17 @@ def features_node(state: AnalysisState) -> dict:
         beats = track_beats(audio_path)
         chords = detect_chords(audio_path)
         sections = detect_sections(audio_path)  # Plan 3 B2; may return []
-        return {
+        # Append an actionable degradation message when chord detection
+        # returned nothing (speech, silence, non-harmonic audio).  We do NOT
+        # set feature_error here — that would wrongly trigger a retry; chords
+        # being empty on a clean extraction is a data-quality issue, not a
+        # transient failure.  derive_status will still classify the run as
+        # "failed" (no chords == no usable product), but now errors carries a
+        # reason the user can act on.
+        extra_errors: list[str] = []
+        if not chords:
+            extra_errors.append(NO_CHORDS_MESSAGE)
+        result: dict = {
             "key": key,
             "tempo": tempo,
             "beats": beats,
@@ -372,8 +386,11 @@ def features_node(state: AnalysisState) -> dict:
             "retries": next_retries,
             "feature_error": None,  # latest attempt succeeded — clear it
         }
+        if extra_errors:
+            result["errors"] = extra_errors
+        return result
     except Exception as e:
-        msg = f"Feature extraction failed: {str(e)}"
+        msg = f"{FEATURE_ERROR_PREFIX}: {str(e)}"
         return {
             "errors": [msg],  # append-only log (operator.add reducer)
             "feature_error": msg,  # latest attempt failed

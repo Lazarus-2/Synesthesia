@@ -21,6 +21,18 @@ from backend.schemas import (
 )
 
 
+# Shared constant that couples features_node (message builder) and
+# derive_status (message filter).  Defined here so both modules can import
+# from backend.graph.state without introducing a circular import.
+FEATURE_ERROR_PREFIX = "Feature extraction failed"
+
+# Message appended to errors when feature extraction succeeds but chord
+# detection returns an empty list (speech, silence, or non-harmonic audio).
+NO_CHORDS_MESSAGE = (
+    "No chords detected — the track may be speech, silence, or non-harmonic audio."
+)
+
+
 class AnalysisState(TypedDict, total=False):
     # --- Input ---
     audio_path: str
@@ -69,6 +81,8 @@ class AnalysisState(TypedDict, total=False):
     # Derived at fan-in by the worker: "ok" (everything ran), "degraded"
     # (deterministic analysis succeeded but a fan-out node fell back), or
     # "failed" (no usable analysis).
+    # NOTE: this field is computed POST-graph in tasks.py (derive_status) and
+    # is NOT written by any node inside the graph itself.
     status: Literal["ok", "degraded", "failed"]
 
     # --- Messages (for HITL, Module 4 Lesson 4) ---

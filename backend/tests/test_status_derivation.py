@@ -12,6 +12,9 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+from backend.graph.state import NO_CHORDS_MESSAGE
 from backend.graph.status import derive_status
 from backend.schemas import ChordEvent
 
@@ -58,3 +61,50 @@ class TestDeriveStatus:
         # A stale *feature* error in the log alone shouldn't downgrade a fully
         # recovered run that has no fan-out errors.
         assert derive_status(state) == "ok"
+
+    # --- Fix 2 regression tests ---
+
+    def test_no_chords_with_no_feature_error_is_failed(self):
+        """Exact path from the review: features ran cleanly but chords is [].
+        derive_status must still classify as 'failed' (policy unchanged)."""
+        assert derive_status({"feature_error": None, "errors": [], "chords": []}) == "failed"
+
+    def test_features_node_appends_actionable_message_when_no_chords(self):
+        """After a clean extraction that yields zero chords, features_node must
+        append NO_CHORDS_MESSAGE to errors so tasks.py can surface it instead
+        of the bare 'Analysis failed' string."""
+        from backend.graph.nodes import features_node
+
+        # Stub all four ML calls: key/tempo succeed, beats succeed, but
+        # chord detection returns [] (speech/silence/non-harmonic audio).
+        with (
+            patch("backend.ml.key_estimation.estimate_key_and_tempo", return_value=("C major", 120.0)),
+            patch("backend.ml.beat_tracking.track_beats", return_value=[]),
+            patch("backend.ml.chord_detection.detect_chords", return_value=[]),
+            patch("backend.ml.structure_detection.detect_sections", return_value=[]),
+        ):
+            result = features_node({"audio_path": "/fake/audio.mp3", "retries": 0})
+
+        assert result.get("feature_error") is None, "no-chords must NOT set feature_error"
+        assert result.get("chords") == []
+        errors = result.get("errors", [])
+        assert any(NO_CHORDS_MESSAGE in e for e in errors), (
+            f"Expected NO_CHORDS_MESSAGE in errors; got {errors!r}"
+        )
+
+    def test_no_chords_errors_log_is_non_empty_for_tasks(self):
+        """Verify that '; '.join(errors) is non-empty when no chords are
+        detected, so tasks.py shows the user an actionable reason rather than
+        the bare fallback string 'Analysis failed'."""
+        from backend.graph.nodes import features_node
+
+        with (
+            patch("backend.ml.key_estimation.estimate_key_and_tempo", return_value=("A minor", 90.0)),
+            patch("backend.ml.beat_tracking.track_beats", return_value=[]),
+            patch("backend.ml.chord_detection.detect_chords", return_value=[]),
+            patch("backend.ml.structure_detection.detect_sections", return_value=[]),
+        ):
+            result = features_node({"audio_path": "/fake/audio.mp3", "retries": 0})
+
+        errors = result.get("errors", [])
+        assert "; ".join(errors), "errors must be non-empty so tasks.py can surface a reason"

@@ -9,13 +9,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from backend.graph.state import AnalysisState
+from backend.graph.state import FEATURE_ERROR_PREFIX, AnalysisState
 
-# Substring that marks an error as originating in feature extraction. The
-# append-only ``errors`` log may still hold one of these from a *failed*
-# attempt that later succeeded (FT-01), so we must NOT downgrade purely on
-# its presence — we gate "failed" on the absence of usable analysis instead.
-_FEATURE_ERROR_MARKER = "Feature extraction failed"
+# Alias kept local for readability; the canonical string lives in state.py so
+# features_node and derive_status share exactly one definition.
+_FEATURE_ERROR_MARKER = FEATURE_ERROR_PREFIX
 
 
 def _has_usable_analysis(state: AnalysisState) -> bool:

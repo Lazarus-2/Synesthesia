@@ -71,5 +71,7 @@ class SongAnalysisModel(BaseModel):
     theory_explanation: str | None = None
     instrument_guides: dict[str, InstrumentGuide] = {}
     stems: dict[str, str] = {}
+    # Default "ok" backfills pre-existing Mongo documents that were written
+    # before the status field existed and therefore lack the key entirely.
     status: Literal["ok", "degraded", "failed"] = "ok"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
