@@ -88,17 +88,21 @@ def _is_audio_magic(head: bytes) -> bool:
 
 import taskiq_fastapi
 
+from backend.auth import UserPrincipal, require_user
+from backend.chains.aura_agent import run_aura, stream_aura
 from backend.chains.chat_chain import get_chat_response, get_chat_response_stream
+from backend.chains.aura_tools import current_user_id
 from backend.config import get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
-from backend.repositories import AnalysisRepo, ChatSessionRepo
+from backend.repositories import AnalysisRepo, ChatSessionRepo, UserRepo
 from backend.schemas import AnalyzeResponse, ChatRequest, ChatResponse, SongAnalysis
 from backend.services.cache import cache
 from backend.services.job_store import (
     DEFAULT_HEARTBEAT_TIMEOUT_S,
     get_job_store,
 )
+from backend.services.token_budget import check_and_consume
 from backend.tasks import run_analysis_pipeline  # noqa: F401
 from backend.worker import broker
 
@@ -262,6 +266,24 @@ def _chat_rate_limit_key(request: Request) -> str:
     if principal is not None and getattr(principal, "user_id", None):
         return f"user:{principal.user_id}"
     return get_remote_address(request)
+
+
+async def _session_exists(db, session_id: str) -> bool:
+    """True if a chat_sessions doc with this id exists (any owner).
+
+    Lets the endpoint distinguish "client supplied an id we've never seen"
+    (treat as a fresh server-owned session) from "client supplied an id that
+    belongs to someone else" (403). Patched in tests.
+    """
+    return await db.chat_sessions.find_one(
+        {"_id": session_id}, {"_id": 1}
+    ) is not None
+
+
+def _estimate_tokens(message: str, history: list[dict]) -> int:
+    """Cheap pre-call token estimate (~4 chars/token) for the budget gate."""
+    chars = len(message) + sum(len(t.get("content", "")) for t in history)
+    return max(1, chars // 4) + 512  # + headroom for the system prompt + reply
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -1183,75 +1205,97 @@ async def get_user_profile(user_id: str, db=Depends(get_mongodb)):
 
 
 @router.post("/chat", response_model=ChatResponse)
-@limiter.limit(lambda: get_settings().chat_rate_limit)
+@limiter.limit(lambda: get_settings().chat_rate_limit, key_func=_chat_rate_limit_key)
 async def chat(
     request: Request,
     payload: ChatRequest,
+    principal: UserPrincipal = Depends(require_user),
     db=Depends(get_mongodb),
 ) -> ChatResponse:
-    """Conversational AI assistant. Stores messages and coordinates session caching."""
-    # ``request`` is the Starlette Request (used by slowapi's key_func);
-    # ``payload`` is the parsed ChatRequest body.
-    del request  # silence unused warning while preserving the slowapi dep
-    # 1. Setup session and user in DB if parameters provided
-    if payload.user_id and payload.session_id:
-        user = await db.users.find_one({"_id": payload.user_id})
-        if not user:
-            await db.users.insert_one(
-                {
-                    "_id": payload.user_id,
-                    "username": f"Hacker-{payload.user_id[:4]}",
-                    "instrument": "guitar",
-                    "difficulty": "beginner",
-                    "created_at": datetime.now(UTC),
-                }
-            )
+    """Grounded AURA chat (non-stream). Identity from the JWT; session +
+    history are server-owned; over-budget turns refuse before the model."""
+    # Expose the principal for the rate-limit key_func (evaluated by slowapi
+    # around this call). Safe to set before the limit fires on the next call.
+    request.state.principal = principal
+    user_id = principal.user_id
+    settings = get_settings()
 
-        session = await db.chat_sessions.find_one({"_id": payload.session_id})
-        if not session:
-            await db.chat_sessions.insert_one(
-                {
-                    "_id": payload.session_id,
-                    "user_id": payload.user_id,
-                    "messages": [],
-                    "created_at": datetime.now(UTC),
-                }
-            )
+    # 1. Resolve a server-owned session id (generate if absent; ownership-check
+    #    if supplied). Degrade to no-history on Mongo errors rather than 500.
+    history: list[dict] = []
+    analysis: dict | None = None
+    mongo_ok = True
+    session_id = payload.session_id
+    repo = ChatSessionRepo(db)
+    try:
+        if session_id:
+            owned = await repo.get_owned_session(session_id, user_id)
+            if owned is None and await _session_exists(db, session_id):
+                # Exists but not ours → forbidden.
+                raise HTTPException(status_code=403, detail="Session not found")
+            if owned is None:
+                # Unknown id: adopt it as a fresh server-owned session.
+                history = []
+            else:
+                history = await ChatSessionRepo(db).recent_turns(
+                    session_id, settings.chat_history_turns
+                )
+        else:
+            session_id = str(uuid.uuid4())
+        if payload.analysis_job_id:
+            analysis = await AnalysisRepo(db).get_owned(
+                payload.analysis_job_id, user_id
+            ) or await AnalysisRepo(db).get(payload.analysis_job_id)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.warning("chat: Mongo unavailable; degrading to no-history", exc_info=True)
+        mongo_ok = False
+        if not session_id:
+            session_id = str(uuid.uuid4())
 
-        # Save user query
-        user_msg = {"role": "user", "content": payload.message, "timestamp": datetime.now(UTC)}
-        await db.chat_sessions.update_one(
-            {"_id": payload.session_id}, {"$push": {"messages": user_msg}}
+    # 2. Per-user token budget — friendly refusal, no model call.
+    if not await check_and_consume(user_id, _estimate_tokens(payload.message, history)):
+        return ChatResponse(
+            reply=(
+                "You've reached today's chat limit. Your budget resets at "
+                "midnight UTC — thanks for using AURA so much!"
+            ),
+            session_id=session_id,
         )
 
-    # 2. Look up song context (Plan 3 A4) and invoke the assistant chain.
-    analysis_doc: dict | None = None
-    if payload.analysis_job_id:
-        analysis_doc = await db.song_analyses.find_one({"_id": payload.analysis_job_id})
+    # 3. Personalization profile (best-effort).
+    profile: dict | None = None
+    if mongo_ok:
+        try:
+            profile = await UserRepo(db).get(user_id)
+        except Exception:
+            profile = None
 
-    # get_chat_response is synchronous (LangChain .invoke); run in a worker
-    # thread so the event loop isn't blocked while the LLM call is in flight.
-    reply = await asyncio.to_thread(
-        get_chat_response, payload.message, payload.history, analysis_doc
-    )
-
-    # 3. Save assistant reply to MongoDB
-    if payload.user_id and payload.session_id:
-        assistant_msg = {"role": "assistant", "content": reply, "timestamp": datetime.now(UTC)}
-        await db.chat_sessions.update_one(
-            {"_id": payload.session_id}, {"$push": {"messages": assistant_msg}}
+    # 4. Run the grounded agent (degrades internally to the LCEL chat path on
+    #    tool-capability / agent errors). Set the ownership contextvar so the
+    #    analysis-reading tools enforce per-user ownership (Group B IDOR fix).
+    token = current_user_id.set(user_id)
+    try:
+        reply = await run_aura(
+            message=payload.message,
+            history=history,
+            analysis=analysis,
+            profile=profile,
+            tutor_mode=payload.tutor_mode or settings.chat_tutor_default,
         )
+    finally:
+        current_user_id.reset(token)
 
-        # Re-query session messages to form correct history list
-        session_doc = await db.chat_sessions.find_one({"_id": payload.session_id})
-        messages = session_doc.get("messages", []) if session_doc else []
-        history_payload = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
+    # 5. Persist both turns (best-effort; never fail the response on a write).
+    if mongo_ok:
+        try:
+            await repo.append_turn(session_id, "user", payload.message, user_id=user_id)
+            await repo.append_turn(session_id, "assistant", reply, user_id=user_id)
+        except Exception:
+            logger.warning("chat: failed to persist turns", exc_info=True)
 
-        # Update cache key
-        cache_key = f"chat:session:{payload.session_id}"
-        await cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
-
-    return ChatResponse(reply=reply)
+    return ChatResponse(reply=reply, session_id=session_id)
 
 
 @router.post("/chat/stream")
