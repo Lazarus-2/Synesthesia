@@ -54,6 +54,9 @@ class SongAnalysisModel(BaseModel):
 
     id: str = Field(alias="_id")  # Unique hash or YouTube ID
     file_hash: str | None = None  # For deduplication
+    # Owner of this analysis. None for anonymous/unauthenticated uploads.
+    # Indexed in database._create_indexes for per-user library filtering (ID-01).
+    user_id: str | None = None
     title: str | None = None
     artist: str | None = None
     duration: float
