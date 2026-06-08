@@ -25,6 +25,19 @@ class TestTranspose:
         out = transpose_progression.invoke({"chords": ["C", "G", "Am", "F"], "semitones": 2})
         assert out == ["D", "A", "Bm", "G"]
 
+    def test_transposes_slash_bass(self):
+        # D/F# up two semitones -> E/G#: BOTH root and bass move.
+        assert transpose_chord("D/F#", 2) == "E/G#"
+
+    def test_slash_bass_down(self):
+        assert transpose_chord("Dm7/G", -2) == "Cm7/F"
+
+    def test_maj7_quality_preserved(self):
+        assert transpose_chord("Cmaj7", 2) == "Dmaj7"
+
+    def test_no_chord_passthrough(self):
+        assert transpose_chord("N.C.", 5) == "N.C."
+
 
 class TestCapo:
     def test_capo_helps_with_barre_chords(self):
