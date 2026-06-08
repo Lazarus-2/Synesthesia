@@ -205,3 +205,25 @@ class TestChatSessionRepo:
         mock_mongo.chat_sessions.find_one.return_value = None
         repo = ChatSessionRepo(mock_mongo)
         assert await repo.recent_turns("sess_nope", 5) == []
+
+
+class TestChatHistoryRefactor:
+    def test_history_route_uses_slice_projection(self, api_client, mock_mongo):
+        # cache miss → falls back to Mongo. The repo must issue a $slice
+        # projection, not a full-doc read.
+        from backend.services.cache import cache
+
+        # Ensure the cache key is cold so we exercise the Mongo path.
+        cache.delete("chat:session:test_slice_sess")
+
+        mock_mongo.chat_sessions.find_one.return_value = {
+            "_id": "test_slice_sess",
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        r = api_client.get("/api/v1/chat/history/test_slice_sess")
+        assert r.status_code == 200
+        assert r.json()["history"] == [{"role": "user", "content": "hi"}]
+
+        # The load-bearing assertion: server-side windowing via $slice.
+        _, kwargs_or_proj = mock_mongo.chat_sessions.find_one.call_args.args
+        assert kwargs_or_proj == {"messages": {"$slice": -200}}

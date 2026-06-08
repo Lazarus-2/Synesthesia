@@ -90,6 +90,7 @@ from backend.chains.chat_chain import get_chat_response, get_chat_response_strea
 from backend.config import get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
+from backend.repositories import AnalysisRepo, ChatSessionRepo
 from backend.schemas import AnalyzeResponse, SongAnalysis
 from backend.services.cache import cache
 from backend.services.job_store import (
@@ -1255,13 +1256,11 @@ async def get_chat_history(session_id: str, db=Depends(get_mongodb)):
     if cached:
         return {"history": json.loads(cached)}
 
-    # Drop back to MongoDB query
-    session_doc = await db.chat_sessions.find_one({"_id": session_id})
-    if not session_doc:
+    # Drop back to MongoDB — window the tail server-side via $slice instead of
+    # pulling the full messages array and slicing in Python.
+    history_payload = await ChatSessionRepo(db).recent_turns(session_id, 200)
+    if not history_payload:
         return {"history": []}
-
-    messages = session_doc.get("messages", [])
-    history_payload = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
 
     # Save loaded records to caching layer
     cache.set(cache_key, json.dumps(history_payload), ttl_seconds=1800)
