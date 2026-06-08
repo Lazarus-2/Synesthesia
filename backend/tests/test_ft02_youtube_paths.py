@@ -16,10 +16,17 @@ import pytest
 def test_ingest_renames_youtube_download_to_job_id(monkeypatch, tmp_path):
     """A YouTube job must land at {job_id}_{video_id}.mp3 under uploads so the
     serve_audio glob ``{job_id}*`` resolves it."""
+    from backend.config import get_settings
     from backend.graph import nodes
 
     uploads = tmp_path / "uploads"
     uploads.mkdir()
+
+    # Point the canonical settings object at our tmp dir so ingest_node's
+    # ``get_settings().audio_upload_dir`` resolves here — same pattern as
+    # test_stems_node_keys_output_dir_on_job_id uses for stems_dir.
+    settings = get_settings()
+    monkeypatch.setattr(settings, "audio_upload_dir", uploads, raising=False)
 
     # Stand in for the real yt-dlp ``YoutubeDL`` context manager. extract_info
     # writes the file yt-dlp would have produced (named by video_id) and
@@ -42,10 +49,6 @@ def test_ingest_renames_youtube_download_to_job_id(monkeypatch, tmp_path):
     import yt_dlp
 
     monkeypatch.setattr(yt_dlp, "YoutubeDL", _FakeYDL)
-    # Force the download dir to our tmp path (ingest_node hard-codes
-    # ./storage/uploads otherwise).
-    monkeypatch.setattr(nodes.Path, "mkdir", lambda self, **kw: None, raising=False)
-    monkeypatch.setenv("FT02_UPLOAD_DIR", str(uploads))
 
     state = {
         "job_id": "job-abc",
@@ -64,6 +67,52 @@ def test_ingest_renames_youtube_download_to_job_id(monkeypatch, tmp_path):
     assert audio_path.exists()
     # serve_audio resolves by globbing job_id*; prove that glob hits.
     assert list(uploads.glob("job-abc*")) == [audio_path]
+
+
+def test_ingest_fallback_no_job_id_uses_bare_video_id(monkeypatch, tmp_path):
+    """When job_id is absent from state (standalone call), the download must
+    land at the bare {video_id}.mp3 — the documented fallback naming."""
+    from backend.config import get_settings
+    from backend.graph import nodes
+
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "audio_upload_dir", uploads, raising=False)
+
+    class _FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            (uploads / "vid9999.mp3").write_bytes(b"ID3fake-mp3-bytes")
+            return {"id": "vid9999", "title": "Standalone Song", "uploader": "Artist"}
+
+    import yt_dlp
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _FakeYDL)
+
+    state = {
+        # job_id intentionally absent — simulates a standalone/direct call
+        "youtube_url": "https://www.youtube.com/watch?v=vid9999",
+        "instrument": "guitar",
+        "difficulty": "beginner",
+        "errors": [],
+    }
+    monkeypatch.setattr(nodes, "_validate_youtube_url", lambda url: None)
+
+    out = nodes.ingest_node(state)
+
+    audio_path = Path(out["audio_path"])
+    assert audio_path.name == "vid9999.mp3"
+    assert audio_path.exists()
 
 
 def test_analysis_state_has_job_id_key():

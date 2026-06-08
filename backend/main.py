@@ -886,8 +886,9 @@ async def serve_audio(job_id: str):
 
     Looks for any file in ``audio_upload_dir`` whose name starts with the
     job id (the upload pipeline stores them as ``{job_id}_{original_name}``,
-    and yt-dlp downloads land at ``{video_id}.mp3``). Falls back to a 404
-    envelope if nothing matches — better than serving an arbitrary file.
+    and yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by
+    ``ingest_node``). Falls back to a 404 envelope if nothing matches —
+    better than serving an arbitrary file.
     """
     settings = get_settings()
     candidates = sorted(settings.audio_upload_dir.glob(f"{job_id}*"))

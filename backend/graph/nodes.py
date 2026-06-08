@@ -149,7 +149,9 @@ def ingest_node(state: AnalysisState) -> dict:
 
             import yt_dlp
 
-            out_dir = Path(os.environ.get("FT02_UPLOAD_DIR", "./storage/uploads"))
+            from backend.config import get_settings
+
+            out_dir = get_settings().audio_upload_dir
             out_dir.mkdir(parents=True, exist_ok=True)
 
             # In 2026 yt-dlp needs an EJS JS runtime to solve YouTube's
@@ -225,16 +227,26 @@ def ingest_node(state: AnalysisState) -> dict:
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
+                # Guard: yt-dlp should always return an info dict with an id,
+                # but be explicit so we surface an actionable error rather than
+                # an obscure KeyError if the response is malformed.
+                video_id = info.get("id") if info else None
+                if not video_id:
+                    raise ValueError("yt-dlp returned no video id; cannot name the output file")
                 # yt-dlp wrote {video_id}.mp3 (outtmpl is %(id)s). Rename it to
                 # {job_id}_{video_id}.mp3 so serve_audio / serve_stem / export_midi
                 # — all of which key on job_id — can resolve it. Fall back to the
                 # raw video-id name if job_id is somehow absent (shouldn't happen
                 # in the pipeline, but keep ingest robust when called standalone).
-                raw_file = out_dir / f"{info['id']}.mp3"
+                raw_file = out_dir / f"{video_id}.mp3"
                 if job_id:
-                    downloaded_file = out_dir / f"{job_id}_{info['id']}.mp3"
-                    if raw_file.exists():
-                        raw_file.replace(downloaded_file)
+                    downloaded_file = out_dir / f"{job_id}_{video_id}.mp3"
+                    if not raw_file.exists():
+                        raise FileNotFoundError(
+                            f"yt-dlp produced no output for {video_id!r}; "
+                            "the FFmpeg postprocessor may have failed"
+                        )
+                    raw_file.replace(downloaded_file)
                 else:
                     downloaded_file = raw_file
                 audio_path = str(downloaded_file)
@@ -610,6 +622,9 @@ def stems_node(state: AnalysisState) -> dict:
     # audio filename, which only happened to work for uploads ({job_id}_{name})
     # and broke for YouTube downloads (named by video_id). Fall back to the old
     # filename-split heuristic only when job_id is absent (standalone calls).
+    # NOTE: the filename-split fallback below is unreachable in production
+    # (job_id is always present on pipeline state) and kept only for standalone
+    # calls (e.g. direct unit-test invocations without a pipeline context).
     job_id = state.get("job_id") or Path(audio_path).stem.split("_")[0]
     out_dir = settings.stems_dir / job_id
     try:
