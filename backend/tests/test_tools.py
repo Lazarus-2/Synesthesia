@@ -101,7 +101,7 @@ class TestVoicingFallback:
         labels = [d.chord for d in diagrams]
         assert "Cmaj7" in labels
         assert "G7" in labels
-        assert "Am7" in labels  # degrades to Am triad, label preserved
+        assert "Am7" in labels  # direct hit in guitar table
 
     def test_unknown_extension_degrades_to_triad(self):
         # F#m9 has no table entry -> should degrade to F#m... -> Em-shape family.
@@ -220,3 +220,152 @@ class TestChordColorQuality:
 
     def test_no_chord_dark(self):
         assert get_chord_color("N.C.") == "#1A1A1A"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for FT-09 code-review fixes
+# ---------------------------------------------------------------------------
+
+
+class TestExtensionParsing:
+    """Fix 1 — minor/major 9/11/13 extensions must NOT collapse to the base triad."""
+
+    # --- minor extensions ---
+    def test_m9_quality_is_min9(self):
+        assert parse_chord("Am9").quality == "min9"
+
+    def test_m11_quality_is_min11(self):
+        assert parse_chord("Cm11").quality == "min11"
+
+    def test_m13_quality_is_min13(self):
+        assert parse_chord("Gm13").quality == "min13"
+
+    def test_min9_prefix_is_min9(self):
+        assert parse_chord("Dmin9").quality == "min9"
+
+    def test_min11_prefix_is_min11(self):
+        assert parse_chord("Emin11").quality == "min11"
+
+    def test_min13_prefix_is_min13(self):
+        assert parse_chord("Fmin13").quality == "min13"
+
+    # --- major extensions ---
+    def test_maj9_quality_is_maj9(self):
+        assert parse_chord("Cmaj9").quality == "maj9"
+
+    def test_maj11_quality_is_maj11(self):
+        assert parse_chord("Cmaj11").quality == "maj11"
+
+    def test_maj13_quality_is_maj13(self):
+        assert parse_chord("Cmaj13").quality == "maj13"
+
+    # --- extension root is preserved correctly ---
+    def test_m9_root_correct(self):
+        p = parse_chord("Am9")
+        assert p.root == "A"
+        assert p.quality == "min9"
+
+    def test_maj9_root_correct(self):
+        p = parse_chord("Cmaj9")
+        assert p.root == "C"
+        assert p.quality == "maj9"
+
+    # --- previously-passing rules are not broken by reordering ---
+    def test_min7_still_works(self):
+        assert parse_chord("Dm7").quality == "min7"
+
+    def test_maj7_still_works(self):
+        assert parse_chord("Cmaj7").quality == "maj7"
+
+    def test_plain_minor_still_works(self):
+        assert parse_chord("Am").quality == "min"
+
+    def test_plain_major_still_works(self):
+        assert parse_chord("C").quality == "maj"
+
+
+class TestPowerChord:
+    """Fix 2 — C5, G5, etc. must parse as quality 'power', not 'maj'."""
+
+    def test_c5_is_power(self):
+        assert parse_chord("C5").quality == "power"
+
+    def test_g5_root_and_quality(self):
+        p = parse_chord("G5")
+        assert p.root == "G"
+        assert p.quality == "power"
+
+    def test_fsharp5_is_power(self):
+        assert parse_chord("F#5").quality == "power"
+
+
+class TestTransposeCompleteness:
+    """Fix 3 — transpose_chord must handle every quality parse_chord can emit."""
+
+    def test_transpose_m9(self):
+        assert transpose_chord("Am9", 2) == "Bm9"
+
+    def test_transpose_m11(self):
+        assert transpose_chord("Cm11", 2) == "Dm11"
+
+    def test_transpose_m13(self):
+        assert transpose_chord("Gm13", 2) == "Am13"
+
+    def test_transpose_maj9(self):
+        assert transpose_chord("Cmaj9", 2) == "Dmaj9"
+
+    def test_transpose_maj11(self):
+        assert transpose_chord("Cmaj11", 2) == "Dmaj11"
+
+    def test_transpose_maj13(self):
+        assert transpose_chord("Cmaj13", 2) == "Dmaj13"
+
+    def test_transpose_power_chord(self):
+        assert transpose_chord("C5", 2) == "D5"
+
+    def test_transpose_power_chord_wraps(self):
+        assert transpose_chord("B5", 1) == "C5"
+
+
+class TestVoicingsDegradationPolicy:
+    """Fix 4 — degrade/drop policy for voicings."""
+
+    # Am7 is a direct hit on guitar; degrades to Am on ukulele/piano/bass
+    def test_am7_direct_hit_guitar(self):
+        diagrams = get_chord_diagrams(["Am7"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am7"
+
+    def test_am7_degrades_to_am_ukulele(self):
+        # No Am7 shape in ukulele table → degrade to Am (minor triad)
+        diagrams = get_chord_diagrams(["Am7"], instrument="ukulele")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am7"  # label is the original
+
+    def test_am7_degrades_to_am_piano(self):
+        diagrams = get_chord_diagrams(["Am7"], instrument="piano")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am7"
+
+    def test_am7_degrades_to_am_bass(self):
+        diagrams = get_chord_diagrams(["Am7"], instrument="bass")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am7"
+
+    # dim / m7b5 should be DROPPED, not shown with a wrong Am shape
+    def test_adim_dropped_when_no_dim_shape(self):
+        # There is no Adim shape in any table; must not fall through to Am.
+        diagrams = get_chord_diagrams(["Adim"], instrument="guitar")
+        assert len(diagrams) == 0
+
+    def test_am7b5_dropped_when_no_shape(self):
+        diagrams = get_chord_diagrams(["Am7b5"], instrument="ukulele")
+        assert len(diagrams) == 0
+
+    # Minor extension chords degrade to minor triad on instruments without the
+    # exact shape, not to major triad.
+    def test_am9_guitar_degrades_to_am_not_a(self):
+        # Am9 has no guitar shape → degrade to Am (not A)
+        diagrams = get_chord_diagrams(["Am9"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Am9"

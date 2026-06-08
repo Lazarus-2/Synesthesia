@@ -14,32 +14,55 @@ from dataclasses import dataclass
 # Leading-token -> canonical quality. ORDER MATTERS: longer / more specific
 # tokens must be tested before their prefixes (e.g. "maj7" before "maj",
 # "m7b5" before "m7" before "m", "dim7" before "dim").
+#
+# EXTENSION RULE: minor/major extended chords (m9, m11, m13, maj9, maj11,
+# maj13) MUST appear before their shorter prefix rules ("m"/"min", "maj")
+# otherwise the shorter rule fires first and the extension is silently dropped.
+# Explicit rules are always preferred over relying on prefix matching.
 _QUALITY_RULES: list[tuple[str, str]] = [
-    ("maj7", "maj7"),
-    ("maj9", "maj9"),
-    ("M7", "maj7"),
+    # --- half-diminished / fully-diminished (before "dim" and "m") ---
     ("m7b5", "m7b5"),
     ("min7b5", "m7b5"),
     ("dim7", "dim7"),
     ("dim", "dim"),
+    # --- augmented ---
     ("aug", "aug"),
+    # --- suspended / added ---
     ("sus2", "sus2"),
     ("sus4", "sus4"),
     ("sus", "sus4"),
     ("add9", "add9"),
+    # --- major-family (extensions before short "maj" catch-all) ---
+    ("maj13", "maj13"),
+    ("maj11", "maj11"),
+    ("maj9", "maj9"),
+    ("maj7", "maj7"),
+    ("M7", "maj7"),
+    ("maj", "maj"),
+    # --- minor-family (extensions before short "m"/"min" catch-all) ---
+    ("min13", "min13"),
+    ("min11", "min11"),
+    ("min9", "min9"),
     ("min7", "min7"),
+    ("m13", "min13"),
+    ("m11", "min11"),
+    ("m9", "min9"),
     ("m7", "min7"),
     ("min", "min"),
-    ("maj", "maj"),
+    ("m", "min"),
+    # --- simple numeric extensions (no quality prefix) ---
     ("13", "13"),
     ("11", "11"),
     ("9", "9"),
     ("7", "dom7"),
     ("6", "6"),
+    # --- power chord (before bare numeric / empty catch-all) ---
+    ("5", "power"),
+    # --- symbol aliases ---
     ("ø", "m7b5"),
     ("o", "dim"),
     ("+", "aug"),
-    ("m", "min"),
+    # --- bare major (catch-all, must be last) ---
     ("", "maj"),
 ]
 

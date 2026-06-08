@@ -63,39 +63,74 @@ _PIANO_TRIADS: dict[str, dict] = {
 }
 
 
-# Canonical quality -> the simplest label we keep a shape for. Used only as a
-# *degradation* target so an extended/unknown chord still yields a diagram
-# instead of being silently dropped.
-_DEGRADE_SUFFIX = {
+# Canonical quality -> the suffix for the DEGRADED fallback shape.
+#
+# Degradation policy (applied when the exact chord label is not in the table):
+#   - major-family (maj, maj7, maj9, maj11, maj13, dom7, 6, 9, 11, 13, sus*, add9,
+#     aug, power): degrade to the bare major triad ("").
+#   - minor-family (min, min7, min9, min11, min13): degrade to the minor triad ("m").
+#   - dim7 / m7b5 / dim: these are tonally DISTINCT from major/minor triads.
+#     Showing an Am shape for "Adim" would be musically WRONG and mislead the
+#     player. We therefore map them to None (sentinel) so _candidate_labels
+#     returns only the exact label — if the table has no dim shape, the chord
+#     is DROPPED (no diagram) rather than shown with an incorrect shape.
+_DEGRADE_SUFFIX: dict[str, str | None] = {
+    # major triad family
     "maj": "",
-    "maj7": "maj7",
-    "dom7": "7",
-    "min": "m",
-    "min7": "m7",
-    "m7b5": "m",
-    "dim": "m",
-    "aug": "",
-    "sus2": "",
-    "sus4": "",
+    "maj7": "",
+    "maj9": "",
+    "maj11": "",
+    "maj13": "",
+    "dom7": "",
     "6": "",
     "9": "",
     "11": "",
     "13": "",
+    "sus2": "",
+    "sus4": "",
     "add9": "",
-    "maj9": "maj7",
+    "aug": "",
+    "power": "",
+    # minor triad family
+    "min": "m",
+    "min7": "m",
     "min9": "m",
+    "min11": "m",
+    "min13": "m",
+    # tonally-distinct qualities: no safe triad fallback → DROP (None)
+    "dim": None,
+    "dim7": None,
+    "m7b5": None,
 }
 
 
 def _candidate_labels(label: str) -> list[str]:
-    """Ordered lookup keys for a chord: exact, then degraded toward a triad."""
+    """Ordered lookup keys for a chord: exact, then degraded toward a triad.
+
+    Returns only keys that are worth looking up:
+    - Always starts with the exact label (e.g. "Am7", "Am9").
+    - Appends the degraded label when the quality has a safe triad equivalent
+      (e.g. min7 → "Am", maj9 → "A").  A None sentinel means the quality is
+      tonally distinct (dim, dim7, m7b5) — no fallback is added, so if the
+      exact shape is absent the chord is dropped rather than shown wrongly.
+    - As a last resort, appends the bare root (handles slash chords like "D/F#"
+      whose suffix is "" after root extraction by parse_chord).
+    """
     parts = parse_chord(label)
     if not parts.root:
         return [label]
-    candidates = [label]  # try the exact label first (e.g. "Cmaj7", "Am7")
-    suffix = _DEGRADE_SUFFIX.get(parts.quality, "")
-    candidates.append(f"{parts.root}{suffix}")  # degraded (e.g. "Am" for "Am9")
-    candidates.append(parts.root)  # last resort: bare triad ("D" for "D/F#")
+
+    candidates = [label]  # exact hit first
+
+    degrade_suffix = _DEGRADE_SUFFIX.get(parts.quality)  # None → no safe fallback
+    if degrade_suffix is not None:
+        degraded = f"{parts.root}{degrade_suffix}"
+        if degraded != label:  # skip if degraded == exact (avoids useless duplicate)
+            candidates.append(degraded)
+        # last-resort bare root (useful for slash chords and bare major triads)
+        if parts.root != degraded:
+            candidates.append(parts.root)
+
     return candidates
 
 

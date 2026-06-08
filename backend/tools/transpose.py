@@ -13,24 +13,40 @@ _NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 _FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
 
 # Canonical quality -> printable suffix (inverse of parse_chord's normalization).
+# Every quality that parse_chord can emit must have an explicit entry here so
+# that transpose_chord produces a recognisable chord symbol. Do NOT rely on the
+# raw-quality fallback (suffix = parts.quality) for user-visible output.
 _QUALITY_SUFFIX = {
+    # major family
     "maj": "",
-    "min": "m",
-    "dom7": "7",
     "maj7": "maj7",
     "maj9": "maj9",
+    "maj11": "maj11",
+    "maj13": "maj13",
+    # minor family
+    "min": "m",
     "min7": "m7",
-    "m7b5": "m7b5",
-    "dim": "dim",
-    "dim7": "dim7",
-    "aug": "aug",
-    "sus2": "sus2",
-    "sus4": "sus4",
-    "add9": "add9",
-    "6": "6",
+    "min9": "m9",
+    "min11": "m11",
+    "min13": "m13",
+    # dominant / plain extensions
+    "dom7": "7",
     "9": "9",
     "11": "11",
     "13": "13",
+    "6": "6",
+    # half-diminished / diminished
+    "m7b5": "m7b5",
+    "dim": "dim",
+    "dim7": "dim7",
+    # augmented
+    "aug": "aug",
+    # suspended / added
+    "sus2": "sus2",
+    "sus4": "sus4",
+    "add9": "add9",
+    # power chord
+    "power": "5",
 }
 
 
