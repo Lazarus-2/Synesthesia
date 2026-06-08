@@ -80,8 +80,20 @@ class TestFullPipelineWithSyntheticAudio:
 
         result = asyncio.run(run())
 
-        # Pipeline reached the end without errors.
-        assert not result.get("errors"), f"unexpected pipeline errors: {result.get('errors')}"
+        # Pipeline reached the end with a usable analysis. With LLM nodes
+        # stubbed to raise, theory/instrument append degradation errors — that's
+        # correct and expected (status="degraded", not "failed"). We verify the
+        # run is not "failed" rather than asserting zero errors.
+        from backend.graph.status import derive_status
+
+        assert derive_status(result) != "failed", (
+            f"pipeline should not be 'failed'; errors: {result.get('errors')}"
+        )
+        # Degradation errors from stubbed LLMs are acceptable here.
+        feature_errors = [
+            e for e in result.get("errors", []) if "Feature extraction failed" in e
+        ]
+        assert not feature_errors, f"unexpected feature errors: {feature_errors}"
 
         # Features ran: we got a key/tempo and at least some chord events.
         assert "key" in result and result["key"], "key estimation should populate"
