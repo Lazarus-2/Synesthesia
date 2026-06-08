@@ -1,0 +1,337 @@
+# Curated music-theory glossary for AURA's lookup_theory tool.
+# Keyword/alias/substring lookup ONLY — no embeddings. (spec §4, §7)
+# Invariants enforced by tests: unique snippet_id, non-empty explanation,
+# aliases is a list of strings. snippet_id is the stable citation key
+# rendered as "[theory:<snippet_id>]".
+
+# --- intervals ---
+- term: perfect fifth
+  aliases: ["P5", "fifth", "5th"]
+  explanation: >-
+    An interval spanning seven semitones, the most consonant interval after the
+    octave. It is the backbone of the circle of fifths and of power chords.
+  snippet_id: int-p5
+- term: perfect fourth
+  aliases: ["P4", "fourth", "4th"]
+  explanation: >-
+    An interval of five semitones; the inversion of the perfect fifth. Consonant,
+    but treated as a mild dissonance when it sits above the bass in counterpoint.
+  snippet_id: int-p4
+- term: major third
+  aliases: ["M3", "third", "3rd"]
+  explanation: >-
+    An interval of four semitones. The presence of a major third over the root is
+    what makes a triad sound major (bright) rather than minor.
+  snippet_id: int-m3
+- term: minor third
+  aliases: ["m3", "flat third", "b3"]
+  explanation: >-
+    An interval of three semitones. A minor third over the root makes a triad sound
+    minor (darker, sadder) than a major triad.
+  snippet_id: int-min3
+- term: tritone
+  aliases: ["augmented fourth", "diminished fifth", "A4", "d5", "devils interval"]
+  explanation: >-
+    An interval of six semitones that bisects the octave. Highly unstable; its urge
+    to resolve outward (to a third) is the engine of the dominant-to-tonic cadence.
+  snippet_id: int-tritone
+- term: octave
+  aliases: ["P8", "8ve"]
+  explanation: >-
+    An interval of twelve semitones where the upper note has double the frequency of
+    the lower. The two notes share a name and sound like the "same" pitch higher up.
+  snippet_id: int-octave
+- term: semitone
+  aliases: ["half step", "halfstep", "minor second", "m2"]
+  explanation: >-
+    The smallest interval in standard Western tuning — one fret on a guitar, one key
+    on a piano. Twelve semitones make an octave.
+  snippet_id: int-semitone
+- term: whole tone
+  aliases: ["whole step", "wholestep", "major second", "M2"]
+  explanation: >-
+    An interval of two semitones. Scale steps in a major scale are a mix of whole and
+    half steps (W-W-H-W-W-W-H).
+  snippet_id: int-tone
+
+# --- triad / seventh qualities ---
+- term: major triad
+  aliases: ["major chord", "maj"]
+  explanation: >-
+    A three-note chord stacking a major third then a minor third (root, major 3rd,
+    perfect 5th). Sounds bright and stable; the tonic of a major key.
+  snippet_id: chq-maj
+- term: minor triad
+  aliases: ["minor chord", "min", "m"]
+  explanation: >-
+    A triad stacking a minor third then a major third (root, minor 3rd, perfect 5th).
+    Sounds darker or sadder than a major triad.
+  snippet_id: chq-min
+- term: diminished triad
+  aliases: ["diminished chord", "dim", "o"]
+  explanation: >-
+    A triad of two stacked minor thirds (root, minor 3rd, diminished 5th). Tense and
+    unstable; appears as the vii° chord in a major key.
+  snippet_id: chq-dim
+- term: augmented triad
+  aliases: ["augmented chord", "aug", "+"]
+  explanation: >-
+    A triad of two stacked major thirds (root, major 3rd, augmented 5th). Symmetrical
+    and restless, it dissolves the sense of a single tonic.
+  snippet_id: chq-aug
+- term: dominant seventh
+  aliases: ["dominant 7th", "dom7", "7 chord", "V7"]
+  explanation: >-
+    A major triad plus a minor seventh (e.g. G-B-D-F). Its internal tritone drives a
+    strong pull to the tonic, making it the classic dominant-function chord.
+  snippet_id: chq-dom7
+- term: major seventh
+  aliases: ["major 7th", "maj7", "M7"]
+  explanation: >-
+    A major triad plus a major seventh (e.g. C-E-G-B). Lush and jazzy; the seventh is
+    a half step below the octave, not a whole step as in a dominant seventh.
+  snippet_id: chq-maj7
+- term: minor seventh
+  aliases: ["minor 7th", "min7", "m7"]
+  explanation: >-
+    A minor triad plus a minor seventh (e.g. A-C-E-G). Smooth and mellow; the typical
+    ii and vi seventh chords in a major key.
+  snippet_id: chq-min7
+- term: half-diminished seventh
+  aliases: ["half diminished", "m7b5", "min7b5", "ø", "ø7"]
+  explanation: >-
+    A diminished triad plus a minor seventh (e.g. B-D-F-A). The ii chord of a minor
+    key; less tense than a fully diminished seventh.
+  snippet_id: chq-m7b5
+- term: diminished seventh
+  aliases: ["fully diminished", "dim7", "o7"]
+  explanation: >-
+    Three stacked minor thirds (e.g. B-D-F-Ab). Symmetrical and maximally unstable; a
+    common pivot for modulation because it can resolve many directions.
+  snippet_id: chq-dim7
+- term: suspended chord
+  aliases: ["sus", "sus2", "sus4", "suspension"]
+  explanation: >-
+    A chord whose third is replaced by the second (sus2) or fourth (sus4), leaving the
+    quality ambiguous and creating tension that wants to resolve back to the third.
+  snippet_id: chq-sus
+
+# --- scales / modes ---
+- term: major scale
+  aliases: ["ionian mode", "ionian", "diatonic major"]
+  explanation: >-
+    The seven-note scale with the step pattern W-W-H-W-W-W-H. Its brightness comes from
+    the major third and major seventh; it is the reference for naming the other modes.
+  snippet_id: scl-major
+- term: natural minor scale
+  aliases: ["aeolian mode", "aeolian", "minor scale"]
+  explanation: >-
+    The scale with step pattern W-H-W-W-H-W-W (the major scale started on its sixth
+    degree). It has a flat 3rd, 6th, and 7th relative to the parallel major.
+  snippet_id: scl-aeolian
+- term: harmonic minor scale
+  aliases: ["harmonic minor"]
+  explanation: >-
+    Natural minor with a raised seventh, creating a leading tone so the dominant chord
+    (V) becomes major and pulls strongly to the minor tonic.
+  snippet_id: scl-harmonic-minor
+- term: melodic minor scale
+  aliases: ["melodic minor"]
+  explanation: >-
+    Natural minor with raised sixth and seventh ascending (often reverting to natural
+    minor descending), smoothing the melodic gap left by harmonic minor.
+  snippet_id: scl-melodic-minor
+- term: dorian mode
+  aliases: ["dorian"]
+  explanation: >-
+    A minor-type mode (major scale from its second degree) with a raised sixth. Brighter
+    than natural minor; heard in folk, modal jazz, and rock vamps.
+  snippet_id: mode-dorian
+- term: phrygian mode
+  aliases: ["phrygian"]
+  explanation: >-
+    A minor-type mode with a flat second, giving a dark, Spanish or metal flavor. It is
+    the major scale played from its third degree.
+  snippet_id: mode-phrygian
+- term: lydian mode
+  aliases: ["lydian"]
+  explanation: >-
+    A major-type mode with a raised fourth, producing a floating, dreamy brightness. It
+    is the major scale played from its fourth degree.
+  snippet_id: mode-lydian
+- term: mixolydian mode
+  aliases: ["mixolydian"]
+  explanation: >-
+    A major-type mode with a flat seventh; dominant-sounding and bluesy. It is the major
+    scale played from its fifth degree, common in rock and funk.
+  snippet_id: mode-mixolydian
+- term: locrian mode
+  aliases: ["locrian"]
+  explanation: >-
+    The mode on the seventh degree of the major scale, with a flat second and flat fifth.
+    Its tonic triad is diminished, so it is rarely used as a stable key.
+  snippet_id: mode-locrian
+- term: pentatonic scale
+  aliases: ["pentatonic", "major pentatonic", "minor pentatonic"]
+  explanation: >-
+    A five-note scale that omits the half steps of the diatonic scale, removing the most
+    dissonant tendencies and making it a safe palette for soloing.
+  snippet_id: scl-pentatonic
+- term: blues scale
+  aliases: ["blues", "blue note"]
+  explanation: >-
+    The minor pentatonic scale with an added flat fifth ("blue note"), giving the gritty,
+    expressive sound central to blues and rock improvisation.
+  snippet_id: scl-blues
+
+# --- function / Roman numerals ---
+- term: roman numeral analysis
+  aliases: ["roman numerals", "roman numeral", "functional analysis"]
+  explanation: >-
+    A system labeling chords by their scale degree (I, ii, iii, IV, V, vi, vii°). Upper
+    case = major, lower case = minor, ° = diminished. It shows function independent of key.
+  snippet_id: fn-roman
+- term: tonic
+  aliases: ["tonic chord", "i chord", "home chord", "I"]
+  explanation: >-
+    The first scale degree and its chord — the harmonic "home" that a progression resolves
+    to. It provides rest and stability.
+  snippet_id: fn-tonic
+- term: dominant
+  aliases: ["dominant chord", "v chord", "V"]
+  explanation: >-
+    The fifth scale degree and its chord. Containing the leading tone (and often a seventh),
+    it creates the strongest pull back to the tonic.
+  snippet_id: fn-dominant
+- term: subdominant
+  aliases: ["subdominant chord", "iv chord", "IV", "predominant"]
+  explanation: >-
+    The fourth scale degree and its chord. It moves away from the tonic and typically sets
+    up the dominant; part of the predominant function.
+  snippet_id: fn-subdominant
+- term: leading tone
+  aliases: ["leading note", "leading-tone", "ti"]
+  explanation: >-
+    The seventh degree of a major or harmonic-minor scale, a half step below the tonic. Its
+    strong upward pull to the tonic powers cadences.
+  snippet_id: fn-leading-tone
+- term: secondary dominant
+  aliases: ["secondary dominants", "applied dominant", "V of V", "V/V"]
+  explanation: >-
+    A dominant-seventh chord that temporarily tonicizes a chord other than the key's tonic
+    (e.g. D7 as V/V in C, pulling toward G). It borrows tension from outside the key.
+  snippet_id: fn-secondary-dominant
+- term: borrowed chord
+  aliases: ["modal mixture", "modal interchange", "borrowed chords"]
+  explanation: >-
+    A chord taken from the parallel mode (e.g. a minor iv in a major key). It colors the
+    harmony with an unexpected, often bittersweet, shade.
+  snippet_id: fn-borrowed
+- term: neapolitan chord
+  aliases: ["neapolitan sixth", "bII", "N6"]
+  explanation: >-
+    A major chord built on the flattened second degree, usually in first inversion (bII6).
+    A dramatic predominant that intensifies the approach to the dominant.
+  snippet_id: fn-neapolitan
+
+# --- cadences ---
+- term: cadence
+  aliases: ["cadences", "harmonic cadence"]
+  explanation: >-
+    A chord progression that ends a phrase and gives a sense of pause or closure. The main
+    types are authentic, plagal, half, and deceptive.
+  snippet_id: cad-cadence
+- term: perfect authentic cadence
+  aliases: ["authentic cadence", "PAC", "V-I", "V-i"]
+  explanation: >-
+    A V-to-I motion with both chords in root position and the tonic in the top voice. The
+    strongest, most conclusive cadence — a full stop.
+  snippet_id: cad-authentic
+- term: plagal cadence
+  aliases: ["amen cadence", "IV-I", "iv-i"]
+  explanation: >-
+    A IV-to-I motion, famous as the "Amen" at the end of hymns. Softer and more restful
+    than an authentic cadence.
+  snippet_id: cad-plagal
+- term: half cadence
+  aliases: ["half-cadence", "imperfect cadence", "ends on V"]
+  explanation: >-
+    A phrase ending on the dominant (V), leaving the music unresolved and expectant — a
+    musical comma rather than a period.
+  snippet_id: cad-half
+- term: deceptive cadence
+  aliases: ["interrupted cadence", "V-vi", "deceptive resolution"]
+  explanation: >-
+    A dominant that resolves to vi (or another non-tonic) instead of the expected tonic,
+    surprising the ear and prolonging the phrase.
+  snippet_id: cad-deceptive
+
+# --- progressions ---
+- term: circle of fifths
+  aliases: ["cycle of fifths", "circle-of-fifths", "fifths circle"]
+  explanation: >-
+    A diagram arranging the twelve keys by ascending fifths. Adjacent keys differ by one
+    sharp or flat, so it maps key signatures and smooth root-motion by fifth.
+  snippet_id: prog-circle-of-fifths
+- term: two five one
+  aliases: ["ii-V-I", "2-5-1", "ii V I", "jazz turnaround"]
+  explanation: >-
+    The ii-V-I progression: a predominant, a dominant, then the tonic. The fundamental
+    cadential unit of jazz and a strong resolution in any style.
+  snippet_id: prog-ii-v-i
+- term: twelve bar blues
+  aliases: ["12-bar blues", "12 bar blues", "blues progression"]
+  explanation: >-
+    A 12-measure form built on the I, IV, and V chords (often as dominant sevenths) in a set
+    pattern. The harmonic foundation of blues, early rock, and R&B.
+  snippet_id: prog-12-bar-blues
+- term: pop punk progression
+  aliases: ["I-V-vi-IV", "1-5-6-4", "axis progression", "four chord song"]
+  explanation: >-
+    The I-V-vi-IV loop (and its rotations) heard in countless pop hits. Its mix of major
+    and relative-minor chords feels both uplifting and wistful.
+  snippet_id: prog-i-v-vi-iv
+- term: andalusian cadence
+  aliases: ["andalusian", "i-bVII-bVI-V", "phrygian progression"]
+  explanation: >-
+    A descending minor progression (i-bVII-bVI-V) with a Spanish, flamenco character. The
+    final major V gives a Phrygian-flavored pull back to the minor tonic.
+  snippet_id: prog-andalusian
+
+# --- modulation / voice-leading / color ---
+- term: modulation
+  aliases: ["key change", "modulate", "change of key"]
+  explanation: >-
+    Moving from one key to another within a piece, usually via a pivot chord shared by both
+    keys, a dominant, or a direct (abrupt) shift for dramatic lift.
+  snippet_id: mod-modulation
+- term: pivot chord
+  aliases: ["pivot", "common chord modulation", "common-chord"]
+  explanation: >-
+    A chord that belongs to both the old and new key, used to smoothly hinge a modulation by
+    being reinterpreted with a new Roman-numeral function.
+  snippet_id: mod-pivot
+- term: relative key
+  aliases: ["relative minor", "relative major", "relative keys"]
+  explanation: >-
+    A major and minor key that share the same key signature (e.g. C major and A minor). Moving
+    between them is a very smooth, common shift.
+  snippet_id: mod-relative
+- term: voice leading
+  aliases: ["voice-leading", "part writing", "smooth voice leading"]
+  explanation: >-
+    The art of moving each chord tone to the nearest note of the next chord. Smooth voice
+    leading (small steps, no parallel fifths/octaves) makes progressions sound connected.
+  snippet_id: vl-voice-leading
+- term: inversion
+  aliases: ["chord inversion", "first inversion", "second inversion", "slash chord"]
+  explanation: >-
+    A chord voiced with a tone other than the root in the bass (e.g. C/E). Inversions create
+    smoother bass lines and soften the chord's stability.
+  snippet_id: vl-inversion
+- term: scriabin color mapping
+  aliases: ["scriabin color", "color hearing", "chromesthesia", "synesthesia color", "clavier a lumieres"]
+  explanation: >-
+    Synesthesia maps each key to a color along the circle of fifths, inspired by Alexander
+    Scriabin's sound-to-color associations — a deterministic table, not a perceptual claim.
+  snippet_id: col-scriabin
