@@ -33,7 +33,7 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -90,7 +90,6 @@ import taskiq_fastapi
 
 from backend.auth import UserPrincipal, require_user
 from backend.chains.aura_agent import run_aura, stream_aura
-from backend.chains.chat_chain import get_chat_response, get_chat_response_stream
 from backend.chains.aura_tools import current_user_id
 from backend.config import get_settings
 from backend.database import get_mongodb
@@ -1299,88 +1298,114 @@ async def chat(
 
 
 @router.post("/chat/stream")
-@limiter.limit(lambda: get_settings().chat_rate_limit)
+@limiter.limit(lambda: get_settings().chat_rate_limit, key_func=_chat_rate_limit_key)
 async def chat_stream(
     request: Request,
     payload: ChatRequest,
+    principal: UserPrincipal = Depends(require_user),
     db=Depends(get_mongodb),
 ):
-    """Conversational AI assistant with SSE streaming response."""
-    # ``request`` is the Starlette Request (slowapi key_func reads it).
-    # ``payload`` is the parsed ChatRequest body.
-    del request
-    # 1. Setup session and user in DB if parameters provided
-    if payload.user_id and payload.session_id:
-        user = await db.users.find_one({"_id": payload.user_id})
-        if not user:
-            await db.users.insert_one(
-                {
-                    "_id": payload.user_id,
-                    "username": f"Hacker-{payload.user_id[:4]}",
-                    "instrument": "guitar",
-                    "difficulty": "beginner",
-                    "created_at": datetime.now(UTC),
-                }
+    """Grounded AURA chat (SSE). Same resolution as /chat; streams
+    context/tool/chunk/done/error frames from stream_aura via
+    EventSourceResponse (client-disconnect + keepalive for free)."""
+    request.state.principal = principal
+    user_id = principal.user_id
+    settings = get_settings()
+
+    history: list[dict] = []
+    analysis: dict | None = None
+    mongo_ok = True
+    session_id = payload.session_id
+    repo = ChatSessionRepo(db)
+    try:
+        if session_id:
+            owned = await repo.get_owned_session(session_id, user_id)
+            if owned is None and await _session_exists(db, session_id):
+                raise HTTPException(status_code=403, detail="Session not found")
+            if owned is not None:
+                history = await ChatSessionRepo(db).recent_turns(
+                    session_id, settings.chat_history_turns
+                )
+        else:
+            session_id = str(uuid.uuid4())
+        if payload.analysis_job_id:
+            analysis = await AnalysisRepo(db).get_owned(
+                payload.analysis_job_id, user_id
+            ) or await AnalysisRepo(db).get(payload.analysis_job_id)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.warning("chat/stream: Mongo unavailable; degrading", exc_info=True)
+        mongo_ok = False
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+    # Budget: emit a single error frame instead of a 200 stream of content.
+    if not await check_and_consume(user_id, _estimate_tokens(payload.message, history)):
+        async def _refused():
+            yield ServerSentEvent(
+                event="error",
+                data=json.dumps(
+                    {"code": "CHAT_BUDGET_EXCEEDED",
+                     "message": "Daily chat limit reached; resets at midnight UTC."}
+                ),
             )
+        return EventSourceResponse(_refused(), headers={"X-Accel-Buffering": "no"})
 
-        session = await db.chat_sessions.find_one({"_id": payload.session_id})
-        if not session:
-            await db.chat_sessions.insert_one(
-                {
-                    "_id": payload.session_id,
-                    "user_id": payload.user_id,
-                    "messages": [],
-                    "created_at": datetime.now(UTC),
-                }
-            )
-
-        user_msg = {"role": "user", "content": payload.message, "timestamp": datetime.now(UTC)}
-        await db.chat_sessions.update_one(
-            {"_id": payload.session_id}, {"$push": {"messages": user_msg}}
-        )
-
-    # Pull song context once before opening the stream so we don't hit the
-    # DB on every yielded chunk.
-    analysis_doc_stream: dict | None = None
-    if payload.analysis_job_id:
-        analysis_doc_stream = await db.song_analyses.find_one({"_id": payload.analysis_job_id})
-
-    async def stream_generator():
-        full_reply = ""
+    profile: dict | None = None
+    if mongo_ok:
         try:
-            async for chunk in get_chat_response_stream(
-                payload.message,
-                payload.history,
-                analysis_doc_stream,
+            profile = await UserRepo(db).get(user_id)
+        except Exception:
+            profile = None
+
+    tutor_mode = payload.tutor_mode or settings.chat_tutor_default
+
+    async def event_generator():
+        assistant_text_parts: list[str] = []
+        # Set the ownership contextvar inside the generator task (Group B IDOR fix).
+        _token = current_user_id.set(user_id)
+        try:
+            async for frame in stream_aura(
+                message=payload.message,
+                history=history,
+                analysis=analysis,
+                profile=profile,
+                tutor_mode=tutor_mode,
             ):
-                if chunk:
-                    yield _sse_frame("chunk", {"text": chunk})
-                    full_reply += chunk
-        except Exception as e:
-            logger.exception("chat stream failed")
-            yield _sse_frame(
-                "error",
-                {
-                    "code": "CHAT_STREAM_FAILED",
-                    "message": str(e)[:200],
-                },
+                # Accumulate assistant text from chunk frames for persistence.
+                if frame.event == "chunk":
+                    try:
+                        assistant_text_parts.append(json.loads(frame.data).get("text", ""))
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                yield frame
+        except Exception:
+            logger.exception("chat/stream: aura stream failed")
+            yield ServerSentEvent(
+                event="error",
+                data=json.dumps(
+                    {"code": "CHAT_STREAM_FAILED",
+                     "message": "AURA hit an error mid-stream."}
+                ),
             )
             return
+        finally:
+            current_user_id.reset(_token)
+        # Persist both turns once the stream drains cleanly.
+        if mongo_ok:
+            reply = "".join(assistant_text_parts)
+            try:
+                await repo.append_turn(session_id, "user", payload.message, user_id=user_id)
+                await repo.append_turn(session_id, "assistant", reply, user_id=user_id)
+            except Exception:
+                logger.warning("chat/stream: failed to persist turns", exc_info=True)
 
-        # Save assistant reply to MongoDB after stream completes
-        if payload.user_id and payload.session_id:
-            assistant_msg = {
-                "role": "assistant",
-                "content": full_reply,
-                "timestamp": datetime.now(UTC),
-            }
-            await db.chat_sessions.update_one(
-                {"_id": payload.session_id}, {"$push": {"messages": assistant_msg}}
-            )
-
-        yield _sse_frame("done", {"reply_length": len(full_reply)})
-
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    return EventSourceResponse(
+        event_generator(),
+        ping=15,
+        headers={"X-Accel-Buffering": "no", "X-Session-Id": session_id},
+    )
 
 
 @router.get("/chat/history/{session_id}")
