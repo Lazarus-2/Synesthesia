@@ -65,3 +65,71 @@ class TestChordDiagrams:
         diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")
         # Because we only append if shape is found, malformed chords with no shape should yield empty
         assert len(diagrams) == 0
+
+
+from backend.tools.chords import ChordParts, parse_chord
+
+
+class TestParseChord:
+    def test_bare_major(self):
+        p = parse_chord("C")
+        assert isinstance(p, ChordParts)
+        assert (p.root, p.quality, p.bass) == ("C", "maj", None)
+
+    def test_minor_is_min_not_maj(self):
+        assert parse_chord("Am").quality == "min"
+        assert parse_chord("F#m").root == "F#"
+        assert parse_chord("F#m").quality == "min"
+
+    def test_maj7_is_not_misread_as_minor(self):
+        # The historical bug: "m" in "maj7" matched the minor branch.
+        p = parse_chord("Cmaj7")
+        assert p.root == "C"
+        assert p.quality == "maj7"
+        assert p.bass is None
+
+    def test_min7(self):
+        assert parse_chord("Dm7").quality == "min7"
+        assert parse_chord("Em7").quality == "min7"
+
+    def test_dominant_seventh(self):
+        assert parse_chord("G7").quality == "dom7"
+        assert parse_chord("C7").quality == "dom7"
+
+    def test_diminished_and_half_diminished(self):
+        assert parse_chord("Bdim").quality == "dim"
+        assert parse_chord("Bo").quality == "dim"
+        assert parse_chord("Bm7b5").quality == "m7b5"
+        assert parse_chord("Bø").quality == "m7b5"
+
+    def test_augmented(self):
+        assert parse_chord("Caug").quality == "aug"
+        assert parse_chord("C+").quality == "aug"
+
+    def test_sus_and_added_tones(self):
+        assert parse_chord("Dsus2").quality == "sus2"
+        assert parse_chord("Dsus4").quality == "sus4"
+        assert parse_chord("C6").quality == "6"
+        assert parse_chord("C9").quality == "9"
+
+    def test_slash_bass_parsed(self):
+        p = parse_chord("Dm7/G")
+        assert p.root == "D"
+        assert p.quality == "min7"
+        assert p.bass == "G"
+
+    def test_slash_bass_with_accidental(self):
+        p = parse_chord("D/F#")
+        assert p.root == "D"
+        assert p.quality == "maj"
+        assert p.bass == "F#"
+
+    def test_flat_root_preserved_with_accidental(self):
+        p = parse_chord("Bbmaj7")
+        assert p.root == "Bb"
+        assert p.quality == "maj7"
+
+    def test_no_chord_and_unknown(self):
+        assert parse_chord("N.C.").root == ""
+        assert parse_chord("N").root == ""
+        assert parse_chord("").root == ""
