@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import re
 import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
 from backend.graph.state import FEATURE_ERROR_PREFIX, NO_CHORDS_MESSAGE, AnalysisState
-from backend.schemas import InstrumentGuide, RomanAnalysis, SongAnalysis
+from backend.schemas import InstrumentGuide, SongAnalysis
 
 
 def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
@@ -423,109 +422,38 @@ def features_node(state: AnalysisState) -> dict:
 
 
 def roman_analysis_node(state: AnalysisState) -> dict:
-    """Convert chord labels to Roman numerals based on the detected key."""
+    """Convert chord labels to Roman numerals using music21 (with legacy fallback).
+
+    Delegates to ``backend.theory.roman.analyze_roman`` which:
+    - uses music21's ``romanNumeralFromChord`` for correct figured-bass numerals
+      (sevenths, inversions, secondary dominants, borrowed chords)
+    - detects cadences (PAC/IAC/half/deceptive/plagal) over the numeral sequence
+    - detects modulations with a sliding-window key analyzer
+    - falls back to the hand-rolled diatonic mapper when music21 is unavailable
+
+    The result is a ``RomanAnalysis`` with:
+    - ``entries`` — time-aligned per-chord list (no dedup, no truncation)
+    - ``progression`` / ``function`` — legacy fields for TheoryPanel.tsx back-compat
+    - ``summary_progression`` — deduped ≤8 numerals for compact UI chips
+    - ``cadences`` / ``modulations`` — structured event lists
+    """
     key = state.get("key", "C major")
     chords = state.get("chords", [])
 
     if not chords:
         return {"roman": None}
 
-    # 1. Parse Key
-    match = re.match(r"^([A-G][b#]?)\s+(major|minor)$", key, re.IGNORECASE)
-    key_root = match.group(1).upper() if match else "C"
-    key_mode = match.group(2).lower() if match else "major"
+    from backend.theory.roman import analyze_roman
 
-    # Pitch naming system
-    notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    enharmonics = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
-
-    def get_pitch_class(note: str) -> int:
-        n = note.upper()
-        n = enharmonics.get(n, n)
-        return notes.index(n) if n in notes else 0
-
-    key_pc = get_pitch_class(key_root)
-
-    # Roman numerals for major/minor scales (0 to 11 semitone offsets from root)
-    # Maps semitone offset -> (RomanNumeralString, is_minor)
-    diatonic_major = {
-        0: ("I", False),
-        2: ("ii", True),
-        4: ("iii", True),
-        5: ("IV", False),
-        7: ("V", False),
-        9: ("vi", True),
-        11: ("vii°", True),
-    }
-    diatonic_minor = {
-        0: ("i", True),
-        2: ("ii°", True),
-        3: ("III", False),
-        5: ("iv", True),
-        7: ("v", True),
-        8: ("VI", False),
-        10: ("VII", False),
-    }
-
-    diatonic_map = diatonic_minor if key_mode == "minor" else diatonic_major
-
-    roman_chords = []
-    functions = []
-
-    for c_event in chords:
-        c_name = c_event.chord
-        if c_name in ("N.C.", "N", ""):
-            continue
-
-        # Parse root and quality
-        c_match = re.match(r"^([A-G][b#]?)(.*)$", c_name)
-        if not c_match:
-            continue
-
-        c_root, c_suffix = c_match.groups()
-        c_pc = get_pitch_class(c_root)
-
-        # Calculate interval offset
-        offset = (c_pc - key_pc) % 12
-
-        # Map to roman numeral
-        if offset in diatonic_map:
-            numeral, is_min = diatonic_map[offset]
-            # Adjust case based on chord type
-            is_minor_chord = "m" in c_suffix.lower() and "maj" not in c_suffix.lower()
-            if is_minor_chord and not is_min:
-                numeral = numeral.lower()
-            elif not is_minor_chord and is_min:
-                numeral = numeral.upper()
-        else:
-            # Chromatic/Borrowed Chord (simple fallback)
-            accidental = "b" if offset in (1, 3, 6, 8, 10) else "#"
-            # Approximate chromatic degree
-            numeral = f"{accidental}degree"
-
-        roman_chords.append(numeral)
-
-        # Determine simple function
-        if offset == 0:
-            functions.append("tonic")
-        elif offset == 7:
-            functions.append("dominant")
-        elif offset == 5:
-            functions.append("subdominant")
-        elif offset == 9 if key_mode == "major" else offset == 3:
-            functions.append("submediant")
-        else:
-            functions.append("borrowed")
-
-    # Deduplicate progressions to keep unique representations
-    dedup_roman = []
-    dedup_func = []
-    for r, f in zip(roman_chords, functions):
-        if not dedup_roman or dedup_roman[-1] != r:
-            dedup_roman.append(r)
-            dedup_func.append(f)
-
-    return {"roman": RomanAnalysis(key=key, progression=dedup_roman[:8], function=dedup_func[:8])}
+    try:
+        roman = analyze_roman(chords, key)
+        return {"roman": roman}
+    except Exception as exc:  # pragma: no cover
+        # Degradation: log and return None so the fan-out doesn't block
+        logging.getLogger(__name__).warning(
+            "roman_analysis_node: analyze_roman raised %s; returning None", exc
+        )
+        return {"roman": None}
 
 
 def theory_node(state: AnalysisState) -> dict:
