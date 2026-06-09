@@ -346,3 +346,122 @@ def test_detect_modulations_returns_at_index():
         assert "to_key" in m
         assert "at_index" in m
         assert isinstance(m["at_index"], int)
+
+
+# ---------------------------------------------------------------------------
+# G1.9 — analyze_roman public API
+# ---------------------------------------------------------------------------
+
+def test_analyze_roman_returns_roman_analysis():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import RomanAnalysis, ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="G7"),
+        ChordEvent(start=4.0, end=6.0, chord="Am"),
+        ChordEvent(start=6.0, end=8.0, chord="F"),
+    ]
+    result = analyze_roman(chords, "C major")
+
+    assert isinstance(result, RomanAnalysis)
+    assert result.key == "C major"
+    assert len(result.entries) == 4
+    assert result.entries[0].numeral == "I"
+    assert result.entries[1].numeral == "V7"
+    assert result.entries[2].numeral == "vi"
+    assert result.entries[3].numeral == "IV"
+
+
+def test_analyze_roman_entries_are_time_aligned():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=1.5, chord="C"),
+        ChordEvent(start=1.5, end=3.0, chord="G"),
+    ]
+    result = analyze_roman(chords, "C major")
+    assert result.entries[0].start == 0.0
+    assert result.entries[0].end == 1.5
+    assert result.entries[1].start == 1.5
+    assert result.entries[1].end == 3.0
+
+
+def test_analyze_roman_populates_legacy_fields():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="G7"),
+        ChordEvent(start=4.0, end=6.0, chord="Am"),
+        ChordEvent(start=6.0, end=8.0, chord="F"),
+    ]
+    result = analyze_roman(chords, "C major")
+    # Legacy fields must be populated (back-compat for TheoryPanel.tsx)
+    assert result.progression == ["I", "V7", "vi", "IV"]
+    assert result.function == ["tonic", "dominant", "submediant", "subdominant"]
+    # summary_progression capped at <=8
+    assert result.summary_progression is not None
+    assert len(result.summary_progression) <= 8
+
+
+def test_analyze_roman_cadences_pac_detected():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="F"),
+        ChordEvent(start=2.0, end=4.0, chord="G"),
+        ChordEvent(start=4.0, end=6.0, chord="C"),
+    ]
+    result = analyze_roman(chords, "C major")
+    # G -> C = PAC
+    cadence_types = [c["type"] for c in result.cadences]
+    assert "PAC" in cadence_types
+
+
+def test_analyze_roman_secondary_dominant_flagged():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="D7"),
+        ChordEvent(start=4.0, end=6.0, chord="G"),
+    ]
+    result = analyze_roman(chords, "C major")
+    d7_entry = next(e for e in result.entries if e.chord == "D7")
+    assert d7_entry.numeral == "V7/V"
+    assert d7_entry.is_secondary is True
+
+
+def test_analyze_roman_borrowed_chord_flagged():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="Bb"),
+        ChordEvent(start=4.0, end=6.0, chord="F"),
+        ChordEvent(start=6.0, end=8.0, chord="C"),
+    ]
+    result = analyze_roman(chords, "C major")
+    bb_entry = next(e for e in result.entries if e.chord == "Bb")
+    assert bb_entry.is_borrowed is True
+    assert bb_entry.numeral == "bVII"
+
+
+def test_analyze_roman_no_chord_tokens_skipped():
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="N.C."),
+        ChordEvent(start=4.0, end=6.0, chord="G"),
+    ]
+    result = analyze_roman(chords, "C major")
+    # N.C. is skipped — only 2 entries
+    assert len(result.entries) == 2
