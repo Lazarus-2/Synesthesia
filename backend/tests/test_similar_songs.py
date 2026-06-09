@@ -173,6 +173,7 @@ async def test_fetch_similar_songs_no_key_uses_deezer(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # G4.3 — Empty/error responses return [] without raising
+# (tests already committed; section marker retained for traceability)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
