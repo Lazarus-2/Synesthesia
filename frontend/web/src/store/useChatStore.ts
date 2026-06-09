@@ -21,11 +21,14 @@ function writeSession(id: string | null) {
 export interface ToolStatus { name: string; phase: 'start' | 'end'; }
 
 export interface ChatContext {
+  loaded?: boolean;
   title?: string;
   artist?: string;
   key?: string;
-  bpm?: number;
+  /** Backend emits `tempo` (BPM); kept as `tempo` to match the wire format. */
+  tempo?: number;
   status?: 'ok' | 'degraded' | 'failed';
+  summary?: string;
 }
 
 interface ChatState {

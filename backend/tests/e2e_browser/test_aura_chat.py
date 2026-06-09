@@ -57,17 +57,19 @@ def test_chat_sendmessage_request_shape(
             body=_SCRIPTED_SSE,
         )
 
-    # Seed an auth token + a known analysis job id into the stores via storage.
+    # Seed an auth token + a KNOWN job id into localStorage so the analysis
+    # store hydrates with a predictable value.  The store reads jobId from
+    # localStorage on startup via the route (sample-blackbird sets it), but we
+    # also inject a sentinel directly so we can assert the request body carries
+    # THAT exact value rather than merely checking that the key is present.
+    KNOWN_JOB_ID = "job-e2e-blackbird-001"
     page.add_init_script(
         "window.localStorage.setItem('synesthesia.auth.token', JSON.stringify('jwt-e2e-token'));"
         "window.localStorage.setItem('synesthesia.auth.user', JSON.stringify({user_id:'u1',username:'tester'}));"
+        # Pre-seed a known jobId so the analysis store picks it up on hydration.
+        f"window.localStorage.setItem('synesthesia.analysis.jobId', JSON.stringify('{KNOWN_JOB_ID}'));"
     )
     _seed_loaded_analysis(page, frontend_url)
-
-    # Force a known analysis_job_id into the analysis store (player route sets it).
-    page.evaluate(
-        "() => { const s = window.__ANALYSIS_JOBID__; }"  # no-op marker; jobId set by route
-    )
 
     page.route("**/api/v1/chat/stream", _handle)
 
@@ -86,7 +88,12 @@ def test_chat_sendmessage_request_shape(
     assert captured, "chat/stream was never called"
     body = captured["body"]
     assert body["message"] == "Why G?"
-    assert "analysis_job_id" in body
+    # Assert the KNOWN job id was forwarded — not just that the key exists.
+    # (If the store didn't hydrate from localStorage the value would be null,
+    # which would silently pass an "in body" check but break server grounding.)
+    assert body.get("analysis_job_id") == KNOWN_JOB_ID, (
+        f"expected analysis_job_id={KNOWN_JOB_ID!r}, got {body.get('analysis_job_id')!r}"
+    )
     assert "session_id" in body
     assert body["tutor_mode"] is False
     assert "history" not in body, "client must STOP sending history (server-owned now)"

@@ -24,7 +24,7 @@ function extractSources(content: string): { text: string; sources: string[] } {
 }
 
 export const ChatPanel: React.FC = () => {
-  const { messages, isStreaming, sendMessage, tutorMode, setTutorMode, activeTool } =
+  const { messages, isStreaming, sendMessage, tutorMode, setTutorMode, activeTool, context } =
     useChatStore();
   const { analysis, jobId } = useAnalysisStore();
   const token = useAuthStore((s) => s.token);
@@ -67,9 +67,26 @@ export const ChatPanel: React.FC = () => {
     );
   }
 
-  const discussing = analysis
-    ? `Discussing: ${analysis.title} (${analysis.key}, ${Math.round(analysis.tempo)} BPM)`
-    : null;
+  // Prefer the server-authoritative `context` frame (emitted at the start of
+  // every chat stream) so the chip reflects the song the CHAT SESSION is
+  // grounded on. Fall back to the client-local analysis store before context
+  // has arrived. Show a caveat marker when the analysis is degraded/failed.
+  const contextStatus = context?.status;
+  const isDegraded =
+    contextStatus === "degraded" || contextStatus === "failed";
+
+  let discussing: string | null = null;
+  if (context?.loaded !== false && (context?.title || context?.key)) {
+    // Server context is available — use it.
+    const parts: string[] = [];
+    if (context.key) parts.push(context.key);
+    if (context.tempo != null) parts.push(`${Math.round(context.tempo)} BPM`);
+    const detail = parts.length ? ` (${parts.join(", ")})` : "";
+    discussing = `Discussing: ${context.title ?? "this song"}${detail}`;
+  } else if (analysis) {
+    // Context hasn't arrived yet — fall back to the analysis store.
+    discussing = `Discussing: ${analysis.title} (${analysis.key}, ${Math.round(analysis.tempo)} BPM)`;
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -104,8 +121,16 @@ export const ChatPanel: React.FC = () => {
           </button>
         </div>
         {discussing && (
-          <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-on-surface-variant bg-white/5 border border-white/10 rounded-full px-2.5 py-1">
+          <div
+            className={`mt-2 inline-flex items-center gap-1 text-[11px] rounded-full px-2.5 py-1 border ${
+              isDegraded
+                ? "text-warning bg-warning/10 border-warning/30"
+                : "text-on-surface-variant bg-white/5 border-white/10"
+            }`}
+            title={isDegraded ? `Analysis is ${contextStatus} — some facts may be unreliable` : undefined}
+          >
             <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
+            {isDegraded && <span aria-label="partial analysis">⚠</span>}
             {discussing}
           </div>
         )}

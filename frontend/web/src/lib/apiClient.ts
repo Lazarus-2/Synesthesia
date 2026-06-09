@@ -213,10 +213,18 @@ function handleFrame<TChunk, TDone>(
 ): void {
   let eventName: string | null = null;
   let dataRaw = "";
+  // SSE frames may use CRLF or LF line endings; split("\\n") handles both
+  // after the caller strips "\\r" via the blank-line boundary split.
+  // Per the SSE spec, multiple `data:` lines within one frame are joined
+  // with a newline — do NOT concat without a separator or multi-line JSON
+  // payloads would be corrupted.
   for (const line of frame.split("\n")) {
     if (line.startsWith("event:")) eventName = line.slice(6).trim();
-    else if (line.startsWith("data:")) dataRaw += line.slice(5).trim();
+    else if (line.startsWith("data:")) {
+      dataRaw += (dataRaw ? "\n" : "") + line.slice(5);
+    }
   }
+  dataRaw = dataRaw.trim();
   if (!dataRaw && eventName === null) return;
 
   // Legacy completion sentinel.
