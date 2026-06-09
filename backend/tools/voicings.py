@@ -285,6 +285,78 @@ def _guitar_barre_shape(root: str, quality: str, prefer_low_fret: bool = False) 
     return None  # quality not supported by any movable template
 
 
+# ---------------------------------------------------------------------------
+# G3.2 — Piano voicing generator
+# ---------------------------------------------------------------------------
+
+# Intervals (semitones above root) for each canonical quality.
+# Qualities not listed here return None (no piano voicing defined).
+_PIANO_INTERVALS: dict[str, list[int]] = {
+    "maj":   [0, 4, 7],
+    "min":   [0, 3, 7],
+    "dom7":  [0, 4, 7, 10],
+    "maj7":  [0, 4, 7, 11],
+    "min7":  [0, 3, 7, 10],
+    "dim":   [0, 3, 6],
+    "dim7":  [0, 3, 6, 9],
+    "m7b5":  [0, 3, 6, 10],
+    "aug":   [0, 4, 8],
+    "sus2":  [0, 2, 7],
+    "sus4":  [0, 5, 7],
+    "maj9":  [0, 4, 7, 11, 14],
+    "min9":  [0, 3, 7, 10, 14],
+    "9":     [0, 4, 7, 10, 14],
+    "6":     [0, 4, 7, 9],
+    "min13": [0, 3, 7, 10, 14, 17, 21],
+    "maj13": [0, 4, 7, 11, 14, 17, 21],
+    "13":    [0, 4, 7, 10, 14, 17, 21],
+    "add9":  [0, 4, 7, 14],
+}
+
+
+def _midi_to_note_name(midi: int) -> str:
+    """Convert a MIDI pitch to a note name with octave, e.g. 60 -> 'C4'."""
+    octave = (midi // 12) - 1
+    return f"{_NOTES_SHARP[midi % 12]}{octave}"
+
+
+def _piano_chord_voicing(root: str, quality: str) -> dict | None:
+    """Generate a closed-position piano voicing from chord-tone intervals.
+
+    Returns ``{"right_hand": list[str], "left_hand": list[str]}`` or ``None``
+    when the quality has no defined interval set (e.g. 'power').
+
+    Right hand starts at C4 (MIDI 60) for root C; other roots are offset
+    accordingly.  Notes that would exceed E5 (MIDI 76) wrap down an octave
+    so the voicing stays in a singable mid-range.
+    """
+    intervals = _PIANO_INTERVALS.get(quality)
+    if intervals is None:
+        return None
+
+    root_sem = _root_semitone(root)
+    if root_sem is None:
+        return None
+
+    # Anchor: place the root in octave 4 (C4 = MIDI 60).
+    root_midi = 60 + root_sem  # C4..B4
+
+    # Build right-hand notes.
+    right_hand: list[str] = []
+    for interval in intervals:
+        note_midi = root_midi + interval
+        # If the note is above E5 (MIDI 76), move it down an octave so we stay
+        # within a comfortable single-octave span for beginners.
+        if note_midi > 76:
+            note_midi -= 12
+        right_hand.append(_midi_to_note_name(note_midi))
+
+    # Left hand: just the root in octave 3.
+    left_hand = [_midi_to_note_name(root_midi - 12)]
+
+    return {"right_hand": right_hand, "left_hand": left_hand}
+
+
 def get_chord_diagrams(
     chords: list[str],
     instrument: Instrument = "guitar",

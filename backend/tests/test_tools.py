@@ -327,6 +327,46 @@ class TestTransposeCompleteness:
         assert transpose_chord("B5", 1) == "C5"
 
 
+class TestPianoVoicings:
+    """G3.2 — piano voicings generated from chord-tone intervals."""
+
+    def test_c_dominant7_has_four_right_hand_notes(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        v = _piano_chord_voicing("C", "dom7")
+        assert v is not None
+        assert v["right_hand"] == ["C4", "E4", "G4", "A#4"]  # Bb = A#
+
+    def test_g_major7_intervals(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        v = _piano_chord_voicing("G", "maj7")
+        assert v is not None
+        # G4 B4 D5 F#4 — D5 because G+7=D wraps to next octave
+        assert "G4" in v["right_hand"]
+        assert "F#4" in v["right_hand"]   # maj7 interval: 11 semitones above G
+
+    def test_d_minor_triad(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        v = _piano_chord_voicing("D", "min")
+        assert v is not None
+        assert v["right_hand"] == ["D4", "F4", "A4"]
+
+    def test_left_hand_is_root_only(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        v = _piano_chord_voicing("A", "min7")
+        assert v["left_hand"] == ["A3"]
+
+    def test_bb_major_works(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        v = _piano_chord_voicing("Bb", "maj")
+        assert v is not None
+        assert v["right_hand"][0] == "A#4"   # Bb normalised to A#
+
+    def test_unsupported_quality_returns_none(self):
+        from backend.tools.voicings import _piano_chord_voicing
+        # 'power' chord on piano has no standard voicing defined
+        assert _piano_chord_voicing("C", "power") is None
+
+
 class TestBarreVoicings:
     """G3.1 — guitar movable-shape math."""
 
