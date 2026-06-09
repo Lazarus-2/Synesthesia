@@ -2,6 +2,36 @@
 
 import React from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
+import { SimilarSongs } from "./SimilarSongs";
+
+// ---- sub-components ----
+
+const TechniqueChip: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+    {label}
+  </span>
+);
+
+const CadenceCallout: React.FC<{ type: string; label: string }> = ({ type, label }) => {
+  const colorMap: Record<string, string> = {
+    PAC: "border-secondary-container bg-secondary-container/10 text-on-secondary-container",
+    IAC: "border-secondary-container/60 bg-secondary-container/5 text-on-secondary-container",
+    half: "border-primary/40 bg-primary/5 text-primary",
+    deceptive: "border-error/40 bg-error/5 text-error-container",
+    plagal: "border-tertiary/40 bg-tertiary/5 text-on-surface-variant",
+  };
+  const cls = colorMap[type] ?? "border-white/10 bg-white/5 text-on-surface-variant";
+  return (
+    <div className={`flex items-center gap-2 border-l-2 ${cls} px-3 py-2 rounded-r-lg`}>
+      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+        music_note
+      </span>
+      <span className="text-xs font-medium">{label}</span>
+    </div>
+  );
+};
+
+// ---- main component ----
 
 export const TheoryPanel: React.FC = () => {
   const { analysis } = useAnalysisStore();
@@ -16,20 +46,21 @@ export const TheoryPanel: React.FC = () => {
 
   const roman = analysis.roman;
   const theory = analysis.theory;
+  const cadences = roman?.cadences ?? [];
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
       <h2 className="font-headline text-2xl font-medium text-white">Analysis</h2>
 
-      {/* Roman Numeral Function Card */}
+      {/* Roman Numeral Function Card — uses entries[0] when available, falls back to flat arrays */}
       {roman && (
         <div className="flex items-center gap-4 bg-surface-container-high rounded-lg p-4 border border-white/5">
           <div className="font-headline text-4xl font-semibold text-primary">
-            {roman.progression?.[0] || "I"}
+            {roman.entries?.[0]?.numeral ?? roman.progression?.[0] ?? "I"}
           </div>
           <div className="flex-grow">
             <p className="text-sm font-semibold text-on-surface">
-              {roman.function?.[0] || "Tonic Chord"}
+              {roman.entries?.[0]?.function ?? roman.function?.[0] ?? "Tonic Chord"}
             </p>
             <p className="text-sm text-on-surface-variant">
               Key of {roman.key || analysis.key}
@@ -38,7 +69,7 @@ export const TheoryPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Chord Progression Display */}
+      {/* Chord Progression Row */}
       {roman?.progression && (
         <div className="flex gap-2 font-headline text-4xl text-on-surface-variant/70 flex-wrap">
           {roman.progression.map((numeral, i) => (
@@ -50,88 +81,128 @@ export const TheoryPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Structured AI Insight — renders chips when theory object is present */}
+      {/* ---- Structured theory block ---- */}
       {theory ? (
-        <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="material-symbols-outlined text-secondary-container"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              lightbulb
-            </span>
-            <h4 className="text-sm font-semibold text-on-secondary-container">
-              AI Insight
-            </h4>
-          </div>
-
-          {/* Key summary */}
-          <p className="text-sm text-on-surface/90 leading-relaxed">
-            {theory.key_summary}
-          </p>
-
-          {/* Pattern chip */}
+        <>
+          {/* Pattern name */}
           {theory.pattern_name && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+            <div>
+              <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-1">
                 Pattern
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+              </h3>
+              <p className="font-headline text-lg font-semibold text-on-surface">
                 {theory.pattern_name}
-              </span>
+              </p>
             </div>
           )}
 
-          {/* Technique chips */}
+          {/* Notable techniques chips */}
           {theory.notable_techniques && theory.notable_techniques.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+            <div>
+              <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-2">
                 Techniques
-              </span>
-              {theory.notable_techniques.map((t, i) => (
-                <span
-                  key={i}
-                  className="px-2 py-0.5 rounded-full bg-secondary/20 text-secondary text-xs font-medium"
-                >
-                  {t}
-                </span>
-              ))}
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {theory.notable_techniques.map((t, i) => (
+                  <TechniqueChip key={i} label={t} />
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Similar song citation */}
-          {theory.similar_song && (
-            <p className="text-xs text-on-surface-variant italic">
-              Similar: {theory.similar_song}
-            </p>
+          {/* Function explanation prose */}
+          {theory.function_explanation && (
+            <div className="border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className="material-symbols-outlined text-secondary-container"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  lightbulb
+                </span>
+                <h4 className="text-sm font-semibold text-on-secondary-container">
+                  AI Insight
+                </h4>
+              </div>
+              <p className="text-sm text-on-surface/90 leading-relaxed">
+                {theory.function_explanation}
+              </p>
+            </div>
           )}
 
-          {/* Function explanation as prose */}
-          <p className="text-sm text-on-surface/80 leading-relaxed">
-            {theory.function_explanation}
-          </p>
-        </div>
-      ) : analysis.theory_explanation ? (
-        /* Legacy fallback: render the flat string if no structured theory */
-        <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className="material-symbols-outlined text-secondary-container"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              lightbulb
-            </span>
-            <h4 className="text-sm font-semibold text-on-secondary-container">
-              AI Insight
-            </h4>
-          </div>
-          <p className="text-sm text-on-surface/90 leading-relaxed whitespace-pre-wrap">
-            {analysis.theory_explanation}
-          </p>
-        </div>
-      ) : null}
+          {/* Cadence callouts from roman.cadences — identified by chord index */}
+          {cadences.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-2">
+                Cadences
+              </h3>
+              <div className="flex flex-col gap-2">
+                {cadences.map((c, i) => {
+                  const numeralsAtIndex =
+                    roman?.progression && c.index > 0
+                      ? [roman.progression[c.index - 1], roman.progression[c.index]].filter(Boolean)
+                      : roman?.progression?.slice(c.index, c.index + 1) ?? [];
+                  const numeralStr = numeralsAtIndex.join(" → ");
+                  const labelMap: Record<string, string> = {
+                    PAC: `Perfect Authentic Cadence${numeralStr ? ` — ${numeralStr}` : ""}`,
+                    IAC: `Imperfect Authentic Cadence${numeralStr ? ` — ${numeralStr}` : ""}`,
+                    half: `Half Cadence${numeralStr ? ` — ${numeralStr}` : ""}`,
+                    deceptive: `Deceptive Cadence${numeralStr ? ` — ${numeralStr}` : ""}`,
+                    plagal: `Plagal Cadence${numeralStr ? ` — ${numeralStr}` : ""}`,
+                  };
+                  return (
+                    <CadenceCallout
+                      key={i}
+                      type={c.type}
+                      label={labelMap[c.type] ?? `${c.type}${numeralStr ? ` — ${numeralStr}` : ""}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-      {/* Vibe Palette */}
+          {/* Grounded similar song citation from theory object */}
+          {theory.similar_song && (
+            <div className="flex items-center gap-3 bg-surface-container-high rounded-lg px-4 py-3 border border-white/5">
+              <span
+                className="material-symbols-outlined text-primary"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                queue_music
+              </span>
+              <div>
+                <p className="text-xs text-on-surface-variant font-semibold uppercase tracking-widest">
+                  Similar song
+                </p>
+                <p className="text-sm text-on-surface font-medium">{theory.similar_song}</p>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* Legacy fallback — flat theory_explanation string */
+        analysis.theory_explanation && (
+          <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className="material-symbols-outlined text-secondary-container"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                lightbulb
+              </span>
+              <h4 className="text-sm font-semibold text-on-secondary-container">
+                AI Insight
+              </h4>
+            </div>
+            <p className="text-sm text-on-surface/90 leading-relaxed whitespace-pre-wrap">
+              {analysis.theory_explanation}
+            </p>
+          </div>
+        )
+      )}
+
+      {/* Vibe Palette — unchanged */}
       {analysis.vibe_palette && analysis.vibe_palette.length > 0 && (
         <div className="mt-4">
           <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-3">
@@ -149,6 +220,9 @@ export const TheoryPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Similar Songs panel — self-hides when empty */}
+      <SimilarSongs />
     </div>
   );
 };
