@@ -457,15 +457,20 @@ def roman_analysis_node(state: AnalysisState) -> dict:
 
 
 def theory_node(state: AnalysisState) -> dict:
-    """LLM call: generate natural-language theory explanation."""
-    from backend.chains.theory_chain import build_theory_chain
+    """LLM call: generate structured theory explanation."""
+    from backend.chains.theory_chain import build_theory_chain, to_text
 
     song_obj = _song_analysis_from_state(state)
 
     try:
         chain = build_theory_chain()
-        text = chain.invoke(song_obj)
-        return {"theory_explanation": text}
+        te = chain.invoke(song_obj)
+        # Write both the structured object AND the back-compat string so
+        # tasks.py, Mongo persistence, and old consumers all keep working.
+        return {
+            "theory": te,
+            "theory_explanation": to_text(te),
+        }
     except Exception as e:
         # Human-friendly degraded message — don't expose raw exception text.
         # The deterministic chord/Roman analysis is still useful on its own;
@@ -475,6 +480,7 @@ def theory_node(state: AnalysisState) -> dict:
         roman = song_obj.roman.progression if song_obj.roman else []
         roman_str = " → ".join(roman[:8]) if roman else "(no progression detected)"
         return {
+            "theory": None,
             "errors": ["theory: LLM commentary engine offline; prose explanation skipped"],
             "theory_explanation": (
                 f"The deterministic part of the analysis ran cleanly: this song "

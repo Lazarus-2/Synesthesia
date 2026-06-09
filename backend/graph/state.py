@@ -18,6 +18,7 @@ from backend.schemas import (
     InstrumentGuide,
     RomanAnalysis,
     SongSection,
+    TheoryExplanation,
 )
 
 # Shared constant that couples features_node (message builder) and
@@ -62,7 +63,8 @@ class AnalysisState(TypedDict, total=False):
 
     # --- LLM outputs ---
     roman: RomanAnalysis | None
-    theory_explanation: str
+    theory: TheoryExplanation | None       # structured object (G2)
+    theory_explanation: str                # back-compat plain string (filled from theory.text)
     instrument_guide: InstrumentGuide | None
     similar_songs: list[dict]
 
