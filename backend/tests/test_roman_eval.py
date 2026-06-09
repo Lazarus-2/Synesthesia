@@ -22,8 +22,6 @@ from pathlib import Path
 import pytest
 from music21 import converter
 from music21 import harmony as m21_harmony
-from music21 import key as m21key
-from music21 import roman as m21roman
 
 GOLDEN_PATH = Path(__file__).parent / "roman_golden.json"
 
@@ -355,11 +353,15 @@ def test_roman_eval_marker_registered():
     import subprocess
     import sys
 
+    # Run from backend/ so pytest picks up backend/pyproject.toml where the
+    # marker is registered.  backend/ is two directories above this test file
+    # (backend/tests/test_roman_eval.py -> backend/).
+    backend_dir = Path(__file__).parent.parent
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "--markers"],
         capture_output=True,
         text=True,
-        cwd=str(Path(__file__).parent.parent.parent),  # repo root
+        cwd=str(backend_dir),
     )
     assert "roman_eval" in result.stdout, (
         "'roman_eval' not found in pytest --markers output. "

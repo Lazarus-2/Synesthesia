@@ -153,6 +153,7 @@ addopts = "--strict-markers --tb=short"
 markers = [
     "integration: needs live Mongo replica set / Redis",
     "ml: needs heavy audio-ML deps (demucs / basic-pitch / madmom)",
+    "roman_eval: offline Roman-numeral correctness eval (pure music21, no network/LLM/audio)",
 ]
 
 [tool.ruff]
