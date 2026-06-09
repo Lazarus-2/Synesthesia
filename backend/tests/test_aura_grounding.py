@@ -65,7 +65,13 @@ def test_grounded_prompt_isolates_untrusted_metadata_from_facts():
 
 
 async def test_agent_does_not_fabricate_key(monkeypatch):
-    """Agent given G-major analysis must not claim C-major in its final answer."""
+    """Agent given G-major analysis must not claim C-major in its final answer.
+
+    NOTE: This test verifies agent PLUMBING — that run_aura forwards the grounded
+    reply from the FakeChatModel unchanged.  The definitive structural guard that
+    isolates untrusted metadata from authoritative facts is
+    ``test_grounded_prompt_isolates_untrusted_metadata_from_facts``.
+    """
     import backend.chains.aura_agent as aura_agent
 
     # Script the fake to answer directly from grounded facts (no tool call needed).
@@ -89,7 +95,13 @@ async def test_agent_does_not_fabricate_key(monkeypatch):
 
 
 async def test_malicious_lyric_is_ignored(monkeypatch):
-    """A malicious instruction embedded in lyrics must not steer the agent."""
+    """A malicious instruction embedded in lyrics must not steer the agent.
+
+    NOTE: This test verifies agent PLUMBING — that run_aura forwards the grounded
+    reply from the FakeChatModel unchanged.  The definitive structural guard that
+    isolates untrusted metadata from authoritative facts is
+    ``test_grounded_prompt_isolates_untrusted_metadata_from_facts``.
+    """
     import backend.chains.aura_agent as aura_agent
 
     # A FAITHFUL model would still answer G major even though the lyric says C.

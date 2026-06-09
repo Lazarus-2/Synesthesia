@@ -18,7 +18,7 @@
                    "roman": {"progression": ["I", "V", "vi", "IV"]}},
       "scripted": [{"tool": "transpose_progression", "args": {"chords": ["C", "G", "Am", "F"], "semitones": 2}},
                    {"answer": "Up two semitones: D, A, Bm, G."}],
-      "expected": {"tools": ["transpose_progression"], "grounded_fact": "D", "forbidden": ["E major"]}
+      "expected": {"tools": ["transpose_progression"], "grounded_fact": "Up two semitones", "forbidden": ["E major"]}
     },
     {
       "id": "capo_open_shapes",
@@ -36,7 +36,7 @@
                    "chords": [{"chord": "C"}, {"chord": "Am"}, {"chord": "F"}, {"chord": "G"}]},
       "scripted": [{"tool": "get_chord_voicing", "args": {"chord": "Am", "instrument": "guitar"}},
                    {"answer": "Am is x02210 in open position."}],
-      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "Am"}
+      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "Am is x02210"}
     },
     {
       "id": "color_of_chord",
@@ -108,7 +108,7 @@
                    "chords": [{"chord": "A"}, {"chord": "E"}, {"chord": "F#m"}, {"chord": "D"}]},
       "scripted": [{"tool": "transpose_progression", "args": {"chords": ["A", "E", "F#m", "D"], "semitones": -2}},
                    {"answer": "Down a whole step: G, D, Em, C."}],
-      "expected": {"tools": ["transpose_progression"], "grounded_fact": "G", "forbidden": ["Bb", "Ab"]}
+      "expected": {"tools": ["transpose_progression"], "grounded_fact": "Down a whole step", "forbidden": ["Bb", "Ab"]}
     },
     {
       "id": "color_of_g_chord",
@@ -163,7 +163,7 @@
                    "chords": [{"chord": "G"}, {"chord": "C"}, {"chord": "Em"}, {"chord": "D"}]},
       "scripted": [{"tool": "get_chord_voicing", "args": {"chord": "G", "instrument": "ukulele"}},
                    {"answer": "G on ukulele: 0232."}],
-      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "G"}
+      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "G on ukulele"}
     },
     {
       "id": "transpose_up_tritone",
@@ -181,8 +181,8 @@
                    "chords": [{"chord": "Eb"}, {"chord": "Cm"}, {"chord": "Ab"}, {"chord": "Bb"}],
                    "roman": {"progression": ["I", "vi", "IV", "V"]}},
       "scripted": [{"tool": "find_similar_songs", "args": {"analysis_job_id": "seb1"}},
-                   {"answer": "Songs with a similar I-vi-IV-V shape in Eb include many ballads."}],
-      "expected": {"tools": ["find_similar_songs"], "grounded_fact": "Eb"}
+                   {"answer": "Songs with a similar I-vi-IV-V shape in Eb major include many ballads."}],
+      "expected": {"tools": ["find_similar_songs"], "grounded_fact": "in Eb major"}
     },
     {
       "id": "theory_ii_v_i",
@@ -247,7 +247,7 @@
                    "chords": [{"chord": "Em"}, {"chord": "A"}, {"chord": "D"}]},
       "scripted": [{"tool": "get_chord_voicing", "args": {"chord": "E", "instrument": "bass"}},
                    {"answer": "E on bass: open 4th string (E2)."}],
-      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "E"}
+      "expected": {"tools": ["get_chord_voicing"], "grounded_fact": "E on bass"}
     },
     {
       "id": "transpose_capo_combo",
@@ -256,7 +256,7 @@
                    "chords": [{"chord": "E"}, {"chord": "B"}, {"chord": "C#m"}, {"chord": "A"}]},
       "scripted": [{"tool": "transpose_progression", "args": {"chords": ["E", "B", "C#m", "A"], "semitones": 1}},
                    {"answer": "Up a half step: F, C, Dm, Bb."}],
-      "expected": {"tools": ["transpose_progression"], "grounded_fact": "F"}
+      "expected": {"tools": ["transpose_progression"], "grounded_fact": "Up a half step"}
     },
     {
       "id": "general_theory_no_song",

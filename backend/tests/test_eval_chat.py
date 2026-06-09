@@ -83,7 +83,7 @@ def test_eval_catches_faithfulness_errors():
     import asyncio
     from unittest.mock import AsyncMock, MagicMock
 
-    from langgraph.prebuilt import create_react_agent
+    from langchain.agents import create_agent as create_react_agent
 
     import backend.chains.aura_agent as aura_agent
     import backend.chains.aura_tools as aura_tools
@@ -120,7 +120,7 @@ def test_eval_catches_faithfulness_errors():
 
     try:
         agent = create_react_agent(
-            model=fake, tools=aura_tools.TOOLS, prompt=prompt, checkpointer=None
+            model=fake, tools=aura_tools.TOOLS, system_prompt=prompt, checkpointer=None
         )
         out = asyncio.run(
             agent.ainvoke({"messages": [("user", bad_item["question"])]},

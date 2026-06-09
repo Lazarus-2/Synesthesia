@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent as create_react_agent
 
 from backend.tests.fake_llm import FakeChatModel, ai
 from backend.tests.fake_llm import tool_call as _tool_call
@@ -105,7 +105,7 @@ async def _run_item(
         agent = create_react_agent(
             model=fake,
             tools=aura_tools.TOOLS,
-            prompt=prompt,
+            system_prompt=prompt,
             checkpointer=None,
         )
 

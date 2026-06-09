@@ -55,7 +55,7 @@ def test_helpers_build_messages_and_tool_calls():
 
 
 def test_drives_create_react_agent_tool_loop():
-    from langgraph.prebuilt import create_react_agent
+    from langchain.agents import create_agent as create_react_agent
 
     @tool
     def adder(x: int, y: int) -> int:
@@ -68,7 +68,7 @@ def test_drives_create_react_agent_tool_loop():
             ai("The answer is 5."),
         ]
     )
-    agent = create_react_agent(model=fake, tools=[adder], prompt="sys", checkpointer=None)
+    agent = create_react_agent(model=fake, tools=[adder], system_prompt="sys", checkpointer=None)
     out = agent.invoke({"messages": [("user", "add 2 and 3")]}, config={"recursion_limit": 6})
     kinds = [type(m).__name__ for m in out["messages"]]
     assert "ToolMessage" in kinds
