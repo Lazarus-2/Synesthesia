@@ -504,3 +504,185 @@ def test_fallback_produces_basic_diatonic_numerals(monkeypatch):
     result = roman_mod.analyze_roman(chords, "C major")
     assert "I" in result.progression
     assert "V" in result.progression
+
+
+# ---------------------------------------------------------------------------
+# G1-review fixes
+# ---------------------------------------------------------------------------
+
+# C1 — garbage chord does NOT abort the whole analysis
+def test_garbage_chord_skipped_keeps_good_chords():
+    """A single unparseable symbol ('Bbb', whitespace) is skipped; good chords survive."""
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="Bbb"),   # invalid -> skipped
+        ChordEvent(start=4.0, end=6.0, chord="   "),   # whitespace-only -> skipped
+        ChordEvent(start=6.0, end=8.0, chord="G"),
+    ]
+    result = analyze_roman(chords, "C major")
+    # Only C and G should appear
+    assert len(result.entries) == 2
+    assert result.entries[0].chord == "C"
+    assert result.entries[1].chord == "G"
+
+
+def test_whitespace_chord_skipped():
+    """smart_analyze returns None for whitespace-only chord symbols."""
+    from backend.theory.roman import smart_analyze
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    assert smart_analyze("   ", k) is None
+    assert smart_analyze("\t", k) is None
+
+
+# I1 — bVII/bVI/bIII in minor NOT relabelled as secondary dominants
+def test_bvii_in_minor_not_secondary():
+    """G in A minor should be bVII, not V/III."""
+    from backend.theory.roman import smart_analyze, is_secondary
+    from music21 import key as m21key
+    k = m21key.Key("a", "minor")
+    rn = smart_analyze("G", k)
+    assert rn is not None
+    assert rn.figure == "bVII", f"Expected bVII, got {rn.figure!r}"
+    assert is_secondary(rn) is False
+
+
+def test_bvi_in_minor_not_secondary():
+    """F in A minor should be bVI, not a secondary dominant."""
+    from backend.theory.roman import smart_analyze, is_secondary
+    from music21 import key as m21key
+    k = m21key.Key("a", "minor")
+    rn = smart_analyze("F", k)
+    assert rn is not None
+    assert rn.figure == "bVI", f"Expected bVI, got {rn.figure!r}"
+    assert is_secondary(rn) is False
+
+
+def test_am_f_g_am_labels_bvii():
+    """Am-F-G-Am progression: G is labelled bVII in A minor context."""
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="Am"),
+        ChordEvent(start=2.0, end=4.0, chord="F"),
+        ChordEvent(start=4.0, end=6.0, chord="G"),
+        ChordEvent(start=6.0, end=8.0, chord="Am"),
+    ]
+    result = analyze_roman(chords, "A minor")
+    g_entry = next(e for e in result.entries if e.chord == "G")
+    assert g_entry.numeral == "bVII", f"Expected bVII, got {g_entry.numeral!r}"
+    assert g_entry.is_secondary is False
+
+
+# I2 — cadence pass reuses retained RN objects (observable via correctness)
+def test_cadence_still_detected_after_i2_refactor():
+    """PAC cadence is still detected correctly after the I2 rn_objects refactor."""
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="F"),
+        ChordEvent(start=2.0, end=4.0, chord="G"),
+        ChordEvent(start=4.0, end=6.0, chord="C"),
+    ]
+    result = analyze_roman(chords, "C major")
+    cadence_types = [c["type"] for c in result.cadences]
+    assert "PAC" in cadence_types
+
+
+# I3 — detect_modulations capped at max_modulations
+def test_detect_modulations_capped():
+    """A noisy/random-ish long progression yields ≤ 8 modulations."""
+    from backend.theory.roman import detect_modulations
+    from music21 import key as m21key
+    import random
+    random.seed(0)
+    key_c = m21key.Key("C", "major")
+    all_chords = ["C", "G", "Am", "F", "D", "A", "Bm", "E", "B", "F#m",
+                  "Ab", "Eb", "Bb", "Dm", "Em", "Cm", "Gm"]
+    long_prog = [random.choice(all_chords) for _ in range(60)]
+    mods = detect_modulations(long_prog, key_c)
+    assert len(mods) <= 8, f"Expected ≤ 8 modulations, got {len(mods)}: {mods}"
+
+
+def test_detect_modulations_genuine_modulation_still_found():
+    """A genuine modulation (C → D major) is still detected even with the cap."""
+    from backend.theory.roman import detect_modulations
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # First 4 chords in C; then a sustained D-major run
+    symbols = ["C", "G", "Am", "F", "D", "A", "Bm", "G", "D", "A", "Bm", "G"]
+    mods = detect_modulations(symbols, k)
+    assert len(mods) >= 1
+    assert all(m["to_key"] != "C major" for m in mods)
+
+
+# Modal mixture (should-fix): Fm in C major
+def test_fm_in_c_major_is_borrowed():
+    """Fm in C major should be is_borrowed=True, function='chromatic'."""
+    from backend.theory.roman import smart_analyze, is_borrowed, harmonic_function
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("Fm", k)
+    assert rn is not None
+    assert is_borrowed(rn) is True, f"Fm in C major should be borrowed; figure={rn.figure!r}"
+    assert harmonic_function(rn) == "chromatic", (
+        f"Fm in C major should have function 'chromatic'; got {harmonic_function(rn)!r}"
+    )
+
+
+def test_fm_in_c_major_flagged_in_analyze_roman():
+    """analyze_roman flags Fm (iv) in C major as is_borrowed=True."""
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="Fm"),
+        ChordEvent(start=4.0, end=6.0, chord="C"),
+    ]
+    result = analyze_roman(chords, "C major")
+    fm_entry = next(e for e in result.entries if e.chord == "Fm")
+    assert fm_entry.is_borrowed is True
+    assert fm_entry.function == "chromatic"
+
+
+# E7 in minor figure normalisation (should-fix)
+def test_e7_in_minor_normalized():
+    """E7 in A minor should produce numeral 'V7', not 'V75#3'."""
+    from backend.theory.roman import analyze_roman
+    from backend.schemas import ChordEvent
+
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="Am"),
+        ChordEvent(start=2.0, end=4.0, chord="E7"),
+        ChordEvent(start=4.0, end=6.0, chord="Am"),
+    ]
+    result = analyze_roman(chords, "A minor")
+    e7_entry = next(e for e in result.entries if e.chord == "E7")
+    assert e7_entry.numeral == "V7", (
+        f"E7 in A minor: expected numeral 'V7', got {e7_entry.numeral!r}"
+    )
+    assert e7_entry.function == "dominant"
+
+
+# Legacy fallback enharmonics (should-fix)
+def test_legacy_fallback_enharmonics_cb_fb(monkeypatch):
+    """CB (C-flat = B) and FB (F-flat = E) are recognized in the legacy fallback."""
+    import backend.theory.roman as roman_mod
+    monkeypatch.setattr(roman_mod, "_MUSIC21_AVAILABLE", False)
+
+    from backend.schemas import ChordEvent
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="Cb"),   # Cb = B -> leading_tone in C major
+        ChordEvent(start=2.0, end=4.0, chord="Fb"),   # Fb = E -> mediant in C major
+    ]
+    result = roman_mod.analyze_roman(chords, "C major")
+    # Cb = B pitch class 11 -> vii° in C major diatonic map -> not '?'
+    assert result.progression[0] != "?", f"Cb should map to a diatonic numeral, got {result.progression[0]!r}"
+    # Fb = E pitch class 4 -> iii in C major diatonic map -> not '?'
+    assert result.progression[1] != "?", f"Fb should map to a diatonic numeral, got {result.progression[1]!r}"

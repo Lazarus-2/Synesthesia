@@ -11,11 +11,14 @@ so the graph keeps running in environments without music21 installed.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.schemas import ChordEvent, RomanAnalysis
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Flat-conversion helper (music21 uses '-' for flats, we use 'b')
@@ -62,6 +65,21 @@ _NO_CHORD_RE = re.compile(r"^(N\.?C\.?|)$", re.IGNORECASE)
 
 _CHROMATIC_SUFFIX_RE = re.compile(r"[#b]")
 
+# Natural-minor modal degrees that carry a flat prefix in music21's notation but
+# ARE diatonic to natural minor (and should NEVER be re-labelled as secondary dominants).
+_NATURAL_MINOR_MODAL = frozenset({"bVII", "bVI", "bIII"})
+
+# Diatonic minor-quality root numerals in a major key (ii, iii, vi, vii are diatonic;
+# iv, i, v would be modal mixture / borrowed from parallel minor).
+_MAJOR_DIATONIC_LOWER = frozenset({"ii", "iii", "vi", "vii"})
+
+# Normalise harmonic-minor V7 figured-bass noise (e.g. 'V75#3') to plain 'V7'.
+# Matches: optional leading accidental + roman numeral root + '7' + any figured-bass junk
+# (digits, '#', 'b') with NO '/' (secondary dominants are left as-is).
+_SIMPLIFY_V7_RE = re.compile(
+    r"^([b#]?(?:VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)7)[\d#b]+$"
+)
+
 
 def _is_diatonic_primary(primary_figure: str) -> bool:
     """Return True if *primary_figure* is a plain diatonic numeral (no accidentals anywhere).
@@ -94,14 +112,14 @@ def _is_diatonic_primary(primary_figure: str) -> bool:
 
 try:
     from music21 import harmony as m21_harmony
-    from music21 import roman as m21_roman
     from music21 import key as m21_key_mod
+    from music21 import roman as m21_roman
     _MUSIC21_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _MUSIC21_AVAILABLE = False
 
 
-def smart_analyze(chord_sym: str, key_obj: "m21_key_mod.Key") -> "m21_roman.RomanNumeral | None":
+def smart_analyze(chord_sym: str, key_obj: m21_key_mod.Key) -> m21_roman.RomanNumeral | None:
     """Return a music21 ``RomanNumeral`` for *chord_sym* in *key_obj*, or ``None`` for no-chord tokens.
 
     Two-pass strategy avoids the ``preferSecondaryDominants=True`` pitfall
@@ -113,8 +131,14 @@ def smart_analyze(chord_sym: str, key_obj: "m21_key_mod.Key") -> "m21_roman.Roma
        ``preferSecondaryDominants=True`` and use the result only if
        ``secondaryRomanNumeral is not None`` (i.e. it genuinely is a secondary
        dominant like V/V).  Otherwise keep the non-diatonic borrowed label (bVII).
+
+    Special case (I1): natural-minor modal degrees ``bVII``, ``bVI``, ``bIII``
+    are diatonic to natural minor and should NEVER be relabelled as secondary
+    dominants.  When Pass-1's figure is one of these and the key is minor, Pass-1
+    is returned unconditionally.
     """
-    if not chord_sym or _NO_CHORD_RE.match(chord_sym):
+    # C1 fix: strip whitespace before the no-chord guard so '   ' is caught too.
+    if not chord_sym or not chord_sym.strip() or _NO_CHORD_RE.match(chord_sym.strip()):
         return None
 
     m21_label = _to_m21(chord_sym)
@@ -122,6 +146,14 @@ def smart_analyze(chord_sym: str, key_obj: "m21_key_mod.Key") -> "m21_roman.Roma
     rn: m21_roman.RomanNumeral = m21_roman.romanNumeralFromChord(cs, key_obj)
 
     if _is_diatonic_primary(rn.primaryFigure):
+        return rn
+
+    # I1 fix: natural-minor modal degrees are diatonic in minor — keep Pass-1.
+    if (
+        rn.primaryFigure in _NATURAL_MINOR_MODAL
+        and hasattr(key_obj, "mode")
+        and key_obj.mode == "minor"
+    ):
         return rn
 
     # Non-diatonic: try to identify as a secondary dominant
@@ -138,14 +170,48 @@ def smart_analyze(chord_sym: str, key_obj: "m21_key_mod.Key") -> "m21_roman.Roma
 _LEADING_ACCIDENTAL_RE = re.compile(r"^[b#]")
 
 
-def is_secondary(rn: "m21_roman.RomanNumeral") -> bool:
+def is_secondary(rn: m21_roman.RomanNumeral) -> bool:
     """True if *rn* is a secondary dominant (figure contains '/', e.g. V7/V)."""
     return rn.secondaryRomanNumeral is not None
 
 
-def is_borrowed(rn: "m21_roman.RomanNumeral") -> bool:
-    """True if *rn* is a borrowed / modal-mixture chord (leading accidental on figure, not secondary)."""
-    return bool(_LEADING_ACCIDENTAL_RE.match(rn.figure)) and not is_secondary(rn)
+def _is_modal_mixture(rn: m21_roman.RomanNumeral) -> bool:
+    """True if *rn* is a modal-mixture chord in a major key.
+
+    Catches the case where a chord has a lowercase (minor-quality) root figure
+    without a leading accidental but is NOT diatonic to the major key.
+    Example: ``iv`` (Fm) in C major — music21 returns figure ``'iv'`` with no
+    leading ``b`` or ``#``, yet it is clearly borrowed from C minor.
+
+    Diatonic minor-quality degrees in a major key are ``ii``, ``iii``, ``vi``,
+    ``vii`` — everything else (``i``, ``iv``, ``v``) is modal mixture.
+    """
+    if is_secondary(rn):
+        return False
+    if not (hasattr(rn, "key") and rn.key is not None and rn.key.mode == "major"):
+        return False
+    m = _RN_ROOT_RE.match(rn.primaryFigure)
+    if not m:
+        return False
+    acc, root = m.group(1), m.group(2)
+    if acc:
+        # Leading accidental is already caught by is_borrowed via _LEADING_ACCIDENTAL_RE
+        return False
+    # Lowercase root without accidental that is NOT a diatonic minor degree
+    return root[0].islower() and root.lower() not in _MAJOR_DIATONIC_LOWER
+
+
+def is_borrowed(rn: m21_roman.RomanNumeral) -> bool:
+    """True if *rn* is a borrowed / modal-mixture chord (not a secondary dominant).
+
+    Two detection paths:
+    1. Leading accidental on the figure (e.g. ``bVII``, ``bVI`` in major).
+    2. Modal mixture: minor-quality figure without accidental at a normally
+       major-quality scale degree in a major key (e.g. ``iv`` = Fm in C major).
+    """
+    if is_secondary(rn):
+        return False
+    return bool(_LEADING_ACCIDENTAL_RE.match(rn.figure)) or _is_modal_mixture(rn)
 
 
 # ---------------------------------------------------------------------------
@@ -170,13 +236,13 @@ _FUNC_MAP: dict[str, str] = {
 }
 
 
-def harmonic_function(rn: "m21_roman.RomanNumeral") -> str:
+def harmonic_function(rn: m21_roman.RomanNumeral) -> str:
     """Map a ``RomanNumeral`` to a pedagogical function label.
 
     Priority order:
     1. Secondary dominant  → ``'secondary_dominant'``
-    2. Borrowed chord in **major** key (leading accidental on figure)
-       → ``'chromatic'`` (e.g. bVII in C major = borrowed).
+    2. Borrowed chord in **major** key (leading accidental on figure, OR modal
+       mixture — e.g. ``iv`` = Fm in C major) → ``'chromatic'``.
     3. All other chords (diatonic + borrowed-in-minor like bVI/bVII which are
        natural-minor degrees) → lookup root via ``_FUNC_MAP``.
        In minor, music21 labels natural-minor chords bVI / bVII / III with
@@ -186,6 +252,10 @@ def harmonic_function(rn: "m21_roman.RomanNumeral") -> str:
     """
     if is_secondary(rn):
         return "secondary_dominant"
+
+    # Modal mixture in major (no leading accidental, but minor-quality non-diatonic root)
+    if _is_modal_mixture(rn):
+        return "chromatic"
 
     # Use regex-based root extraction so figured-bass suffixes like '75#3' don't interfere
     m = _RN_ROOT_RE.match(rn.primaryFigure)
@@ -205,7 +275,7 @@ def harmonic_function(rn: "m21_roman.RomanNumeral") -> str:
 # Cadence detection
 # ---------------------------------------------------------------------------
 
-def _primary_base(rn: "m21_roman.RomanNumeral") -> str:
+def _primary_base(rn: m21_roman.RomanNumeral) -> str:
     """Return the root numeral stripped of accidentals and extensions, uppercase."""
     m = _RN_ROOT_RE.match(rn.primaryFigure)
     if not m:
@@ -214,8 +284,8 @@ def _primary_base(rn: "m21_roman.RomanNumeral") -> str:
 
 
 def detect_cadence(
-    prev: "m21_roman.RomanNumeral",
-    curr: "m21_roman.RomanNumeral",
+    prev: m21_roman.RomanNumeral,
+    curr: m21_roman.RomanNumeral,
 ) -> str | None:
     """Classify the cadence type formed by the *prev* → *curr* motion.
 
@@ -255,20 +325,30 @@ def detect_cadence(
 # Modulation detection
 # ---------------------------------------------------------------------------
 
-_WINDOW = 4   # minimum consecutive chords to confirm a new key
-_SCORE_THRESHOLD = 0.65  # KS correlation threshold to accept new key candidate
+_WINDOW = 4            # minimum consecutive chords to confirm a new key
+_SCORE_THRESHOLD = 0.65  # KS correlation threshold (music21 Key.correlationCoefficient)
+_MAX_MODULATIONS = 8   # cap to prevent runaway detection on random/noisy progressions
 
 
 def detect_modulations(
     chord_symbols: list[str],
-    home_key: "m21_key_mod.Key",
+    home_key: m21_key_mod.Key,
+    max_modulations: int = _MAX_MODULATIONS,
 ) -> list[dict]:
     """Scan *chord_symbols* for sustained modulations away from *home_key*.
 
-    Uses a sliding window of ``_WINDOW`` chords; for each window position
-    where the window does not fit *home_key*, runs music21's
-    ``stream.analyze('key')`` on the window.  A new key is reported if it
-    differs from the current tracking key and the window fits it.
+    Uses a sliding window of ``_WINDOW`` chords; O(n) in the number of
+    chord symbols (two stream-analysis calls per candidate window).  For each
+    window position where the window does not fit *home_key*, runs music21's
+    ``stream.analyze('key')`` on the window.  A new key is reported only when:
+
+    * the detected key differs from both the tracking key and home key,
+    * the next overlapping window confirms the same key, AND
+    * the Krumhansl-Schmuckler ``correlationCoefficient`` of the detected key
+      meets ``_SCORE_THRESHOLD`` (≥ 0.65) to filter weak / ambiguous matches.
+
+    Detection stops once ``max_modulations`` (default ``_MAX_MODULATIONS = 8``)
+    entries have been collected to prevent over-reporting on random progressions.
 
     Returns a list of ``{"to_key": str, "at_index": int}`` dicts.
     """
@@ -287,6 +367,10 @@ def detect_modulations(
 
     i = 0
     while i <= n - _WINDOW:
+        # I3 fix: stop once max_modulations cap is reached
+        if len(modulations) >= max_modulations:
+            break
+
         window_syms = chord_symbols[i: i + _WINDOW]
         s = m21_stream.Stream()
         for sym in window_syms:
@@ -303,6 +387,12 @@ def detect_modulations(
 
         detected: m21_key_mod.Key = s.analyze("key")
         detected_str = str(detected)
+
+        # I3 fix: gate on KS correlation coefficient to filter weak detections
+        score = getattr(detected, "correlationCoefficient", 1.0)
+        if score < _SCORE_THRESHOLD:
+            i += 1
+            continue
 
         if detected_str != current_key_str and detected_str != home_key_str:
             # Confirm: does the *next* window also agree?
@@ -331,9 +421,9 @@ def detect_modulations(
 # ---------------------------------------------------------------------------
 
 def _legacy_fallback(
-    chords: "list[dict | ChordEvent]",
+    chords: list[dict | ChordEvent],
     key_str: str,
-) -> "RomanAnalysis":
+) -> RomanAnalysis:
     """Hand-rolled diatonic mapper used when music21 is unavailable.
 
     Reproduces the original ``roman_analysis_node`` logic (nodes.py:425-530)
@@ -342,18 +432,21 @@ def _legacy_fallback(
     Non-diatonic chords are labelled ``'?'`` rather than the broken placeholder
     ``'bdegree'``/``'#degree'``.
     """
-    import re as _re
     from backend.schemas import RomanAnalysis
 
     _notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    _enharmonics = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
+    _enharmonics = {
+        "DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#",
+        "CB": "B",  # C-flat = B
+        "FB": "E",  # F-flat = E
+    }
 
     def _pc(note: str) -> int:
         n = note.upper()
         n = _enharmonics.get(n, n)
         return _notes.index(n) if n in _notes else 0
 
-    m = _re.match(r"^([A-G][b#]?)\s+(major|minor)$", key_str.strip(), _re.IGNORECASE)
+    m = re.match(r"^([A-G][b#]?)\s+(major|minor)$", key_str.strip(), re.IGNORECASE)
     key_root = m.group(1) if m else "C"
     key_mode = m.group(2).lower() if m else "major"
     key_pc = _pc(key_root)
@@ -375,7 +468,7 @@ def _legacy_fallback(
         sym = c.get("chord") if isinstance(c, dict) else c.chord
         if not sym or sym.upper() in ("N.C.", "N", ""):
             continue
-        cm = _re.match(r"^([A-G][b#]?)", sym)
+        cm = re.match(r"^([A-G][b#]?)", sym)
         if not cm:
             continue
         c_root = cm.group(1)
@@ -404,9 +497,9 @@ def _legacy_fallback(
 # ---------------------------------------------------------------------------
 
 def analyze_roman(
-    chords: "list[dict | ChordEvent]",
+    chords: list[dict | ChordEvent],
     key_str: str,
-) -> "RomanAnalysis":
+) -> RomanAnalysis:
     """Produce a fully enriched ``RomanAnalysis`` for *chords* in *key_str*.
 
     Parameters
@@ -430,9 +523,8 @@ def analyze_roman(
     if not _MUSIC21_AVAILABLE:
         return _legacy_fallback(chords, key_str)
 
-    # --- Parse key ---
-    import re as _re
-    m = _re.match(r"^([A-G][b#]?)\s+(major|minor)$", key_str.strip(), _re.IGNORECASE)
+    # --- Parse key (use module-level re, not a re-import) ---
+    m = re.match(r"^([A-G][b#]?)\s+(major|minor)$", key_str.strip(), re.IGNORECASE)
     if m:
         tonic = m.group(1)
         mode = m.group(2).lower()
@@ -444,6 +536,9 @@ def analyze_roman(
 
     entries: list[RomanEntry] = []
     chord_symbols: list[str] = []
+    # I2 fix: retain RomanNumeral objects aligned with entries so the cadence
+    # pass can reuse them rather than calling smart_analyze a second time.
+    rn_objects: list[m21_roman.RomanNumeral] = []
 
     for c in chords:
         if isinstance(c, dict):
@@ -451,15 +546,29 @@ def analyze_roman(
         else:
             sym, start, end = c.chord, c.start, c.end
 
-        rn = smart_analyze(sym, home_key)
+        # C1 fix: per-chord guard so a bad symbol (e.g. 'Bbb', '   ') is skipped
+        # rather than aborting the whole analysis.
+        try:
+            rn = smart_analyze(sym, home_key)
+        except Exception:
+            log.debug("roman: skipping unparseable chord %r", sym)
+            continue
         if rn is None:
             continue  # skip N.C. tokens
 
+        # Should-fix (E7-in-minor): normalise harmonic-minor V7 figured-bass
+        # notation (e.g. 'V75#3') to plain 'V7' for readability.
+        figure = rn.figure
+        m_simplify = _SIMPLIFY_V7_RE.match(figure)
+        if m_simplify:
+            figure = m_simplify.group(1)
+
         chord_symbols.append(sym)
+        rn_objects.append(rn)
         entries.append(
             RomanEntry(
                 chord=sym,
-                numeral=rn.figure,
+                numeral=figure,
                 function=harmonic_function(rn),
                 inversion=rn.inversion(),
                 is_secondary=is_secondary(rn),
@@ -470,13 +579,11 @@ def analyze_roman(
             )
         )
 
-    # --- Cadence pass ---
+    # --- Cadence pass (I2 fix: reuse rn_objects, no second smart_analyze calls) ---
     cadences: list[dict] = []
-    for i in range(1, len(entries)):
-        rn_prev = smart_analyze(entries[i - 1].chord, home_key)
-        rn_curr = smart_analyze(entries[i].chord, home_key)
-        if rn_prev is None or rn_curr is None:
-            continue
+    for i in range(1, len(rn_objects)):
+        rn_prev = rn_objects[i - 1]
+        rn_curr = rn_objects[i]
         cad = detect_cadence(rn_prev, rn_curr)
         if cad:
             entries[i] = entries[i].model_copy(update={"cadence": cad})
