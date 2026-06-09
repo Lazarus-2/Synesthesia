@@ -18,6 +18,14 @@ export interface RomanAnalysis {
   function: string[];
 }
 
+export interface TheoryExplanation {
+  key_summary: string;
+  function_explanation: string;
+  pattern_name: string | null;
+  notable_techniques: string[];
+  similar_song: string | null;
+}
+
 export interface SongAnalysis {
   title: string;
   artist: string;
@@ -29,7 +37,9 @@ export interface SongAnalysis {
   beats?: number[];
   sections: SongSection[];
   roman?: RomanAnalysis;
-  theory_explanation?: string;
+  theory?: TheoryExplanation | null;
+  // theory_explanation kept for back-compat (equals theory.text when theory is set)
+  theory_explanation?: string | null;
   vibe_palette?: string[];
   instrument_guides?: Record<string, InstrumentGuide>;
   audioUrl?: string;

@@ -15,6 +15,7 @@ export const TheoryPanel: React.FC = () => {
   }
 
   const roman = analysis.roman;
+  const theory = analysis.theory;
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
@@ -49,8 +50,69 @@ export const TheoryPanel: React.FC = () => {
         </div>
       )}
 
-      {/* AI Insight Callout */}
-      {analysis.theory_explanation && (
+      {/* Structured AI Insight — renders chips when theory object is present */}
+      {theory ? (
+        <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="material-symbols-outlined text-secondary-container"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              lightbulb
+            </span>
+            <h4 className="text-sm font-semibold text-on-secondary-container">
+              AI Insight
+            </h4>
+          </div>
+
+          {/* Key summary */}
+          <p className="text-sm text-on-surface/90 leading-relaxed">
+            {theory.key_summary}
+          </p>
+
+          {/* Pattern chip */}
+          {theory.pattern_name && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+                Pattern
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                {theory.pattern_name}
+              </span>
+            </div>
+          )}
+
+          {/* Technique chips */}
+          {theory.notable_techniques && theory.notable_techniques.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+                Techniques
+              </span>
+              {theory.notable_techniques.map((t, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-full bg-secondary/20 text-secondary text-xs font-medium"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Similar song citation */}
+          {theory.similar_song && (
+            <p className="text-xs text-on-surface-variant italic">
+              Similar: {theory.similar_song}
+            </p>
+          )}
+
+          {/* Function explanation as prose */}
+          <p className="text-sm text-on-surface/80 leading-relaxed">
+            {theory.function_explanation}
+          </p>
+        </div>
+      ) : analysis.theory_explanation ? (
+        /* Legacy fallback: render the flat string if no structured theory */
         <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
           <div className="flex items-center gap-2 mb-2">
             <span
@@ -67,7 +129,7 @@ export const TheoryPanel: React.FC = () => {
             {analysis.theory_explanation}
           </p>
         </div>
-      )}
+      ) : null}
 
       {/* Vibe Palette */}
       {analysis.vibe_palette && analysis.vibe_palette.length > 0 && (
