@@ -1,7 +1,10 @@
 """Chain tests (Plan 3 D2).
 
-Cover the chains that are pure-Python (similarity, llm_factory routing,
+Cover the chains that are pure-Python (llm_factory routing,
 prompt formatting). LLM-invoking paths are mocked so tests stay hermetic.
+
+Note: TestSimilarity was removed in G4.4 — similarity_chain.py was deleted
+as part of the move to online similar-songs via fetch_similar_songs.
 """
 
 from __future__ import annotations
@@ -9,62 +12,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# similarity_chain (no LLM)
-# ---------------------------------------------------------------------------
-
-
-class TestSimilarity:
-    def test_embed_progression_is_normalized(self):
-        from backend.chains.similarity_chain import embed_progression
-
-        vec = embed_progression(["C", "G", "Am", "F"])
-        norm = sum(v * v for v in vec) ** 0.5
-        assert vec is not None and len(vec) == 12
-        assert 0.99 <= norm <= 1.01, f"vector should be L2-normalized; got {norm}"
-
-    def test_embed_empty_returns_zero_vector(self):
-        from backend.chains.similarity_chain import embed_progression
-
-        assert embed_progression([]) == [0.0] * 12
-
-    def test_embed_v2_is_36_dim(self):
-        from backend.chains.similarity_chain import embed_progression_v2
-
-        vec = embed_progression_v2(["C", "G", "Am", "F"])
-        assert len(vec) == 36, "v2 = 12 pitch + 12 transitions + 12 qualities"
-
-    def test_embed_v2_key_invariance(self):
-        """I-V-vi-IV in C and the same progression in G should embed nearly identically."""
-        from backend.chains.similarity_chain import embed_progression_v2
-
-        c_vec = embed_progression_v2(["C", "G", "Am", "F"], key="C major")
-        g_vec = embed_progression_v2(["G", "D", "Em", "C"], key="G major")
-        # Cosine similarity
-        dot = sum(a * b for a, b in zip(c_vec, g_vec))
-        n_c = sum(a * a for a in c_vec) ** 0.5
-        n_g = sum(a * a for a in g_vec) ** 0.5
-        sim = dot / (n_c * n_g)
-        assert sim > 0.99, f"key-rotated progressions should match closely; got {sim}"
-
-    def test_find_similar_returns_top_k(self):
-        from backend.chains.similarity_chain import find_similar
-
-        results = find_similar(["C", "G", "Am", "F"], k=2)
-        assert len(results) == 2
-        for r in results:
-            assert {"title", "artist", "progression", "score"} <= r.keys()
-        # Scores should be sorted descending
-        assert results[0]["score"] >= results[1]["score"]
-
-    def test_find_similar_handles_unknown_chord(self):
-        from backend.chains.similarity_chain import find_similar
-
-        # ``N.C.`` and empty strings shouldn't crash
-        results = find_similar(["N.C.", "", "Cmaj7"], k=3)
-        assert len(results) <= 3
-
 
 # ---------------------------------------------------------------------------
 # llm_factory (provider routing, no real API calls)

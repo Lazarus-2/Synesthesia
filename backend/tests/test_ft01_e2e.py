@@ -7,6 +7,8 @@ Proves three properties through ``build_graph`` (the worker's graph):
   2. A degraded fan-out (LLM down) persists status="degraded" with the
      error recorded in the append-only ``errors`` log.
   3. Concurrent fan-out appends merge via operator.add — no InvalidUpdateError.
+
+G4.4: similarity_node was removed; fan-out is now theory/instrument/stems (3 leaves).
 """
 
 from __future__ import annotations
@@ -72,13 +74,13 @@ def patched_pipeline(monkeypatch):
     monkeypatch.setattr(graph_mod, "features_node", flaky_features)
     monkeypatch.setattr(graph_mod, "roman_analysis_node", lambda s: {"roman": None})
     # Stub the heavy/IO fan-out so the graph stays hermetic.
+    # G4.4: similarity_node removed — only theory/instrument/stems remain.
     monkeypatch.setattr(
         graph_mod, "theory_node", lambda s: {"theory_explanation": "ok"}
     )
     monkeypatch.setattr(
         graph_mod, "instrument_node", lambda s: {"instrument_guide": None}
     )
-    monkeypatch.setattr(graph_mod, "similarity_node", lambda s: {"similar_songs": []})
     monkeypatch.setattr(graph_mod, "stems_node", lambda s: {})
     return calls
 
@@ -129,7 +131,7 @@ def test_degraded_fanout_records_error_and_marks_degraded(monkeypatch):
     monkeypatch.setattr(
         graph_mod, "instrument_node", lambda s: {"instrument_guide": None}
     )
-    monkeypatch.setattr(graph_mod, "similarity_node", lambda s: {"similar_songs": []})
+    # G4.4: similarity_node removed — no stub needed
     monkeypatch.setattr(graph_mod, "stems_node", lambda s: {})
 
     graph = build_graph(MemorySaver())
@@ -143,9 +145,12 @@ def test_degraded_fanout_records_error_and_marks_degraded(monkeypatch):
 
 
 def test_concurrent_fanout_appends_do_not_raise(monkeypatch):
-    """Two fan-out nodes both append on the SAME super-step. With the
-    operator.add reducer this merges; without it LangGraph raises
-    InvalidUpdateError."""
+    """Three fan-out nodes (theory/instrument/stems) all append on the SAME
+    super-step. With the operator.add reducer this merges; without it LangGraph
+    raises InvalidUpdateError.
+
+    G4.4: similarity_node removed — fan-out is now 3 leaves instead of 4.
+    """
     import backend.graph.graph as graph_mod
 
     monkeypatch.setattr(
@@ -176,11 +181,7 @@ def test_concurrent_fanout_appends_do_not_raise(monkeypatch):
         "instrument_node",
         lambda s: {"errors": ["instrument down"], "instrument_guide": None},
     )
-    monkeypatch.setattr(
-        graph_mod,
-        "similarity_node",
-        lambda s: {"errors": ["similarity down"], "similar_songs": []},
-    )
+    # G4.4: similarity_node removed — no stub needed
     monkeypatch.setattr(
         graph_mod, "stems_node", lambda s: {"errors": ["stems down"]}
     )
@@ -191,10 +192,9 @@ def test_concurrent_fanout_appends_do_not_raise(monkeypatch):
         {"audio_path": "/tmp/job_cc.wav", "errors": [], "retries": 0},
         "ft01-concurrent",
     )
-    # All four degradation strings present; no exception was raised.
+    # All three degradation strings present; no exception was raised.
     assert sorted(result["errors"]) == [
         "instrument down",
-        "similarity down",
         "stems down",
         "theory down",
     ]

@@ -14,7 +14,10 @@ from contextvars import ContextVar
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from backend.chains.similarity_chain import find_similar
+# similarity_chain removed in G4.4; find_similar_songs @tool rewired in G4.5.
+# Import fetch_similar_songs now so the module attribute exists for patching;
+# the tool body is fully wired in G4.5.
+from backend.services.similar_songs import fetch_similar_songs
 from backend.database import get_mongodb
 from backend.repositories.analysis_repo import AnalysisRepo
 from backend.schemas import Instrument
@@ -170,28 +173,25 @@ class FindSimilarArgs(BaseModel):
 
 @tool(args_schema=FindSimilarArgs)
 async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
-    """Find catalog songs whose chord progression is most similar to the CURRENT
-    song's, using the deterministic key-aware progression embedding. The
-    analysis_job_id is the same id used by get_song_analysis — it identifies the
-    currently loaded song and is provided by the system, not the user. Returns a
-    ranked list of {title, artist, progression, score}. Use this for
-    'what sounds like this?' / 'songs with similar chords' questions."""
+    """Find songs similar to the CURRENT song using online music databases
+    (Last.fm primary, Deezer fallback).  The analysis_job_id identifies the
+    currently loaded song and is provided by the system, not the user.
+    Returns a ranked list of {title, artist, url, image, source, match}.
+    Use this for 'what sounds like this?' / 'songs with similar chords' questions."""
     repo = _resolve_analysis_repo()
     uid = current_user_id.get()
-    doc = await repo.get_owned(analysis_job_id, uid) if uid is not None else await repo.get(analysis_job_id)
+    doc = (
+        await repo.get_owned(analysis_job_id, uid)
+        if uid is not None
+        else await repo.get(analysis_job_id)
+    )
     if not doc:
         return {"error": f"No analysis found for job_id '{analysis_job_id}'."}
 
-    raw_chords = doc.get("chords") or []
-    chords: list[str] = []
-    for c in raw_chords:
-        sym = c.get("chord") if isinstance(c, dict) else getattr(c, "chord", None)
-        if sym and sym not in chords:  # dedupe preserving order (m-2)
-            chords.append(sym)
-    if not chords:
-        return {"error": "This analysis has no chords to compare; cannot find similar songs."}
+    title: str = doc.get("title") or ""
+    artist: str = doc.get("artist") or ""
 
-    return find_similar(chords, k=5, key=doc.get("key"))
+    return await fetch_similar_songs(title, artist, limit=8)
 
 
 # ---------------------------------------------------------------------------

@@ -579,30 +579,6 @@ def stems_node(state: AnalysisState) -> dict:
     return {"stems": rel}
 
 
-def similarity_node(state: AnalysisState) -> dict:
-    """Retrieve similar songs by chord progression (RAG).
-
-    Passes the detected key so the v2 sequence-aware embedding can rotate
-    progressions into a common tonal frame (Plan 3 A6).
-
-    Degradation: if the similarity index is unavailable, return an empty
-    list and append a clear error so the run is marked ``degraded`` rather
-    than silently shipping zero recommendations.
-    """
-    from backend.chains.similarity_chain import find_similar
-
-    chords_list = [c.chord for c in state.get("chords", [])]
-    try:
-        similar = find_similar(chords_list, key=state.get("key"))
-        return {"similar_songs": similar}
-    except Exception as e:
-        logger.warning("similarity_node: recommendation engine unavailable: %s", e)
-        return {
-            "errors": [f"similarity: recommendations unavailable ({e})"],
-            "similar_songs": [],
-        }
-
-
 def has_errors_route(state: AnalysisState) -> str:
     """Conditional-edge helper: route to END as soon as a stage produces errors.
 

@@ -34,7 +34,6 @@ from backend.graph.nodes import (
     instrument_node,
     roman_analysis_node,
     should_retry,
-    similarity_node,
     stems_node,
     theory_node,
     validate_audio_node,
@@ -48,7 +47,7 @@ def build_graph(checkpointer):
     """Build + compile the StateGraph with the given checkpointer.
 
     Pipeline:
-        ingest -> features -> roman -> [theory, instrument, similarity] (parallel) -> END
+        ingest -> features -> roman -> [theory, instrument, stems] (parallel) -> END
     """
     g = StateGraph(AnalysisState)
 
@@ -58,7 +57,6 @@ def build_graph(checkpointer):
     g.add_node("roman", roman_analysis_node)
     g.add_node("theory", theory_node)
     g.add_node("instrument", instrument_node)
-    g.add_node("similarity", similarity_node)
     g.add_node("stems", stems_node)
 
     g.add_edge(START, "ingest")
@@ -95,11 +93,9 @@ def build_graph(checkpointer):
     # simply lacks the ``stems`` key.
     g.add_edge("roman", "theory")
     g.add_edge("roman", "instrument")
-    g.add_edge("roman", "similarity")
     g.add_edge("roman", "stems")
     g.add_edge("theory", END)
     g.add_edge("instrument", END)
-    g.add_edge("similarity", END)
     g.add_edge("stems", END)
 
     return g.compile(checkpointer=checkpointer)

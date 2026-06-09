@@ -48,18 +48,6 @@ class TestInstrumentDegradation:
         assert any("instrument" in e.lower() for e in out["errors"])
 
 
-class TestSimilarityDegradation:
-    def test_similarity_failure_records_error(self, monkeypatch):
-        def boom(*_a, **_k):
-            raise RuntimeError("golden_songs.json missing")
-
-        monkeypatch.setattr("backend.chains.similarity_chain.find_similar", boom)
-        out = nodes_mod.similarity_node(_base_state())
-        assert out["similar_songs"] == []  # graceful empty list
-        assert out.get("errors")
-        assert any("similar" in e.lower() for e in out["errors"])
-
-
 class TestStemsDegradation:
     def test_stems_failure_records_error(self, monkeypatch):
         from backend.config import get_settings

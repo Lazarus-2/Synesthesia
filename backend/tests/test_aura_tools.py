@@ -87,6 +87,11 @@ class TestGetChordColor:
         assert "chord" in schema["properties"]
 
 
+async def _noop_fetch(*_args, **_kwargs) -> list:
+    """No-op stand-in for fetch_similar_songs — keeps ownership tests hermetic."""
+    return []
+
+
 class _FakeAnalysisRepo:
     """Stands in for AnalysisRepo.get / get_owned — async, no Mongo."""
 
@@ -173,20 +178,26 @@ class TestGetSongAnalysis:
 
 
 class TestFindSimilarSongs:
-    async def test_returns_ranked_matches(self, monkeypatch):
+    # G4.4/G4.5: find_similar_songs now delegates to fetch_similar_songs (online service).
+    # The old similarity_chain.find_similar (embedding/catalog) has been removed.
+    # Full behavioral tests are in test_aura_tools_similar.py (G4.5).
+
+    async def test_returns_list_for_found_doc(self, monkeypatch):
+        """find_similar_songs must return a list (possibly empty) for a found doc."""
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import find_similar_songs
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
+        # Stub fetch_similar_songs so no network call is made
+        async def _fake_fetch(title, artist, *, limit=8):
+            return [{"title": "Hey Jude", "artist": "The Beatles", "url": None, "image": "", "source": "lastfm", "match": 0.9}]
+        monkeypatch.setattr(at, "fetch_similar_songs", _fake_fetch)
 
         out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
         assert isinstance(out, list)
-        assert out, "expected at least one similar-song match"
+        assert len(out) >= 1
         first = out[0]
-        assert {"title", "artist", "progression", "score"} <= set(first)
-        # scores are descending (find_similar already sorts)
-        scores = [r["score"] for r in out]
-        assert scores == sorted(scores, reverse=True)
+        assert {"title", "artist", "source"} <= set(first)
 
     async def test_missing_job_returns_not_found(self, monkeypatch):
         import backend.chains.aura_tools as at
@@ -198,16 +209,20 @@ class TestFindSimilarSongs:
         assert isinstance(out, dict)
         assert "found" in out["error"].lower()
 
-    async def test_no_chords_returns_clear_message(self, monkeypatch):
+    async def test_no_title_artist_returns_empty_list(self, monkeypatch):
+        """A doc without title/artist calls fetch_similar_songs with '' → service returns []."""
         import backend.chains.aura_tools as at
         from backend.chains.aura_tools import find_similar_songs
 
-        doc = {"_id": "job-empty", "key": "C major", "chords": []}
+        doc = {"_id": "job-empty", "key": "C major", "chords": [], "title": None, "artist": None}
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(doc))
+        async def _fake_fetch(title, artist, *, limit=8):
+            return []
+        monkeypatch.setattr(at, "fetch_similar_songs", _fake_fetch)
 
         out = await find_similar_songs.ainvoke({"analysis_job_id": "job-empty"})
-        assert isinstance(out, dict)
-        assert "chord" in out["error"].lower()
+        assert isinstance(out, list)
+        assert out == []
 
     def test_is_a_langchain_tool_with_schema(self):
         from langchain_core.tools import BaseTool
@@ -226,10 +241,13 @@ class TestFindSimilarSongs:
         from backend.chains.aura_tools import find_similar_songs
 
         monkeypatch.setattr(at, "_resolve_analysis_repo", lambda: _FakeAnalysisRepo(_STORED_DOC))
+        async def _fake_fetch(title, artist, *, limit=8):
+            return [{"title": "T", "artist": "A", "url": None, "image": "", "source": "lastfm", "match": 0.8}]
+        monkeypatch.setattr(at, "fetch_similar_songs", _fake_fetch)
 
         out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
         assert isinstance(out, list)
-        assert out[0]["score"] <= 1.0
+        assert out[0]["match"] <= 1.0
 
 
 class TestOwnershipContextVar:
@@ -292,6 +310,7 @@ class TestOwnershipContextVar:
             at, "_resolve_analysis_repo",
             lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
         )
+        monkeypatch.setattr(at, "fetch_similar_songs", lambda *a, **kw: _noop_fetch(*a, **kw))
         token = current_user_id.set("user-1")
         try:
             out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
@@ -325,6 +344,7 @@ class TestOwnershipContextVar:
             at, "_resolve_analysis_repo",
             lambda: _FakeAnalysisRepo(_STORED_DOC, owner_id="user-1")
         )
+        monkeypatch.setattr(at, "fetch_similar_songs", lambda *a, **kw: _noop_fetch(*a, **kw))
         assert current_user_id.get() is None
         out = await find_similar_songs.ainvoke({"analysis_job_id": "job-abc"})
         assert isinstance(out, list)
