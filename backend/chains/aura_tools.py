@@ -157,7 +157,7 @@ async def get_song_analysis(job_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# B.4  find_similar_songs  (uses _resolve_analysis_repo + similarity_chain)
+# B.4  find_similar_songs  (uses _resolve_analysis_repo + services.similar_songs.fetch_similar_songs)
 # ---------------------------------------------------------------------------
 
 
