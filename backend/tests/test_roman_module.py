@@ -305,3 +305,44 @@ def test_roman_analysis_summary_progression_optional():
     )
     # summary_progression defaults to None when omitted
     assert ra.summary_progression is None
+
+
+# ---------------------------------------------------------------------------
+# G1.8 — detect_modulations
+# ---------------------------------------------------------------------------
+
+def test_detect_modulations_no_modulation():
+    from backend.theory.roman import detect_modulations
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Classic I-V-vi-IV loop — no modulation
+    symbols = ["C", "G", "Am", "F", "C", "G", "Am", "F"]
+    mods = detect_modulations(symbols, k)
+    assert mods == []
+
+
+def test_detect_modulations_finds_relative_shift():
+    from backend.theory.roman import detect_modulations
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # First 4 chords in C, then sustained shift to a different tonal centre.
+    # D A Bm G is I-V-vi-IV in D major, so music21 correctly detects D major.
+    # (Adaptation from plan: the plan said "G major" but the chord sequence
+    # D-A-Bm-G is the D major I-V-vi-IV loop, not G major's.)
+    symbols = ["C", "G", "Am", "F", "D", "A", "Bm", "G", "D", "A", "Bm", "G"]
+    mods = detect_modulations(symbols, k)
+    # Should detect at least one modulation away from C major
+    assert len(mods) >= 1
+    assert all(m["to_key"] != "C major" for m in mods)
+
+
+def test_detect_modulations_returns_at_index():
+    from backend.theory.roman import detect_modulations
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    symbols = ["C", "G", "Am", "F", "D", "A", "Bm", "G", "D", "A", "Bm", "G"]
+    mods = detect_modulations(symbols, k)
+    for m in mods:
+        assert "to_key" in m
+        assert "at_index" in m
+        assert isinstance(m["at_index"], int)
