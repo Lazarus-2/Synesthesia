@@ -327,6 +327,49 @@ class TestTransposeCompleteness:
         assert transpose_chord("B5", 1) == "C5"
 
 
+class TestBarreVoicings:
+    """G3.1 — guitar movable-shape math."""
+
+    def test_bb_major_e_shape_fret_6(self):
+        """Bb is 6 semitones above E → E-shape barre on fret 6."""
+        from backend.tools.voicings import _guitar_barre_shape
+        shape = _guitar_barre_shape("Bb", "maj")
+        # E-shape: open [0,2,2,1,0,0] + 6 = [6,8,8,7,6,6]
+        assert shape is not None
+        assert shape["frets"] == [6, 8, 8, 7, 6, 6]
+
+    def test_fsharp_minor_em_shape_fret_2(self):
+        """F#m is 2 semitones above E → Em-shape barre on fret 2."""
+        from backend.tools.voicings import _guitar_barre_shape
+        shape = _guitar_barre_shape("F#", "min")
+        # Em-shape: open [0,2,2,0,0,0] + 2 = [2,4,4,2,2,2]
+        assert shape is not None
+        assert shape["frets"] == [2, 4, 4, 2, 2, 2]
+
+    def test_c_major_a_shape_fret_3(self):
+        """C is 3 semitones above A → A-shape barre on fret 3."""
+        from backend.tools.voicings import _guitar_barre_shape
+        shape = _guitar_barre_shape("C", "maj")
+        # A-shape: [-1, F, F+2, F+2, F+2, F] = [-1, 3, 5, 5, 5, 3]
+        # (open-position C is in table; but barre path must also work)
+        assert shape is not None
+        assert shape["frets"][0] == -1           # muted low E
+        assert shape["frets"][1] == shape["frets"][5]  # barre fret matches
+
+    def test_e_major_uses_open_not_barre(self):
+        """E is the open root of E-shape → fret 0, not a high barre."""
+        from backend.tools.voicings import _guitar_barre_shape
+        shape = _guitar_barre_shape("E", "maj")
+        assert shape is not None
+        assert shape["frets"][0] == 0
+        assert max(shape["frets"]) <= 2   # it's an open chord
+
+    def test_unknown_quality_returns_none(self):
+        """No movable shape exists for quality 'wtf'."""
+        from backend.tools.voicings import _guitar_barre_shape
+        assert _guitar_barre_shape("C", "wtf") is None
+
+
 class TestVoicingsDegradationPolicy:
     """Fix 4 — degrade/drop policy for voicings."""
 
