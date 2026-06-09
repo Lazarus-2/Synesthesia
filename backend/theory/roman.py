@@ -60,18 +60,30 @@ _DIATONIC_ROOTS = frozenset(
 _NO_CHORD_RE = re.compile(r"^(N\.?C\.?|)$", re.IGNORECASE)
 
 
+_CHROMATIC_SUFFIX_RE = re.compile(r"[#b]")
+
+
 def _is_diatonic_primary(primary_figure: str) -> bool:
-    """Return True if *primary_figure* is a plain diatonic numeral (no leading accidental).
+    """Return True if *primary_figure* is a plain diatonic numeral (no accidentals anywhere).
 
     Uses a regex to extract the Roman numeral root before any figured-bass
     suffix (which may contain digits, accidentals, or letters like in 'V75#3').
+
+    A chord is non-diatonic if:
+    - the root has a leading accidental (e.g. bVII, #IV), OR
+    - the figured-bass suffix contains accidentals (e.g. II75#3 = D7 in C major,
+      where the raised major 3rd signals a secondary dominant candidate).
     """
     m = _RN_ROOT_RE.match(primary_figure)
     if not m:
         return False
     acc, root = m.group(1), m.group(2)
-    # Has leading accidental -> non-diatonic (borrowed / chromatic)
+    # Leading accidental on root -> borrowed / chromatic
     if acc:
+        return False
+    # Accidental in figured-bass suffix -> secondary dominant candidate
+    suffix = primary_figure[m.end():]
+    if _CHROMATIC_SUFFIX_RE.search(suffix):
         return False
     return root in _DIATONIC_ROOTS
 

@@ -88,3 +88,64 @@ def test_smart_analyze_no_chord_returns_none():
     k = m21key.Key("C", "major")
     assert smart_analyze("N.C.", k) is None
     assert smart_analyze("", k) is None
+
+
+# ---------------------------------------------------------------------------
+# G1.4 — is_secondary / is_borrowed
+# ---------------------------------------------------------------------------
+
+def test_secondary_dominant_d7_in_c():
+    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("D7", k)
+    assert rn.figure == "V7/V"
+    assert is_secondary(rn) is True
+    assert is_borrowed(rn) is False
+
+
+def test_secondary_dominant_a7_in_c():
+    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("A7", k)
+    assert rn.figure == "V7/ii"
+    assert is_secondary(rn) is True
+    assert is_borrowed(rn) is False
+
+
+def test_secondary_dominant_e7_in_c():
+    from backend.theory.roman import smart_analyze, is_secondary
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("E7", k)
+    assert rn.figure == "V7/vi"
+    assert is_secondary(rn) is True
+
+
+def test_borrowed_chord_bb_in_c():
+    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("Bb", k)
+    assert rn.figure == "bVII"
+    assert is_borrowed(rn) is True
+    assert is_secondary(rn) is False
+
+
+def test_borrowed_chord_ab_in_c():
+    from backend.theory.roman import smart_analyze, is_borrowed
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn = smart_analyze("Ab", k)
+    assert is_borrowed(rn) is True
+
+
+def test_diatonic_chords_not_borrowed_not_secondary():
+    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    for sym in ("C", "Am", "G", "G7", "F", "Fmaj7", "C/E"):
+        rn = smart_analyze(sym, k)
+        assert not is_secondary(rn), f"{sym} wrongly flagged as secondary"
+        assert not is_borrowed(rn), f"{sym} wrongly flagged as borrowed"
