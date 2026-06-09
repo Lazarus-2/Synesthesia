@@ -10,10 +10,12 @@ import { CapoWhisperer } from "./CapoWhisperer";
 import { MIDIDownloadMenu } from "./MIDIDownloadMenu";
 
 const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
-  if (!diagram || !diagram.frets) {
+  // Guard: backend may set no_voicing=true when no playable shape exists.
+  // Also guard missing diagram or missing frets array.
+  if (!diagram || diagram.no_voicing || !diagram.frets) {
     return (
       <div className="w-full aspect-[3/4] bg-surface-container-highest rounded-lg border border-white/10 p-4 flex items-center justify-center text-on-surface-variant text-sm">
-        No diagram available
+        {diagram?.no_voicing ? "No voicing available for this chord" : "No diagram available"}
       </div>
     );
   }
