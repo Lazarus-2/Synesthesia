@@ -254,3 +254,54 @@ def test_cadence_none_for_non_cadential():
     # I -> IV, I -> ii, etc. are not cadences
     assert detect_cadence(smart_analyze("C", k), smart_analyze("F", k)) is None
     assert detect_cadence(smart_analyze("C", k), smart_analyze("Am", k)) is None
+
+
+# ---------------------------------------------------------------------------
+# G1.7 — RomanEntry schema + enriched RomanAnalysis
+# ---------------------------------------------------------------------------
+
+def test_roman_entry_schema():
+    from backend.schemas import RomanEntry
+    entry = RomanEntry(
+        chord="G7",
+        numeral="V7",
+        function="dominant",
+        inversion=0,
+        is_secondary=False,
+        is_borrowed=False,
+        cadence=None,
+        start=2.0,
+        end=4.0,
+    )
+    assert entry.numeral == "V7"
+    assert entry.start == 2.0
+
+
+def test_roman_analysis_has_entries_cadences_modulations():
+    from backend.schemas import RomanAnalysis, RomanEntry
+    ra = RomanAnalysis(
+        key="C major",
+        progression=["I", "V7", "vi"],
+        function=["tonic", "dominant", "submediant"],
+        entries=[
+            RomanEntry(chord="C", numeral="I", function="tonic",
+                       inversion=0, is_secondary=False, is_borrowed=False,
+                       cadence=None, start=0.0, end=2.0),
+        ],
+        cadences=[{"type": "PAC", "index": 1}],
+        modulations=[],
+    )
+    assert len(ra.entries) == 1
+    assert ra.cadences[0]["type"] == "PAC"
+    assert ra.modulations == []
+
+
+def test_roman_analysis_summary_progression_optional():
+    from backend.schemas import RomanAnalysis
+    ra = RomanAnalysis(
+        key="C major",
+        progression=["I", "V", "vi", "IV"],
+        function=["tonic", "dominant", "submediant", "subdominant"],
+    )
+    # summary_progression defaults to None when omitted
+    assert ra.summary_progression is None

@@ -47,13 +47,56 @@ class SongSection(BaseModel):
 # =============================================================================
 
 
+class RomanEntry(BaseModel):
+    """Time-aligned per-chord Roman-numeral entry."""
+
+    chord: str = Field(description="Original chord symbol, e.g. 'G7'")
+    numeral: str = Field(description="Figured-bass Roman numeral, e.g. 'V7', 'V7/V', 'I6'")
+    function: str = Field(
+        description="Harmonic function: tonic/dominant/subdominant/supertonic/"
+                    "submediant/mediant/leading_tone/secondary_dominant/chromatic"
+    )
+    inversion: int = Field(default=0, description="Inversion number (0=root, 1=1st, etc.)")
+    is_secondary: bool = Field(default=False, description="True if secondary dominant (V/V etc.)")
+    is_borrowed: bool = Field(default=False, description="True if borrowed / modal-mixture chord")
+    cadence: str | None = Field(
+        default=None,
+        description="Cadence type ending on this chord: PAC/IAC/half/deceptive/plagal or None",
+    )
+    start: float = Field(description="Start time in seconds")
+    end: float = Field(description="End time in seconds")
+
+
 class RomanAnalysis(BaseModel):
     """Roman-numeral analysis of the progression."""
 
     key: str
-    progression: list[str] = Field(description="e.g. ['I', 'V', 'vi', 'IV']")
+    # Legacy fields — kept for back-compat; populated from entries.
+    progression: list[str] = Field(
+        default_factory=list,
+        description="Full per-chord numeral list (no dedup, no truncation). e.g. ['I', 'V7', 'vi', 'IV']",
+    )
     function: list[str] = Field(
-        description="e.g. ['tonic', 'dominant', 'submediant', 'subdominant']"
+        default_factory=list,
+        description="Per-chord function list aligned with progression.",
+    )
+    # Optional ≤8-item summary for UI chips that need brevity
+    summary_progression: list[str] | None = Field(
+        default=None,
+        description="Deduped + truncated to ≤8 numerals for compact UI display.",
+    )
+    # Enriched per-chord entries (music21 path)
+    entries: list[RomanEntry] = Field(
+        default_factory=list,
+        description="Time-aligned per-chord entries with full figured-bass data.",
+    )
+    cadences: list[dict] = Field(
+        default_factory=list,
+        description="Detected cadences: {type: PAC|IAC|half|deceptive|plagal, index: int}",
+    )
+    modulations: list[dict] = Field(
+        default_factory=list,
+        description="Detected key modulations: {to_key: str, at_index: int}",
     )
 
 
