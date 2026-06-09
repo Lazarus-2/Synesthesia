@@ -12,10 +12,36 @@ export interface SongSection {
   end: number;
 }
 
+export interface RomanEntry {
+  chord: string;
+  numeral: string;
+  function: "tonic" | "dominant" | "subdominant" | "submediant" | "borrowed" | "secondary" | string;
+  inversion?: number;       // 0=root, 1=1st, 2=2nd (int from backend)
+  is_secondary?: boolean;   // V/V, V/IV etc.
+  is_borrowed?: boolean;    // modal mixture
+  cadence?: "PAC" | "IAC" | "half" | "deceptive" | "plagal" | null;
+  start: number;
+  end: number;
+}
+
+export interface RomanCadence {
+  type: "PAC" | "IAC" | "half" | "deceptive" | "plagal";
+  index: number;            // chord index in progression (from backend)
+}
+
+export interface RomanModulation {
+  to_key: string;
+  at_index: number;         // chord index where modulation begins (from backend)
+}
+
 export interface RomanAnalysis {
   key: string;
-  progression: string[];
-  function: string[];
+  progression: string[];    // kept for legacy fallback rendering
+  function: string[];       // kept for legacy fallback rendering
+  summary_progression?: string[];
+  entries?: RomanEntry[];   // G1 enriched, time-aligned per-chord data
+  cadences?: RomanCadence[];
+  modulations?: RomanModulation[];
 }
 
 export interface TheoryExplanation {
@@ -24,6 +50,16 @@ export interface TheoryExplanation {
   pattern_name: string | null;
   notable_techniques: string[];
   similar_song: string | null;
+  text?: string;            // computed field — full prose rendering
+}
+
+export interface SimilarSong {
+  title: string;
+  artist: string;
+  url?: string;
+  image?: string;
+  source: string;           // e.g. "lastfm", "deezer", "catalog"
+  match: number;            // 0-1 similarity score
 }
 
 export interface SongAnalysis {
@@ -37,9 +73,10 @@ export interface SongAnalysis {
   beats?: number[];
   sections: SongSection[];
   roman?: RomanAnalysis;
-  theory?: TheoryExplanation | null;
+  theory?: TheoryExplanation | null;   // G4 structured object; preferred when present
   // theory_explanation kept for back-compat (equals theory.text when theory is set)
   theory_explanation?: string | null;
+  similar_songs?: SimilarSong[];       // G4 surface — absent when backend hasn't computed it
   vibe_palette?: string[];
   instrument_guides?: Record<string, InstrumentGuide>;
   audioUrl?: string;
@@ -59,6 +96,7 @@ export interface ChordDiagram {
   fingers?: number[];
   right_hand?: string[];
   left_hand?: string[];
+  no_voicing?: boolean;     // True = no playable shape exists; render "no diagram" placeholder
 }
 
 export interface InstrumentGuide {
