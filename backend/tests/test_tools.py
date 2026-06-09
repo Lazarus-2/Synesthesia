@@ -87,10 +87,11 @@ class TestChordDiagrams:
         assert diagrams[0].instrument == "ukulele"
 
     def test_guardrails_malformed_input(self):
-        # Should gracefully fallback or ignore
+        # Unparseable labels (no recognisable root) get a no_voicing=True marker
+        # rather than being silently dropped — the count is always preserved.
         diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")
-        # Because we only append if shape is found, malformed chords with no shape should yield empty
-        assert len(diagrams) == 0
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is True
 
 
 class TestVoicingFallback:
@@ -115,9 +116,11 @@ class TestVoicingFallback:
         assert len(diagrams) == 1
         assert diagrams[0].chord == "D/F#"
 
-    def test_truly_unparseable_still_dropped(self):
+    def test_truly_unparseable_returns_no_voicing_marker(self):
+        # G3.3: no_voicing=True is emitted instead of silently dropping
         diagrams = get_chord_diagrams(["INVALID_CHORD"], instrument="guitar")
-        assert len(diagrams) == 0
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is True
 
 
 from backend.tools.chords import ChordParts, parse_chord
@@ -327,6 +330,56 @@ class TestTransposeCompleteness:
         assert transpose_chord("B5", 1) == "C5"
 
 
+class TestNoVoicingMarker:
+    """G3.3 — every chord returns a ChordDiagram; unsupported ones are marked."""
+
+    def test_bb_guitar_now_returns_diagram_not_empty(self):
+        """Bb was silently dropped before G3; now it must return a barre shape."""
+        from backend.tools.voicings import get_chord_diagrams
+        diagrams = get_chord_diagrams(["Bb"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Bb"
+        assert diagrams[0].frets is not None
+        assert diagrams[0].no_voicing is False
+
+    def test_fsharp_minor_guitar_returns_barre(self):
+        from backend.tools.voicings import get_chord_diagrams
+        diagrams = get_chord_diagrams(["F#m"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is False
+        assert diagrams[0].frets[0] == 2   # Em-shape on fret 2
+
+    def test_adim_guitar_returns_no_voicing_marker(self):
+        """Adim has no table entry and no movable-shape template → no_voicing=True."""
+        from backend.tools.voicings import get_chord_diagrams
+        diagrams = get_chord_diagrams(["Adim"], instrument="guitar")
+        assert len(diagrams) == 1
+        assert diagrams[0].chord == "Adim"
+        assert diagrams[0].no_voicing is True
+        assert diagrams[0].frets is None
+
+    def test_c_dominant7_piano_has_four_notes(self):
+        from backend.tools.voicings import get_chord_diagrams
+        diagrams = get_chord_diagrams(["C7"], instrument="piano")
+        assert len(diagrams) == 1
+        assert len(diagrams[0].right_hand) == 4
+        assert diagrams[0].no_voicing is False
+
+    def test_no_voicing_for_power_chord_on_piano(self):
+        """Piano has no sensible voicing for a power chord — marker emitted."""
+        from backend.tools.voicings import get_chord_diagrams
+        diagrams = get_chord_diagrams(["C5"], instrument="piano")
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is True
+
+    def test_all_chords_always_returned(self):
+        """get_chord_diagrams never silently drops a chord; count must equal input."""
+        from backend.tools.voicings import get_chord_diagrams
+        chords = ["C", "Bb", "F#m", "Adim", "Gbmaj7", "C5"]
+        diagrams = get_chord_diagrams(chords, instrument="guitar")
+        assert len(diagrams) == len(chords)
+
+
 class TestPianoVoicings:
     """G3.2 — piano voicings generated from chord-tone intervals."""
 
@@ -435,15 +488,19 @@ class TestVoicingsDegradationPolicy:
         assert len(diagrams) == 1
         assert diagrams[0].chord == "Am7"
 
-    # dim / m7b5 should be DROPPED, not shown with a wrong Am shape
-    def test_adim_dropped_when_no_dim_shape(self):
+    # dim / m7b5 have no safe triad fallback; G3.3 emits no_voicing=True
+    # instead of silently dropping — len is always 1 per input chord.
+    def test_adim_returns_no_voicing_marker(self):
         # There is no Adim shape in any table; must not fall through to Am.
+        # G3.3: returns a diagram with no_voicing=True instead of empty list.
         diagrams = get_chord_diagrams(["Adim"], instrument="guitar")
-        assert len(diagrams) == 0
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is True
 
-    def test_am7b5_dropped_when_no_shape(self):
+    def test_am7b5_returns_no_voicing_on_ukulele(self):
         diagrams = get_chord_diagrams(["Am7b5"], instrument="ukulele")
-        assert len(diagrams) == 0
+        assert len(diagrams) == 1
+        assert diagrams[0].no_voicing is True
 
     # Minor extension chords degrade to minor triad on instruments without the
     # exact shape, not to major triad.

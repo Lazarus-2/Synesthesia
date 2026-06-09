@@ -64,7 +64,8 @@ def get_chord_voicing(chord: str, instrument: str = "guitar") -> dict:
     chord on the given instrument. Returns the deterministic diagram, never a
     guessed shape. Use this when the user asks how to play a chord."""
     diagrams = get_chord_diagrams([chord], instrument=instrument)  # type: ignore[arg-type]
-    if not diagrams:
+    # G3.3: get_chord_diagrams always returns a diagram; check no_voicing flag.
+    if not diagrams or diagrams[0].no_voicing:
         return {"error": f"No voicing found for '{chord}' on {instrument}."}
     return diagrams[0].model_dump(exclude_none=True)
 

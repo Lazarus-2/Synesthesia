@@ -357,15 +357,43 @@ def _piano_chord_voicing(root: str, quality: str) -> dict | None:
     return {"right_hand": right_hand, "left_hand": left_hand}
 
 
+def _quality_chain(quality: str) -> list[str]:
+    """Return quality candidates from specific to general for barre lookup.
+
+    e.g. 'min7' -> ['min7', 'min']  so we first try an Em7-barre (not defined)
+    then fall through to Em-barre (defined).
+    """
+    chain = [quality]
+    # Broaden minor extensions to 'min', major extensions to 'maj'
+    if quality in ("min7", "min9", "min11", "min13", "m7b5"):
+        chain.append("min")
+    elif quality in ("maj7", "maj9", "maj11", "maj13", "dom7", "6", "9", "11", "13", "add9", "aug", "power", "sus2", "sus4"):
+        chain.append("maj")
+    elif quality == "dim7":
+        chain.append("dim")
+    return chain
+
+
 def get_chord_diagrams(
     chords: list[str],
     instrument: Instrument = "guitar",
+    difficulty: str = "intermediate",
 ) -> list[ChordDiagram]:
-    """Return a ChordDiagram for each unique chord in the progression.
+    """Return a ChordDiagram for every unique chord in the progression.
 
-    Extended/unknown chords degrade to their triad shape via ``parse_chord``
-    rather than being silently dropped — only truly unparseable labels (no
-    recognizable root) and roots with no table entry are skipped.
+    Lookup order (guitar/ukulele/bass):
+      1. Curated open-chord table (exact label).
+      2. Degrade-by-quality fallback in the curated table (e.g. Am7 -> Am).
+      3. Movable barre shape (guitar) or root-note shape (bass/ukulele).
+      4. If nothing found: ChordDiagram(no_voicing=True) -- never silently dropped.
+
+    Lookup order (piano):
+      1. Curated _PIANO_TRIADS table (exact or degraded).
+      2. Programmatic _piano_chord_voicing generator.
+      3. no_voicing marker.
+
+    The original chord label is always preserved on the returned diagram so
+    the UI can display 'Am7' even when the shape fell back to Am.
     """
     unique = list(dict.fromkeys(chords))
     diagrams: list[ChordDiagram] = []
@@ -378,14 +406,44 @@ def get_chord_diagrams(
     }[instrument]
 
     for c in unique:
-        shape = None
-        for key in _candidate_labels(c):
-            shape = table.get(key)
-            if shape:
-                break
-        if shape:
-            # Preserve the ORIGINAL label on the diagram even when we fell back
-            # to a degraded shape, so the UI still says "Am7".
-            diagrams.append(ChordDiagram(chord=c, instrument=instrument, **shape))
+        parts = parse_chord(c)
+        shape: dict | None = None
+
+        if instrument == "piano":
+            # Piano lookup order:
+            #   1. Exact hit in curated _PIANO_TRIADS
+            #   2. Programmatic generator (exact quality — avoids degrading dom7 to
+            #      the bare major triad when we can produce a proper voicing)
+            #   3. no_voicing marker
+            shape = table.get(c)
+            if shape is None and parts.root:
+                piano_v = _piano_chord_voicing(parts.root, parts.quality)
+                if piano_v:
+                    shape = piano_v
+        else:
+            # Guitar / ukulele / bass lookup order:
+            # -- Step 1 + 2: curated table (exact then degraded) --
+            for key in _candidate_labels(c):
+                shape = table.get(key)
+                if shape:
+                    break
+
+            # -- Step 3: programmatic barre generator (guitar only) --
+            if shape is None and parts.root and instrument == "guitar":
+                prefer_low = difficulty == "beginner"
+                for q in _quality_chain(parts.quality):
+                    shape = _guitar_barre_shape(parts.root, q, prefer_low_fret=prefer_low)
+                    if shape:
+                        break
+
+        # -- Step 4: emit no_voicing marker instead of dropping --
+        if shape is None or not parts.root:
+            diagrams.append(
+                ChordDiagram(chord=c, instrument=instrument, no_voicing=True)
+            )
+        else:
+            diagrams.append(
+                ChordDiagram(chord=c, instrument=instrument, no_voicing=False, **shape)
+            )
 
     return diagrams

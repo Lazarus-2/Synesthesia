@@ -218,12 +218,16 @@ class ChordDiagram(BaseModel):
 
     chord: str
     instrument: Instrument
-    # Guitar: list of 6 fret numbers (low-E to high-E); -1 = mute, 0 = open
+    # Guitar / ukulele / bass: list of fret numbers; -1 = mute, 0 = open
     frets: list[int] | None = None
     fingers: list[int] | None = None
-    # Piano: list of note names the left/right hand plays
+    # Piano
     right_hand: list[str] | None = None
     left_hand: list[str] | None = None
+    # True when no playable voicing exists for this chord+instrument combo.
+    # The UI must render a "no diagram available" placeholder rather than
+    # silently hiding the chord card.
+    no_voicing: bool = False
 
 
 class InstrumentGuide(BaseModel):
