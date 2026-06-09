@@ -15,7 +15,18 @@ export interface SongSection {
 export interface RomanEntry {
   chord: string;
   numeral: string;
-  function: "tonic" | "dominant" | "subdominant" | "submediant" | "borrowed" | "secondary" | string;
+  // Values from harmonic_function() in backend/theory/roman.py.
+  function:
+    | "tonic"
+    | "supertonic"
+    | "mediant"
+    | "subdominant"
+    | "dominant"
+    | "submediant"
+    | "leading_tone"
+    | "secondary_dominant"
+    | "chromatic"
+    | string; // fallback for future additions
   inversion?: number;       // 0=root, 1=1st, 2=2nd (int from backend)
   is_secondary?: boolean;   // V/V, V/IV etc.
   is_borrowed?: boolean;    // modal mixture

@@ -6,7 +6,7 @@ import { usePlayerStore } from "../../store/usePlayerStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 import { useReharmStore } from "../../store/useReharmStore";
 import { transposeChord } from "../../lib/music";
-import type { RomanEntry, RomanModulation, RomanCadence } from "../../types";
+import type { RomanEntry, RomanModulation } from "../../types";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -14,24 +14,20 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// Figured-bass notation from inversion number.
-function inversionSuffix(inv: number | undefined): string {
-  if (!inv) return "";
-  const map: Record<number, string> = { 1: "6", 2: "64", 3: "42" };
-  return map[inv] ?? "";
-}
-
 // ---------- small presentational sub-components ----------
 
 const FunctionPill: React.FC<{ fn: string }> = ({ fn }) => {
+  // Values match harmonic_function() in backend/theory/roman.py exactly.
   const colorMap: Record<string, string> = {
-    tonic: "bg-primary/20 text-primary",
-    dominant: "bg-error/20 text-error-container",
-    subdominant: "bg-secondary-container/30 text-on-secondary-container",
-    submediant: "bg-tertiary/20 text-on-surface-variant",
-    borrowed: "bg-warning/20 text-on-surface",
-    secondary: "bg-yellow-400/20 text-yellow-300",
-    secondary_dominant: "bg-yellow-400/20 text-yellow-300",
+    tonic:             "bg-primary/20 text-primary",
+    supertonic:        "bg-secondary/20 text-on-surface-variant",
+    mediant:           "bg-tertiary/20 text-on-surface-variant",
+    subdominant:       "bg-secondary-container/30 text-on-secondary-container",
+    dominant:          "bg-error/20 text-error-container",
+    submediant:        "bg-tertiary/20 text-on-surface-variant",
+    leading_tone:      "bg-surface-container-highest/60 text-on-surface-variant",
+    secondary_dominant:"bg-yellow-400/20 text-yellow-300",
+    chromatic:         "bg-blue-400/20 text-blue-300",
   };
   const cls = colorMap[fn] ?? "bg-white/10 text-on-surface-variant";
   return (
@@ -92,7 +88,6 @@ export const ChordTimeline: React.FC = () => {
 
   const entries: RomanEntry[] = analysis.roman?.entries ?? [];
   const modulations: RomanModulation[] = analysis.roman?.modulations ?? [];
-  const cadences: RomanCadence[] = analysis.roman?.cadences ?? [];
 
   // Build per-chord-index lookup maps from time-aligned entries.
   // An entry's [start,end) bracket maps to the chord with closest start.
@@ -104,20 +99,24 @@ export const ChordTimeline: React.FC = () => {
     if (idx !== -1) entryByChordIdx.set(idx, entry);
   }
 
-  // Cadence badges: backend stores {type, index} where index is chord index.
-  const cadenceByChordIdx = new Map<number, RomanCadence>();
-  for (const cadence of cadences) {
-    if (cadence.index >= 0 && cadence.index < analysis.chords.length) {
-      cadenceByChordIdx.set(cadence.index, cadence);
-    }
-  }
+  // I1 fix: cadence and modulation indices are in entries[] space (N.C.-stripped),
+  // NOT chords[] space. Convert via time-alignment.
 
-  // Modulation chips: backend stores {to_key, at_index} where at_index is
-  // the chord index where the new key begins. Render chip BEFORE that chord.
+  // Cadence badges: entry.cadence is already time-aligned per-entry (set by
+  // the backend cadence pass). We read it directly from entryByChordIdx — no
+  // index-space conversion needed.
+
+  // Modulation chips: mod.at_index -> entries[at_index] -> .start -> chords[] idx.
   const modulationBeforeIdx = new Map<number, RomanModulation>();
   for (const mod of modulations) {
-    if (mod.at_index >= 0 && mod.at_index < analysis.chords.length) {
-      modulationBeforeIdx.set(mod.at_index, mod);
+    const entry = entries[mod.at_index];
+    if (!entry) continue;
+    // Find chords[] index whose start is within ±0.15s of this entry's start.
+    const chordIdx = analysis.chords.findIndex(
+      (c) => Math.abs(c.start - entry.start) < 0.15
+    );
+    if (chordIdx !== -1) {
+      modulationBeforeIdx.set(chordIdx, mod);
     }
   }
 
@@ -139,7 +138,8 @@ export const ChordTimeline: React.FC = () => {
           const isPast = i < activeIdx;
           const isFuture = i > activeIdx;
           const entry = entryByChordIdx.get(i);
-          const cadence = cadenceByChordIdx.get(i);
+          // I1: cadence comes from entry.cadence (time-aligned) — no index-space mismatch.
+          const cadenceType = entry?.cadence ?? null;
           const modBefore = modulationBeforeIdx.get(i);
 
           return (
@@ -167,7 +167,8 @@ export const ChordTimeline: React.FC = () => {
                   {transpose !== 0 ? transposeChord(chord.chord, transpose) : chord.chord}
                 </span>
 
-                {/* Roman numeral + inversion (figured-bass) */}
+                {/* Roman numeral — entry.numeral already includes figured bass from music21.
+                    I2: Do NOT append an extra inversion suffix; numeral is the single source of truth. */}
                 {entry && (
                   <span
                     className={`font-headline ${
@@ -176,9 +177,6 @@ export const ChordTimeline: React.FC = () => {
                     title={entry.is_secondary ? "Secondary dominant" : entry.is_borrowed ? "Borrowed chord" : entry.function}
                   >
                     {entry.numeral}
-                    {inversionSuffix(entry.inversion) && (
-                      <sup className="text-[9px]">{inversionSuffix(entry.inversion)}</sup>
-                    )}
                     {entry.is_secondary && (
                       <span className="ml-0.5 text-[9px] text-yellow-400 font-bold">2°</span>
                     )}
@@ -191,8 +189,8 @@ export const ChordTimeline: React.FC = () => {
                 {/* Function pill */}
                 {entry && <FunctionPill fn={entry.function} />}
 
-                {/* Cadence badge */}
-                {cadence && <CadenceBadge type={cadence.type} />}
+                {/* Cadence badge — sourced from entry.cadence (time-aligned, N.C.-safe) */}
+                {cadenceType && <CadenceBadge type={cadenceType} />}
 
                 {/* Timestamp */}
                 <span
