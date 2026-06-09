@@ -34,3 +34,57 @@ def test_to_m21_handles_no_chord_markers():
     from backend.theory.roman import _to_m21
     assert _to_m21("N.C.") == "N.C."
     assert _to_m21("") == ""
+
+
+# ---------------------------------------------------------------------------
+# G1.3 — smart_analyze
+# ---------------------------------------------------------------------------
+
+def test_smart_analyze_diatonic_triads_c_major():
+    from backend.theory.roman import smart_analyze
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    cases = [
+        ("C",    "I"),
+        ("Dm",   "ii"),
+        ("Em",   "iii"),
+        ("F",    "IV"),
+        ("G",    "V"),
+        ("Am",   "vi"),
+        ("Bdim", "viio"),
+    ]
+    for sym, expected_fig in cases:
+        rn = smart_analyze(sym, k)
+        assert rn.figure == expected_fig, (
+            f"smart_analyze({sym!r}, C major) = {rn.figure!r}, expected {expected_fig!r}"
+        )
+
+
+def test_smart_analyze_seventh_chords():
+    from backend.theory.roman import smart_analyze
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    assert smart_analyze("G7", k).figure == "V7"
+    assert smart_analyze("Fmaj7", k).figure == "IV7"
+    assert smart_analyze("Am7", k).figure == "vi7"
+
+
+def test_smart_analyze_inversions():
+    from backend.theory.roman import smart_analyze
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    rn_c_e = smart_analyze("C/E", k)
+    assert rn_c_e.figure == "I6"
+    assert rn_c_e.inversion() == 1
+
+    rn_g_b = smart_analyze("G/B", k)
+    assert rn_g_b.figure == "V6"
+    assert rn_g_b.inversion() == 1
+
+
+def test_smart_analyze_no_chord_returns_none():
+    from backend.theory.roman import smart_analyze
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    assert smart_analyze("N.C.", k) is None
+    assert smart_analyze("", k) is None
