@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     chat_tutor_default: bool = False
     chat_user_daily_token_budget: int = 200000
 
+    # --- Optional external music-data keys ---
+    # Last.fm free API — https://www.last.fm/api/account/create
+    # When unset the similar-songs service silently returns [] (graceful no-op,
+    # same pattern as ACOUSTID_API_KEY).
+    lastfm_api_key: str = ""
+
     # --- LLM Temperatures ---
     theory_temperature: float = 0.2
     instrument_temperature: float = 0.3
