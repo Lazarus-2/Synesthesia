@@ -330,6 +330,48 @@ class TestTransposeCompleteness:
         assert transpose_chord("B5", 1) == "C5"
 
 
+class TestDifficultyVoicings:
+    """G3.4 — difficulty selects simpler vs richer shapes."""
+
+    def test_beginner_f_guitar_gets_capo_friendly_shape(self):
+        """F major is hard; beginner should receive the curated open F or a
+        low-fret barre, NOT the full-barre F on fret 1 with high stretch."""
+        from backend.tools.voicings import get_chord_diagrams
+        beginner = get_chord_diagrams(["F"], instrument="guitar", difficulty="beginner")
+        assert len(beginner) == 1
+        # Curated open F (frets=[1,3,3,2,1,1]) is fine for beginner; max fret <= 5
+        assert max(f for f in beginner[0].frets if f >= 0) <= 5
+
+    def test_advanced_bb_guitar_gets_barre_not_open(self):
+        """Advanced player: Bb should get the full barre shape (fret 6),
+        not be forced into a beginner-friendly simplification."""
+        from backend.tools.voicings import get_chord_diagrams
+        advanced = get_chord_diagrams(["Bb"], instrument="guitar", difficulty="advanced")
+        assert len(advanced) == 1
+        assert advanced[0].no_voicing is False
+        # E-shape barre on fret 6: all strings fretted >= 6
+        assert advanced[0].frets[0] == 6
+
+    def test_beginner_bb_guitar_gets_a_shape_lower_fret(self):
+        """Beginner gets the A-shape barre (fret 1, lower stretch) for Bb
+        rather than the E-shape barre on fret 6."""
+        from backend.tools.voicings import get_chord_diagrams
+        beginner = get_chord_diagrams(["Bb"], instrument="guitar", difficulty="beginner")
+        assert len(beginner) == 1
+        assert beginner[0].no_voicing is False
+        # A-shape Bb: root on string 1 at fret 1 -> [-1,1,3,3,3,1]
+        assert beginner[0].frets[1] == 1   # root on A-string at fret 1
+
+    def test_beginner_vs_advanced_same_length(self):
+        """Both levels return a diagram for every chord."""
+        from backend.tools.voicings import get_chord_diagrams
+        chords = ["C", "G", "Am", "F", "Bb", "F#m"]
+        b = get_chord_diagrams(chords, instrument="guitar", difficulty="beginner")
+        a = get_chord_diagrams(chords, instrument="guitar", difficulty="advanced")
+        assert len(b) == len(chords)
+        assert len(a) == len(chords)
+
+
 class TestNoVoicingMarker:
     """G3.3 — every chord returns a ChordDiagram; unsupported ones are marked."""
 
