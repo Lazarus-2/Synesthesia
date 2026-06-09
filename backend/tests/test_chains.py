@@ -268,24 +268,27 @@ class TestChatContext:
 
 
 class TestAutoCapo:
+    # G3.5: _auto_capo was replaced by _deterministic_capo which delegates to
+    # suggest_capo.  Tests updated to import _deterministic_capo.
+
     def test_open_chords_pick_no_capo_or_better(self):
         """C-G-Am-F: open shapes are fine but capo 5 turns F→C so might rank higher."""
-        from backend.chains.instrument_chain import _auto_capo
+        from backend.chains.instrument_chain import _deterministic_capo
 
-        result = _auto_capo(["C", "G", "Am", "F"])
+        result = _deterministic_capo(["C", "G", "Am", "F"])
         # Either the function says no capo or a fret that yields easier shapes.
         assert result is None or 1 <= result <= 7
 
     def test_tricky_keys_picks_capo_2(self):
-        from backend.chains.instrument_chain import _auto_capo
+        from backend.chains.instrument_chain import _deterministic_capo
 
         # F#m-D-A-E with capo 2 -> Em-C-G-D (all open).
-        assert _auto_capo(["F#m", "D", "A", "E"]) == 2
+        assert _deterministic_capo(["F#m", "D", "A", "E"]) == 2
 
     def test_empty_list_returns_none(self):
-        from backend.chains.instrument_chain import _auto_capo
+        from backend.chains.instrument_chain import _deterministic_capo
 
-        assert _auto_capo([]) is None
+        assert _deterministic_capo([]) is None
 
 
 # ---------------------------------------------------------------------------

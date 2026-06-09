@@ -330,6 +330,43 @@ class TestTransposeCompleteness:
         assert transpose_chord("B5", 1) == "C5"
 
 
+class TestCapoUnified:
+    """G3.5 — capo is computed once deterministically; LLM no longer decides."""
+
+    def test_instrument_guide_capo_matches_suggest_capo(self):
+        """The capo on an InstrumentGuide must equal suggest_capo's answer."""
+        from backend.tools.capo import suggest_capo
+        from backend.chains.instrument_chain import _deterministic_capo
+
+        chords = ["F", "Bb", "Dm", "Gm"]
+        expected = suggest_capo.invoke({"chords": chords})["capo"]
+        got = _deterministic_capo(chords)
+        assert got == expected
+
+    def test_deterministic_capo_for_all_open_chords(self):
+        # C G Am are all easy open; no capo improvement expected.
+        from backend.chains.instrument_chain import _deterministic_capo
+        assert _deterministic_capo(["C", "G", "Am"]) in (0, None)
+
+    def test_llm_instrument_tips_has_no_capo_field(self):
+        """LLMInstrumentTips must NOT include 'capo' after G3.5."""
+        from backend.chains.instrument_chain import LLMInstrumentTips
+        assert "capo" not in LLMInstrumentTips.model_fields
+
+    def test_diagrams_use_transposed_chords_when_capo_set(self):
+        """With capo=5, Bb diagrams should be stored as F (the pressed shape)."""
+        from backend.tools.voicings import get_chord_diagrams
+        from backend.tools.transpose import transpose_chord
+
+        capo = 5
+        chords = ["Bb"]
+        transposed = [transpose_chord(c, -capo) for c in chords]
+        diagrams = get_chord_diagrams(transposed, instrument="guitar")
+        # F is in the curated table; must come back as a non-barre open shape
+        assert len(diagrams) == 1
+        assert max(f for f in diagrams[0].frets if f >= 0) <= 3
+
+
 class TestDifficultyVoicings:
     """G3.4 — difficulty selects simpler vs richer shapes."""
 

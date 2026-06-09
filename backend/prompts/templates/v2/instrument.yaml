@@ -17,9 +17,10 @@ messages:
       Tempo: {tempo} BPM
       Chords (in order): {chords}
       Section: {section}
+      Capo: {capo}
 
       Provide:
       1. Recommended strumming/picking pattern (with notation like D DU UDU).
       2. Tricky chord transitions and how to practice them.
-      3. One capo suggestion if it makes chords easier (or "No capo needed").
+      3. Explain the capo setting above (or confirm no capo is needed).
       4. One practice tip for a {difficulty} player.
