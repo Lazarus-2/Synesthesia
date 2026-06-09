@@ -18,7 +18,7 @@ function writeSession(id: string | null) {
   else window.localStorage.removeItem(SESSION_KEY);
 }
 
-export interface ToolStatus { name: string; phase: 'start' | 'end'; }
+export interface ToolStatus { name: string; phase: 'start' | 'end' | 'error'; }
 
 export interface ChatContext {
   loaded?: boolean;
@@ -125,11 +125,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (!response.body) throw new Error('No SSE body returned');
 
+      // Belt-and-suspenders: read session_id from the X-Session-Id response
+      // header as a fallback in case the done SSE frame lacks it.
+      const headerSessionId = response.headers.get('X-Session-Id');
+      if (headerSessionId && !get().sessionId) {
+        writeSession(headerSessionId);
+        set({ sessionId: headerSessionId });
+      }
+
       await consumeSse<{ text: string }, { session_id?: string }>(
         response.body,
         {
           onContext: (ctx) => set({ context: ctx as ChatContext }),
-          onTool: (t) => set({ activeTool: t as ToolStatus }),
+          onTool: (t) => {
+            const toolStatus = t as ToolStatus;
+            if (toolStatus.phase === 'end' || toolStatus.phase === 'error') {
+              set({ activeTool: null });
+            } else {
+              set({ activeTool: toolStatus });
+            }
+          },
           onChunk: (data) => {
             const text = typeof data === 'string' ? data : data?.text;
             if (text) get().updateLastMessage(text);

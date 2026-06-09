@@ -207,7 +207,6 @@ def test_stream_foreign_analysis_not_loaded(as_user, mock_mongo, monkeypatch):
 
     monkeypatch.setattr("backend.main.stream_aura", _fake_stream)
 
-    from backend.repositories import AnalysisRepo
     monkeypatch.setattr(
         "backend.repositories.AnalysisRepo.get_owned",
         AsyncMock(return_value=None),
@@ -223,3 +222,48 @@ def test_stream_foreign_analysis_not_loaded(as_user, mock_mongo, monkeypatch):
 
     assert captured["analysis"] is None, "Foreign analysis must not reach stream_aura"
     get_mock.assert_not_awaited()
+
+
+def test_stream_done_frame_contains_session_id(as_user, monkeypatch):
+    """Bug-1 fix: the terminal 'done' SSE frame must carry the resolved
+    session_id so the frontend can persist it for multi-turn continuity.
+    Without this, the client POSTs session_id=null on every turn and the
+    server mints a new session per message — history never accumulates."""
+    async def _fake_stream(**kwargs):
+        yield ServerSentEvent(event="context", data='{"loaded":false}')
+        yield ServerSentEvent(event="chunk", data='{"text":"hello"}')
+        yield ServerSentEvent(event="done", data='{"text":"hello"}')
+
+    monkeypatch.setattr("backend.main.stream_aura", _fake_stream)
+
+    import json as _json
+
+    with as_user.stream(
+        "POST", "/api/v1/chat/stream", json={"message": "hi"}
+    ) as r:
+        assert r.status_code == 200
+        body = "".join(r.iter_text())
+
+    # Parse all SSE events by scanning for event/data pairs.
+    events: list[dict] = []
+    current_event: str | None = None
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("event:"):
+            current_event = line[len("event:"):].strip()
+        elif line.startswith("data:") and current_event is not None:
+            try:
+                events.append({"event": current_event, "data": _json.loads(line[len("data:"):].strip())})
+            except _json.JSONDecodeError:
+                pass
+            current_event = None
+
+    done_events = [e for e in events if e["event"] == "done"]
+    assert done_events, "No 'done' event found in stream"
+    done_payload = done_events[-1]["data"]
+    assert "session_id" in done_payload, (
+        f"'session_id' missing from done frame payload: {done_payload!r}"
+    )
+    assert done_payload["session_id"] is not None and done_payload["session_id"] != "", (
+        f"'session_id' in done frame is empty: {done_payload!r}"
+    )

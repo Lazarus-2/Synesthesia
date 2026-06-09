@@ -1409,6 +1409,16 @@ async def chat_stream(
                         assistant_text_parts.append(json.loads(frame.data).get("text", ""))
                     except (json.JSONDecodeError, AttributeError):
                         pass
+                # Inject the resolved session_id into the terminal done frame so
+                # the frontend can persist it for multi-turn continuity.
+                if frame.event == "done":
+                    try:
+                        done_data = json.loads(frame.data) if frame.data else {}
+                    except (json.JSONDecodeError, AttributeError):
+                        done_data = {}
+                    done_data["session_id"] = session_id
+                    yield ServerSentEvent(event="done", data=json.dumps(done_data))
+                    continue
                 yield frame
         except Exception:
             # I2: persist whatever partial assistant text accumulated before

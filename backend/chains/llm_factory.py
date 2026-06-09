@@ -264,6 +264,8 @@ def _get_api_key(provider: str) -> str:
 
 def _resolve_primary_and_fallback(
     temperature: float,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> tuple[Callable[[], BaseChatModel], Callable[[], BaseChatModel] | None, str, str | None]:
     """Resolve provider/model/key config and emit logger.info lines ONCE.
 
@@ -276,22 +278,29 @@ def _resolve_primary_and_fallback(
     Both :func:`build_llm` and :func:`_provider_builders` (which backs
     :func:`build_chat_llm` / :func:`build_structured_llm`) delegate here so
     provider resolution and logging happen in exactly one place.
+
+    When ``provider``/``model`` are given they override ``s.llm_provider`` /
+    ``s.model_name`` for the PRIMARY model only; the fallback continues to use
+    the global ``LLM_FALLBACK_PROVIDER``/``LLM_FALLBACK_MODEL`` settings.  This
+    lets the CHAT path honour ``CHAT_PROVIDER``/``CHAT_MODEL`` without touching
+    the theory/instrument chains.
     """
     s = get_settings()
-    provider = (s.llm_provider or "ollama").lower()
+    resolved_provider = (provider or s.llm_provider or "ollama").lower()
+    resolved_model = model or s.model_name
 
-    logger.info("Building LLM: provider=%s, model=%s", provider, s.model_name or "(default)")
+    logger.info("Building LLM: provider=%s, model=%s", resolved_provider, resolved_model or "(default)")
 
     def _build_primary() -> BaseChatModel:
         return _build_provider_llm(
-            provider=provider,
-            model=s.model_name,
+            provider=resolved_provider,
+            model=resolved_model,
             temperature=temperature,
-            api_key=_get_api_key(provider),
+            api_key=_get_api_key(resolved_provider),
         )
 
     fallback_provider = (s.llm_fallback_provider or "").lower()
-    if fallback_provider and fallback_provider != provider:
+    if fallback_provider and fallback_provider != resolved_provider:
         logger.info(
             "Fallback configured: provider=%s, model=%s",
             fallback_provider,
@@ -306,9 +315,9 @@ def _resolve_primary_and_fallback(
                 api_key=_get_api_key(fallback_provider),
             )
 
-        return _build_primary, _build_fallback, provider, fallback_provider
+        return _build_primary, _build_fallback, resolved_provider, fallback_provider
 
-    return _build_primary, None, provider, None
+    return _build_primary, None, resolved_provider, None
 
 
 def build_llm(temperature: float = 0.2) -> BaseChatModel:
@@ -346,6 +355,8 @@ def build_llm(temperature: float = 0.2) -> BaseChatModel:
 
 def _provider_builders(
     temperature: float,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> tuple[Callable[[], BaseChatModel], Callable[[], BaseChatModel] | None]:
     """Return zero-arg builders for the primary and (optional) fallback models.
 
@@ -353,20 +364,29 @@ def _provider_builders(
     and logging are shared with :func:`build_llm`.
     """
     build_primary, build_fallback, _primary_name, _fallback_name = _resolve_primary_and_fallback(
-        temperature
+        temperature, provider=provider, model=model
     )
     return build_primary, build_fallback
 
 
-def build_chat_llm(temperature: float = 0.7, tools: list | None = None) -> Runnable:
+def build_chat_llm(
+    temperature: float = 0.7,
+    tools: list | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> Runnable:
     """Plain-or-tool-bound chat LLM with provider fallback.
 
     When ``tools`` is given, ``bind_tools`` is applied to EACH bare provider
     model before ``.with_fallbacks()`` composes them — so the fallback model is
     tool-aware too. When ``tools`` is None the bare model passes through
     untouched.
+
+    When ``provider``/``model`` are given they override the global
+    ``LLM_PROVIDER``/``MODEL_NAME`` settings for the PRIMARY model so the chat
+    path can honour ``CHAT_PROVIDER``/``CHAT_MODEL`` independently.
     """
-    build_primary, build_fallback = _provider_builders(temperature)
+    build_primary, build_fallback = _provider_builders(temperature, provider=provider, model=model)
 
     def _transform(model: BaseChatModel) -> Runnable:
         if tools is not None:

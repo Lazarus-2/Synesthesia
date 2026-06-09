@@ -106,6 +106,102 @@ class TestLLMFactory:
         assert wrapped.invoke("test") == "recovered:test"
         assert get_fallback_stats() == {"alpha->beta": 1}
 
+    def test_build_chat_llm_provider_override_uses_given_provider(self, monkeypatch):
+        """Bug-2 fix: build_chat_llm(provider='anthropic', model='claude-x') must
+        call _build_provider_llm with provider='anthropic', not the global
+        LLM_PROVIDER setting.  Patch _build_provider_llm to capture the call."""
+        from backend.chains import llm_factory
+
+        captured: dict = {}
+
+        def _fake_build_provider_llm(provider, model, temperature, api_key=""):
+            captured["provider"] = provider
+            captured["model"] = model
+            # Return a minimal mock that won't blow up when bind_tools is called.
+            from unittest.mock import MagicMock
+            m = MagicMock()
+            m.bind_tools = lambda tools, **kw: m
+            return m
+
+        monkeypatch.setattr(llm_factory, "_build_provider_llm", _fake_build_provider_llm)
+
+        llm_factory.build_chat_llm(temperature=0.7, provider="anthropic", model="claude-x")
+        assert captured.get("provider") == "anthropic", (
+            f"Expected provider='anthropic', got {captured.get('provider')!r}"
+        )
+        assert captured.get("model") == "claude-x"
+
+    def test_build_chat_llm_no_override_uses_global_provider(self, monkeypatch):
+        """Bug-2 backward-compat: when provider/model are omitted, the global
+        LLM_PROVIDER / MODEL_NAME settings are used (unchanged behavior).
+        We call _resolve_primary_and_fallback directly (no network) and assert
+        the resolved provider matches the global setting."""
+        import os
+
+        from backend.chains import llm_factory
+
+        # Force the global provider to a known value via env var.
+        monkeypatch.setenv("LLM_PROVIDER", "ollama")
+        # Clear the settings cache so our env var takes effect.
+        from backend.config import get_settings as _gs
+        _gs.cache_clear()
+
+        captured: dict = {}
+        original_build_provider = llm_factory._build_provider_llm
+
+        def _fake_build_provider_llm(provider, model, temperature, api_key=""):
+            captured["provider"] = provider
+            from unittest.mock import MagicMock
+            m = MagicMock()
+            m.bind_tools = lambda tools, **kw: m
+            return m
+
+        monkeypatch.setattr(llm_factory, "_build_provider_llm", _fake_build_provider_llm)
+
+        try:
+            llm_factory.build_chat_llm(temperature=0.7)
+        finally:
+            _gs.cache_clear()
+
+        assert captured.get("provider") == "ollama", (
+            f"Expected provider='ollama' (global default), got {captured.get('provider')!r}"
+        )
+
+    def test_build_aura_agent_passes_effective_chat_provider_to_build_chat_llm(self, monkeypatch):
+        """Bug-2 fix: build_aura_agent must forward effective_chat_provider /
+        effective_chat_model to build_chat_llm, so CHAT_PROVIDER/CHAT_MODEL env
+        vars actually affect the chat path."""
+        from backend.chains import aura_agent
+
+        captured: dict = {}
+
+        def _fake_build_chat_llm(temperature=0.7, tools=None, provider=None, model=None):
+            captured["provider"] = provider
+            captured["model"] = model
+            from unittest.mock import MagicMock
+            return MagicMock()
+
+        fake_settings = type("S", (), {
+            "creative_temperature": 0.7,
+            "effective_chat_provider": "anthropic",
+            "effective_chat_model": "claude-sentinel",
+            "chat_max_tool_iters": 4,
+            "chat_tools_enabled": True,
+        })()
+
+        monkeypatch.setattr(aura_agent, "build_chat_llm", _fake_build_chat_llm)
+        monkeypatch.setattr(aura_agent, "get_settings", lambda: fake_settings)
+
+        try:
+            aura_agent.build_aura_agent(tools=[], tutor_mode=False)
+        except Exception:
+            pass  # agent construction may fail on the mock model — we only care about the call args
+
+        assert captured.get("provider") == "anthropic", (
+            f"Expected build_chat_llm called with provider='anthropic'; got {captured!r}"
+        )
+        assert captured.get("model") == "claude-sentinel"
+
 
 # ---------------------------------------------------------------------------
 # chat_chain context injection (no LLM)
@@ -239,7 +335,6 @@ class TestBindBeforeFallback:
 
         from backend.chains.llm_factory import (
             _bind_before_fallback,
-            get_fallback_stats,
             reset_fallback_stats,
         )
 
@@ -418,8 +513,6 @@ class TestTheoryChainFallbackSafe:
     because .with_structured_output was called on RunnableWithFallbacks."""
 
     def test_build_theory_chain_with_cross_provider_fallback(self):
-        from unittest.mock import MagicMock
-
         from langchain_core.runnables import RunnableLambda
 
         from backend.chains import theory_chain
@@ -449,8 +542,6 @@ class TestInstrumentChainFallbackSafe:
     RunnableWithFallbacks.with_structured_output)."""
 
     def test_build_instrument_chain_with_cross_provider_fallback(self):
-        from unittest.mock import MagicMock
-
         from langchain_core.runnables import RunnableLambda
 
         from backend.chains import instrument_chain

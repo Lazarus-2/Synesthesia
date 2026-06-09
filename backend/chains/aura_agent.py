@@ -273,7 +273,13 @@ def build_aura_agent(tools: list | None = None, tutor_mode: bool = False):  # no
         tools = TOOLS
 
     temperature = float(getattr(get_settings(), "creative_temperature", 0.7) or 0.7)
-    model = build_chat_llm(temperature, tools=tools)
+    s = get_settings()
+    model = build_chat_llm(
+        temperature,
+        tools=tools,
+        provider=s.effective_chat_provider,
+        model=s.effective_chat_model,
+    )
 
     # I-1: no system_prompt argument — the per-call SystemMessage in
     # _agent_messages already carries persona + grounding rules + FACTS.
