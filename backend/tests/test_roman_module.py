@@ -465,3 +465,42 @@ def test_analyze_roman_no_chord_tokens_skipped():
     result = analyze_roman(chords, "C major")
     # N.C. is skipped — only 2 entries
     assert len(result.entries) == 2
+
+
+# ---------------------------------------------------------------------------
+# G1.10 — No-music21 fallback
+# ---------------------------------------------------------------------------
+
+def test_fallback_when_music21_unavailable(monkeypatch):
+    """analyze_roman must not raise when music21 is import-guarded out."""
+    import backend.theory.roman as roman_mod
+    monkeypatch.setattr(roman_mod, "_MUSIC21_AVAILABLE", False)
+
+    from backend.schemas import ChordEvent, RomanAnalysis
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="G"),
+        ChordEvent(start=4.0, end=6.0, chord="Am"),
+        ChordEvent(start=6.0, end=8.0, chord="F"),
+    ]
+    result = roman_mod.analyze_roman(chords, "C major")
+    assert isinstance(result, RomanAnalysis)
+    # Fallback still populates progression and function (legacy shape)
+    assert len(result.progression) > 0
+    assert len(result.function) > 0
+    # entries and enriched fields may be empty in fallback
+    # but must not raise
+
+
+def test_fallback_produces_basic_diatonic_numerals(monkeypatch):
+    import backend.theory.roman as roman_mod
+    monkeypatch.setattr(roman_mod, "_MUSIC21_AVAILABLE", False)
+
+    from backend.schemas import ChordEvent
+    chords = [
+        ChordEvent(start=0.0, end=2.0, chord="C"),
+        ChordEvent(start=2.0, end=4.0, chord="G"),
+    ]
+    result = roman_mod.analyze_roman(chords, "C major")
+    assert "I" in result.progression
+    assert "V" in result.progression
