@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 # =============================================================================
 # Core music primitives -- Module 1
@@ -144,6 +144,7 @@ class TheoryExplanation(BaseModel):
         ),
     )
 
+    @computed_field
     @property
     def text(self) -> str:
         """Render the structured fields as the Markdown string consumers expect."""
@@ -194,7 +195,7 @@ class SongAnalysis(BaseModel):
     stems: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _sync_theory_explanation(self) -> "SongAnalysis":
+    def _sync_theory_explanation(self) -> SongAnalysis:
         """Keep theory_explanation in sync with theory.text when theory is set.
 
         Does not overwrite an explicitly supplied theory_explanation string.

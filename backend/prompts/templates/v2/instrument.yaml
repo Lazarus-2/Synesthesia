@@ -1,5 +1,5 @@
 name: instrument
-version: v1
+version: v2
 description: Instrument-specific tips. Chord shapes come from voicings.py — never invented here.
 messages:
   - role: system

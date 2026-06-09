@@ -189,3 +189,67 @@ class TestTheoryEndToEnd:
         )
         assert restored.theory.pattern_name == "I-V-vi-IV pop progression"
         assert restored.theory_explanation == te.text
+
+
+class TestTheoryExplanationComputedField:
+    """G2 fix: TheoryExplanation.text must appear in model_dump / model_dump_json
+    as a computed_field so the API JSON includes it (needed by G5 frontend)."""
+
+    def _make_te(self):
+        from backend.schemas import TheoryExplanation
+
+        return TheoryExplanation(
+            key_summary="C major — the I-V-vi-IV progression centers on C.",
+            function_explanation=(
+                "C is tonic (I), G is dominant (V), Am is submediant (vi), "
+                "F is subdominant (IV)."
+            ),
+            pattern_name="I-V-vi-IV pop progression",
+            notable_techniques=["diatonic harmony only"],
+            similar_song="Let It Be — Beatles",
+        )
+
+    def test_text_in_model_dump(self):
+        """text must be serialized by model_dump() as a computed_field."""
+        te = self._make_te()
+        dumped = te.model_dump()
+        assert "text" in dumped, (
+            f"'text' not found in model_dump() keys: {list(dumped.keys())}"
+        )
+        assert isinstance(dumped["text"], str)
+        assert "C major" in dumped["text"]
+        assert "I-V-vi-IV pop progression" in dumped["text"]
+
+    def test_text_in_model_dump_json(self):
+        """text must be serialized by model_dump_json() so the API response includes it."""
+        import json
+
+        te = self._make_te()
+        payload = json.loads(te.model_dump_json())
+        assert "text" in payload, (
+            f"'text' not found in model_dump_json() keys: {list(payload.keys())}"
+        )
+        assert isinstance(payload["text"], str)
+        assert "C major" in payload["text"]
+
+    def test_text_consistent_with_property(self):
+        """model_dump()['text'] must equal te.text (property value unchanged)."""
+        te = self._make_te()
+        assert te.model_dump()["text"] == te.text
+
+    def test_model_validator_backfill_still_works(self):
+        """SongAnalysis._sync_theory_explanation must still read theory.text correctly
+        after the computed_field decorator is applied."""
+        from backend.schemas import ChordEvent, SongAnalysis
+
+        te = self._make_te()
+        sa = SongAnalysis(
+            duration=4.0,
+            key="C major",
+            tempo=120.0,
+            chords=[ChordEvent(start=0.0, end=1.0, chord="C")],
+            theory=te,
+        )
+        assert sa.theory_explanation == te.text, (
+            "model_validator back-fill must still populate theory_explanation from theory.text"
+        )

@@ -1,5 +1,5 @@
 name: chat
-version: v1
+version: v2
 description: AURA — the holographic Synesthesia chat assistant persona.
 messages:
   - role: system
