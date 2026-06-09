@@ -94,6 +94,7 @@ async def test_fetch_similar_songs_lastfm_happy_path(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # G4.2 — Graceful no-op when key absent → Deezer fallback fires
+# (tests already committed; section marker retained for traceability)
 # ---------------------------------------------------------------------------
 
 DEEZER_ARTIST_SEARCH = {
