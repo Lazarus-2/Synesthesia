@@ -10,19 +10,22 @@ const SourceBadge: React.FC<{ source: string }> = ({ source }) => (
   </span>
 );
 
-const MatchBar: React.FC<{ match: number }> = ({ match }) => (
-  <div className="flex items-center gap-2 mt-1">
-    <div className="flex-grow h-1 bg-white/10 rounded-full overflow-hidden">
-      <div
-        className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-full"
-        style={{ width: `${Math.round(match * 100)}%` }}
-      />
+const MatchBar: React.FC<{ match: number | null }> = ({ match }) => {
+  if (match == null) return null;
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="flex-grow h-1 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-full"
+          style={{ width: `${Math.round(match * 100)}%` }}
+        />
+      </div>
+      <span className="text-[9px] text-on-surface-variant tabular-nums w-8 text-right">
+        {Math.round(match * 100)}%
+      </span>
     </div>
-    <span className="text-[9px] text-on-surface-variant tabular-nums w-8 text-right">
-      {Math.round(match * 100)}%
-    </span>
-  </div>
-);
+  );
+};
 
 const SimilarSongRow: React.FC<{ song: SimilarSong }> = ({ song }) => (
   <li className="flex items-center gap-3 py-3 border-b border-white/5 last:border-b-0">

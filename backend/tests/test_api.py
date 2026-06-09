@@ -219,6 +219,44 @@ class TestShare:
         assert body["analysis"]["title"] == "Demo"
         assert body["audio_url"] == "/api/v1/audio/abc"
 
+    def test_share_includes_structured_theory(self, api_client, mock_mongo):
+        """Fix 2: /share must pass theory= so the structured TheoryPanel is present."""
+        theory_obj = {
+            "key_summary": "C major",
+            "function_explanation": "I-V-vi-IV",
+            "pattern_name": "Axis progression",
+            "notable_techniques": ["diatonic"],
+            "similar_song": None,
+        }
+        mock_mongo.song_analyses.find_one = AsyncMock(
+            return_value={
+                "_id": "xyz",
+                "title": "Theory Track",
+                "artist": "Test Artist",
+                "duration": 90.0,
+                "key": "C major",
+                "tempo": 100.0,
+                "time_signature": "4/4",
+                "chords": [],
+                "beats": [],
+                "sections": [],
+                "roman": None,
+                "vibe_palette": [],
+                "theory": theory_obj,
+                "theory_explanation": "C major: I-V-vi-IV",
+                "similar_songs": [],
+                "instrument_guides": {},
+                "stems": {},
+            }
+        )
+        r = api_client.get("/api/v1/share/xyz")
+        assert r.status_code == 200
+        body = r.json()
+        analysis = body["analysis"]
+        assert analysis["theory"] is not None, "structured theory must not be dropped by /share"
+        assert analysis["theory"]["key_summary"] == "C major"
+        assert analysis["theory"]["pattern_name"] == "Axis progression"
+
 
 class TestPreferences:
     def test_get_preferences_404_for_unknown_user(self, api_client, mock_mongo):

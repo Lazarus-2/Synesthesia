@@ -862,6 +862,7 @@ async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeRespons
         sections=song.sections,
         roman=song.roman,
         vibe_palette=song.vibe_palette,
+        theory=song.theory,                              # structured object (G2)
         theory_explanation=song.theory_explanation,
         similar_songs=song.similar_songs,               # online recommendations (G4)
     )

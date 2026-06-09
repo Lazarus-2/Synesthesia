@@ -70,7 +70,7 @@ export interface SimilarSong {
   url?: string;
   image?: string;
   source: string;           // e.g. "lastfm", "deezer", "catalog"
-  match: number;            // 0-1 similarity score
+  match: number | null;     // 0-1 similarity score; null when backend has no score (e.g. Deezer default path)
 }
 
 export interface SongAnalysis {
