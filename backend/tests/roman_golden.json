@@ -1,0 +1,258 @@
+{
+  "_comment": "G6 Roman-numeral eval golden set. 28 hand-verified items. music21 notation: flats use 'B-' not 'Bb'. expected_root_pcs: chord-symbol root pitch classes (0=C 1=C#/Db 2=D 3=Eb 4=E 5=F 6=F#/Gb 7=G 8=Ab 9=A 10=Bb 11=B). expected_cadence: pac|iac|half|deceptive|plagal|null (lowercase; analyze_roman returns uppercase, comparison is case-insensitive). expected_secondary: bool (any V/x in progression). SCORING NOTE: root PCs are scored via entry.chord pitchClass (music21 ChordSymbol), NOT via RomanNumeral(figure,key).root() — the latter is unreliable for flat modal degrees (bVI/bVII/bIII) in minor keys.",
+  "items": [
+    {
+      "id": "ii_V_I_G_major",
+      "description": "ii-V-I in G major (jazz backbone)",
+      "key": "G major",
+      "chords": ["Am", "D7", "G"],
+      "expected_root_pcs": [9, 2, 7],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "I_V_vi_IV_C_major",
+      "description": "I-V-vi-IV in C major (50s/pop four-chord); G->Am = deceptive cadence",
+      "key": "C major",
+      "chords": ["C", "G", "Am", "F"],
+      "expected_root_pcs": [0, 7, 9, 5],
+      "expected_cadence": "deceptive",
+      "expected_secondary": false
+    },
+    {
+      "id": "I_vi_ii_V_C_major",
+      "description": "I-vi-ii-V turnaround in C major",
+      "key": "C major",
+      "chords": ["C", "Am", "Dm", "G"],
+      "expected_root_pcs": [0, 9, 2, 7],
+      "expected_cadence": "half",
+      "expected_secondary": false
+    },
+    {
+      "id": "secondary_dominant_V_of_V_C_major",
+      "description": "Secondary dominant V/V (D7) resolving to V then I in C major",
+      "key": "C major",
+      "chords": ["D7", "G", "C"],
+      "expected_root_pcs": [2, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": true
+    },
+    {
+      "id": "borrowed_bVII_C_major",
+      "description": "Borrowed bVII (Bb) modal mixture in C major",
+      "key": "C major",
+      "chords": ["C", "B-", "F"],
+      "expected_root_pcs": [0, 10, 5],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "neapolitan_bII_C_major",
+      "description": "Neapolitan bII (Db) -> V7 -> I in C major",
+      "key": "C major",
+      "chords": ["D-", "G7", "C"],
+      "expected_root_pcs": [1, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "i_iv_V_A_minor",
+      "description": "i-iv-V7 (harmonic minor) in A minor",
+      "key": "A minor",
+      "chords": ["Am", "Dm", "E7"],
+      "expected_root_pcs": [9, 2, 4],
+      "expected_cadence": "half",
+      "expected_secondary": false
+    },
+    {
+      "id": "i_VII_III_VI_A_minor",
+      "description": "i-bVII-III-bVI natural minor in A minor (G=7, C=0, F=5)",
+      "key": "A minor",
+      "chords": ["Am", "G", "C", "F"],
+      "expected_root_pcs": [9, 7, 0, 5],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "PAC_V7_I_G_major",
+      "description": "Perfect authentic cadence V7-I in G major",
+      "key": "G major",
+      "chords": ["D7", "G"],
+      "expected_root_pcs": [2, 7],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "half_cadence_G_major",
+      "description": "Half cadence I-IV-V in G major (ends on dominant)",
+      "key": "G major",
+      "chords": ["G", "C", "D"],
+      "expected_root_pcs": [7, 0, 2],
+      "expected_cadence": "half",
+      "expected_secondary": false
+    },
+    {
+      "id": "deceptive_cadence_C_major",
+      "description": "Deceptive cadence V7-vi in C major",
+      "key": "C major",
+      "chords": ["G7", "Am"],
+      "expected_root_pcs": [7, 9],
+      "expected_cadence": "deceptive",
+      "expected_secondary": false
+    },
+    {
+      "id": "plagal_cadence_C_major",
+      "description": "Plagal cadence IV-I in C major",
+      "key": "C major",
+      "chords": ["F", "C"],
+      "expected_root_pcs": [5, 0],
+      "expected_cadence": "plagal",
+      "expected_secondary": false
+    },
+    {
+      "id": "borrowed_iv_C_major",
+      "description": "Borrowed iv (Fm) in C major (modal mixture)",
+      "key": "C major",
+      "chords": ["Fm", "C"],
+      "expected_root_pcs": [5, 0],
+      "expected_cadence": "plagal",
+      "expected_secondary": false
+    },
+    {
+      "id": "autumn_leaves_partial_G_minor",
+      "description": "Autumn Leaves iv7-V7/III-IIIMaj7 in G minor; F7 = V7/III (secondary dominant)",
+      "key": "G minor",
+      "chords": ["Cm7", "F7", "B-maj7"],
+      "expected_root_pcs": [0, 5, 10],
+      "expected_cadence": "half",
+      "expected_secondary": true
+    },
+    {
+      "id": "autumn_leaves_full_G_minor",
+      "description": "Autumn Leaves full cycle in G minor; F7 = V7/III (secondary)",
+      "key": "G minor",
+      "chords": ["Cm7", "F7", "B-maj7", "E-maj7", "Am7b5", "D7", "Gm"],
+      "expected_root_pcs": [0, 5, 10, 3, 9, 2, 7],
+      "expected_cadence": "pac",
+      "expected_secondary": true
+    },
+    {
+      "id": "ii_V_I_C_major_seventh_chords",
+      "description": "ii7-V7-Imaj7 with seventh chords in C major",
+      "key": "C major",
+      "chords": ["Dm7", "G7", "Cmaj7"],
+      "expected_root_pcs": [2, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "secondary_dominant_V_of_ii_C_major",
+      "description": "V/ii (A7) -> ii -> V -> I in C major",
+      "key": "C major",
+      "chords": ["A7", "Dm", "G7", "C"],
+      "expected_root_pcs": [9, 2, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": true
+    },
+    {
+      "id": "secondary_dominant_V_of_vi_C_major",
+      "description": "V/vi (E7) -> vi -> IV -> V in C major",
+      "key": "C major",
+      "chords": ["E7", "Am", "F", "G"],
+      "expected_root_pcs": [4, 9, 5, 7],
+      "expected_cadence": "half",
+      "expected_secondary": true
+    },
+    {
+      "id": "chromatic_mediant_C_major",
+      "description": "Chromatic mediant bVI (Ab) in C major",
+      "key": "C major",
+      "chords": ["C", "A-", "C"],
+      "expected_root_pcs": [0, 8, 0],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "i_bVI_bVII_i_A_minor",
+      "description": "i-bVI-bVII-i natural minor in A minor (F=5, G=7)",
+      "key": "A minor",
+      "chords": ["Am", "F", "G", "Am"],
+      "expected_root_pcs": [9, 5, 7, 9],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "let_it_be_C_major",
+      "description": "Let It Be I-V-vi-IV-I-V-IV-I in C major",
+      "key": "C major",
+      "chords": ["C", "G", "Am", "F", "C", "G", "F", "C"],
+      "expected_root_pcs": [0, 7, 9, 5, 0, 7, 5, 0],
+      "expected_cadence": "plagal",
+      "expected_secondary": false
+    },
+    {
+      "id": "IAC_V_I_first_inversion_C_major",
+      "description": "Imperfect authentic cadence V-I (I in first inversion) in C major",
+      "key": "C major",
+      "chords": ["G7", "C/E"],
+      "expected_root_pcs": [7, 0],
+      "expected_cadence": "iac",
+      "expected_secondary": false
+    },
+    {
+      "id": "diminished_seventh_passing_C_major",
+      "description": "Diminished seventh passing chord vii°7 in C major",
+      "key": "C major",
+      "chords": ["C", "Bdim7", "C"],
+      "expected_root_pcs": [0, 11, 0],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "ii_V_I_D_major",
+      "description": "ii-V-I in D major (Em-A7-D)",
+      "key": "D major",
+      "chords": ["Em", "A7", "D"],
+      "expected_root_pcs": [4, 9, 2],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "diatonic_cycle_of_fifths_C_major",
+      "description": "Diatonic cycle of fifths: iii-vi-ii-V-I in C major",
+      "key": "C major",
+      "chords": ["Em", "Am", "Dm", "G", "C"],
+      "expected_root_pcs": [4, 9, 2, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": false
+    },
+    {
+      "id": "bII_bVII_borrowed_rock_C_major",
+      "description": "Double borrowed chords: bII-bVII-I in C major",
+      "key": "C major",
+      "chords": ["D-", "B-", "C"],
+      "expected_root_pcs": [1, 10, 0],
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "DELIBERATELY_WRONG_expected",
+      "description": "DELIBERATELY WRONG: all expected_root_pcs shifted by 1 semitone to prove scorer catches errors",
+      "key": "C major",
+      "chords": ["C", "G", "Am", "F"],
+      "expected_root_pcs": [1, 8, 10, 6],
+      "_deliberately_wrong": true,
+      "expected_cadence": null,
+      "expected_secondary": false
+    },
+    {
+      "id": "secondary_dominant_chain_C_major",
+      "description": "Secondary dominant chain: V/vi-vi-V/ii-ii-V-I in C major",
+      "key": "C major",
+      "chords": ["E7", "Am", "A7", "Dm", "G7", "C"],
+      "expected_root_pcs": [4, 9, 9, 2, 7, 0],
+      "expected_cadence": "pac",
+      "expected_secondary": true
+    }
+  ]
+}
