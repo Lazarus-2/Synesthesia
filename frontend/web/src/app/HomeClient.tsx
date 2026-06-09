@@ -8,9 +8,10 @@
 // future server-fetched data (initial analysis, user prefs from D4) pass
 // down as props without a hooks dance.
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useAnalysisStore } from "../store/useAnalysisStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { UploadModal } from "../components/Upload/UploadModal";
 import { AnalyzingView } from "../components/Analysis/AnalyzingView";
 import { Header } from "../components/Layout/Header";
@@ -38,6 +39,13 @@ const RIGHT_TABS = [
 export default function HomeClient() {
   const { activeTab, setActiveTab } = useAppStore();
   const { analysis, jobStatus } = useAnalysisStore();
+  const loadAuth = useAuthStore((s) => s.loadFromStorage);
+
+  // Rehydrate the JWT from localStorage once on mount so an authed user who
+  // hard-reloads the player keeps the chat tab unlocked (no sign-in flash).
+  useEffect(() => {
+    loadAuth();
+  }, [loadAuth]);
 
   // Show analyzing overlay when processing
   const isProcessing = jobStatus === "queued" || jobStatus === "processing" || jobStatus === "error";
