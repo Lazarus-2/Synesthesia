@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.schemas import BeatEvent, ChordEvent, InstrumentGuide, RomanAnalysis, SongSection
+from backend.schemas import BeatEvent, ChordEvent, InstrumentGuide, RomanAnalysis, SongSection, TheoryExplanation
 
 
 class User(BaseModel):
@@ -72,6 +72,7 @@ class SongAnalysisModel(BaseModel):
     vibe_palette: list[str] = []
 
     theory_explanation: str | None = None
+    theory: TheoryExplanation | None = None    # structured theory object (G2)
     instrument_guides: dict[str, InstrumentGuide] = {}
     stems: dict[str, str] = {}
     # Default "ok" backfills pre-existing Mongo documents that were written

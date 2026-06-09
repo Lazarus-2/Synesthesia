@@ -600,6 +600,7 @@ async def get_analysis(
         sections=song_analysis.sections,
         roman=song_analysis.roman,
         vibe_palette=song_analysis.vibe_palette,
+        theory=song_analysis.theory,                        # structured object (G2)
         theory_explanation=song_analysis.theory_explanation,
     )
 

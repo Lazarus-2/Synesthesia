@@ -227,6 +227,7 @@ async def run_analysis_pipeline(
             sections=result.get("sections", []),
             roman=result.get("roman"),
             vibe_palette=vibe_pal,
+            theory=result.get("theory"),           # TheoryExplanation | None (G2)
             theory_explanation=result.get("theory_explanation"),
             instrument_guides={},
             stems=result.get("stems", {}),
@@ -259,6 +260,7 @@ async def run_analysis_pipeline(
             roman=analysis.roman,
             vibe_palette=analysis.vibe_palette,
             theory_explanation=analysis.theory_explanation,
+            theory=analysis.theory,                # NEW — persist structured object (G2)
             instrument_guides=guides,
             stems=analysis.stems,
             status=status,
