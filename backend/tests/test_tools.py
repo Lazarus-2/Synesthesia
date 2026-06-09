@@ -491,7 +491,9 @@ class TestPianoVoicings:
         from backend.tools.voicings import _piano_chord_voicing
         v = _piano_chord_voicing("Bb", "maj")
         assert v is not None
-        assert v["right_hand"][0] == "A#4"   # Bb normalised to A#
+        # Bb normalised to A#; F5 is octave-capped to F4, so notes sort to [F4, A#4, D5]
+        assert "A#4" in v["right_hand"]   # root present
+        assert len(v["right_hand"]) == 3  # triad has three notes
 
     def test_unsupported_quality_returns_none(self):
         from backend.tools.voicings import _piano_chord_voicing
@@ -588,3 +590,99 @@ class TestVoicingsDegradationPolicy:
         diagrams = get_chord_diagrams(["Am9"], instrument="guitar")
         assert len(diagrams) == 1
         assert diagrams[0].chord == "Am9"
+
+
+class TestG3ReviewFixes:
+    """G3 review fixes — C1, C2, I1."""
+
+    # C1: Minor chords must return minor barre shapes, not major open shapes.
+    def test_fm_guitar_is_minor_barre_not_f_major(self):
+        """Fm must use Em-shape barre (fret 1 = [1,3,3,1,1,1]), not open F major."""
+        diagrams = get_chord_diagrams(["Fm"], instrument="guitar")
+        d = diagrams[0]
+        assert d.no_voicing is False
+        # Em-shape barre on fret 1: all barre strings at 1, inner pair at 3
+        assert d.frets == [1, 3, 3, 1, 1, 1]
+
+    def test_cm_guitar_is_minor_barre_not_c_major(self):
+        """Cm must use Am-shape barre (fret 3 = [-1,3,5,5,4,3]), not open C major."""
+        diagrams = get_chord_diagrams(["Cm"], instrument="guitar")
+        d = diagrams[0]
+        assert d.no_voicing is False
+        assert d.frets == [-1, 3, 5, 5, 4, 3]
+
+    def test_gm_guitar_is_minor_barre_not_g_major(self):
+        """Gm must use Em-shape barre (fret 3 = [3,5,5,3,3,3]), not open G major."""
+        diagrams = get_chord_diagrams(["Gm"], instrument="guitar")
+        d = diagrams[0]
+        assert d.no_voicing is False
+        assert d.frets == [3, 5, 5, 3, 3, 3]
+
+    def test_fm_frets_are_not_f_major_open(self):
+        """Belt-and-suspenders: Fm frets must not equal the open F major shape."""
+        diagrams = get_chord_diagrams(["Fm"], instrument="guitar")
+        d = diagrams[0]
+        # F major open shape is [1,3,3,2,1,1]
+        assert d.frets != [1, 3, 3, 2, 1, 1]
+
+    # C2: Cm7b5 (half-diminished) must return no_voicing, not a minor barre.
+    def test_cm7b5_guitar_returns_no_voicing(self):
+        """Half-diminished has no movable template — no_voicing=True, not a wrong Cm barre."""
+        diagrams = get_chord_diagrams(["Cm7b5"], instrument="guitar")
+        d = diagrams[0]
+        assert d.no_voicing is True
+        assert d.frets is None
+
+    def test_am7b5_guitar_returns_no_voicing_c2(self):
+        """Consistent: Am7b5 also gets no_voicing on guitar (barre path)."""
+        diagrams = get_chord_diagrams(["Am7b5"], instrument="guitar")
+        assert diagrams[0].no_voicing is True
+
+    # I1: Piano notes must be in strictly ascending pitch order.
+    def test_gmaj7_piano_notes_ascending(self):
+        """Gmaj7 triggers octave-cap on F# — notes must still be ascending."""
+        from backend.tools.voicings import _piano_chord_voicing
+        import re
+        v = _piano_chord_voicing("G", "maj7")
+        assert v is not None
+        note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+        def note_to_midi(name: str) -> int:
+            m = re.match(r"([A-G]#?)(\d+)", name)
+            pitch, octave = m.group(1), int(m.group(2))
+            return (octave + 1) * 12 + note_order.index(pitch)
+
+        midi_vals = [note_to_midi(n) for n in v["right_hand"]]
+        assert midi_vals == sorted(midi_vals), f"Notes not ascending: {v['right_hand']}"
+
+    def test_a7_piano_notes_ascending(self):
+        """A7 also triggers octave-cap — notes must be ascending."""
+        from backend.tools.voicings import _piano_chord_voicing
+        import re
+        v = _piano_chord_voicing("A", "dom7")
+        assert v is not None
+        note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+        def note_to_midi(name: str) -> int:
+            m = re.match(r"([A-G]#?)(\d+)", name)
+            pitch, octave = m.group(1), int(m.group(2))
+            return (octave + 1) * 12 + note_order.index(pitch)
+
+        midi_vals = [note_to_midi(n) for n in v["right_hand"]]
+        assert midi_vals == sorted(midi_vals), f"Notes not ascending: {v['right_hand']}"
+
+    def test_bmaj_piano_notes_ascending(self):
+        """Bmaj (F# capped down) must return ascending notes."""
+        from backend.tools.voicings import _piano_chord_voicing
+        import re
+        v = _piano_chord_voicing("B", "maj")
+        assert v is not None
+        note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+        def note_to_midi(name: str) -> int:
+            m = re.match(r"([A-G]#?)(\d+)", name)
+            pitch, octave = m.group(1), int(m.group(2))
+            return (octave + 1) * 12 + note_order.index(pitch)
+
+        midi_vals = [note_to_midi(n) for n in v["right_hand"]]
+        assert midi_vals == sorted(midi_vals), f"Notes not ascending: {v['right_hand']}"

@@ -127,8 +127,10 @@ def _candidate_labels(label: str) -> list[str]:
         degraded = f"{parts.root}{degrade_suffix}"
         if degraded != label:  # skip if degraded == exact (avoids useless duplicate)
             candidates.append(degraded)
-        # last-resort bare root (useful for slash chords and bare major triads)
-        if parts.root != degraded:
+        # last-resort bare root (useful for slash chords and bare major triads).
+        # Only append for the MAJOR family (degrade_suffix == "") — for minor chords
+        # the bare root is the major triad which would be musically wrong (Fm → F).
+        if degrade_suffix == "" and parts.root != degraded:
             candidates.append(parts.root)
 
     return candidates
@@ -341,15 +343,19 @@ def _piano_chord_voicing(root: str, quality: str) -> dict | None:
     # Anchor: place the root in octave 4 (C4 = MIDI 60).
     root_midi = 60 + root_sem  # C4..B4
 
-    # Build right-hand notes.
-    right_hand: list[str] = []
+    # Build right-hand notes as MIDI values first so we can sort them.
+    right_hand_midi: list[int] = []
     for interval in intervals:
         note_midi = root_midi + interval
         # If the note is above E5 (MIDI 76), move it down an octave so we stay
         # within a comfortable single-octave span for beginners.
         if note_midi > 76:
             note_midi -= 12
-        right_hand.append(_midi_to_note_name(note_midi))
+        right_hand_midi.append(note_midi)
+    # Sort ascending so the voicing is always in pitch order regardless of
+    # which notes were pulled down by the octave-cap above.
+    right_hand_midi.sort()
+    right_hand = [_midi_to_note_name(m) for m in right_hand_midi]
 
     # Left hand: just the root in octave 3.
     left_hand = [_midi_to_note_name(root_midi - 12)]
@@ -365,7 +371,7 @@ def _quality_chain(quality: str) -> list[str]:
     """
     chain = [quality]
     # Broaden minor extensions to 'min', major extensions to 'maj'
-    if quality in ("min7", "min9", "min11", "min13", "m7b5"):
+    if quality in ("min7", "min9", "min11", "min13"):
         chain.append("min")
     elif quality in ("maj7", "maj9", "maj11", "maj13", "dom7", "6", "9", "11", "13", "add9", "aug", "power", "sus2", "sus4"):
         chain.append("maj")

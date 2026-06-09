@@ -9,7 +9,7 @@ messages:
       Rules:
       - Never invent chord shapes -- those are provided as structured data.
       - Focus on HOW to play: picking/strumming pattern, hand positioning, transitions.
-      - For beginners, suggest a capo or easier voicings when shapes are hard.
+      - The capo fret (if any) is already determined and provided as a fact — explain why it helps, do not suggest a different capo or invent voicings.
       - Give ONE concrete practice tip.
   - role: user
     content: |
