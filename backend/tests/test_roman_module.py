@@ -1,5 +1,4 @@
-"""G1.2: backend.theory.roman module exists with _to_m21 helper."""
-import pytest
+"""G1.2–G1.11: backend.theory.roman module tests."""
 
 
 def test_module_importable():
@@ -199,3 +198,59 @@ def test_function_classifier_minor():
         assert result == expected_func, (
             f"harmonic_function({sym!r}, a minor) = {result!r}, expected {expected_func!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# G1.6 — detect_cadence
+# ---------------------------------------------------------------------------
+
+def test_cadence_pac():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Perfect authentic: V -> I, both root position
+    assert detect_cadence(smart_analyze("G", k), smart_analyze("C", k)) == "PAC"
+    assert detect_cadence(smart_analyze("G7", k), smart_analyze("C", k)) == "PAC"
+
+
+def test_cadence_iac():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Imperfect authentic: V -> I but I is inverted OR V is inverted
+    assert detect_cadence(smart_analyze("G/B", k), smart_analyze("C", k)) == "IAC"
+
+
+def test_cadence_deceptive():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Deceptive: V -> vi
+    assert detect_cadence(smart_analyze("G7", k), smart_analyze("Am", k)) == "deceptive"
+    assert detect_cadence(smart_analyze("G", k), smart_analyze("Am", k)) == "deceptive"
+
+
+def test_cadence_half():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Half cadence: any -> V (root position)
+    assert detect_cadence(smart_analyze("F", k), smart_analyze("G", k)) == "half"
+    assert detect_cadence(smart_analyze("Dm", k), smart_analyze("G", k)) == "half"
+
+
+def test_cadence_plagal():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # Plagal: IV -> I
+    assert detect_cadence(smart_analyze("F", k), smart_analyze("C", k)) == "plagal"
+
+
+def test_cadence_none_for_non_cadential():
+    from backend.theory.roman import smart_analyze, detect_cadence
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    # I -> IV, I -> ii, etc. are not cadences
+    assert detect_cadence(smart_analyze("C", k), smart_analyze("F", k)) is None
+    assert detect_cadence(smart_analyze("C", k), smart_analyze("Am", k)) is None
