@@ -194,6 +194,13 @@ class SongAnalysis(BaseModel):
     # Frontend builds the URL as ``/api/v1/stems/{job_id}/{stem_name}``.
     stems: dict[str, str] = Field(default_factory=dict)
 
+    # Online similar-song recommendations fetched post-graph (G4).
+    # Each item: {title, artist, url, image, source, match}.
+    similar_songs: list[dict] = Field(
+        default_factory=list,
+        description="Online similar-song recommendations (Last.fm / Deezer).",
+    )
+
     @model_validator(mode="after")
     def _sync_theory_explanation(self) -> SongAnalysis:
         """Keep theory_explanation in sync with theory.text when theory is set.

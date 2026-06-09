@@ -75,6 +75,8 @@ class SongAnalysisModel(BaseModel):
     theory: TheoryExplanation | None = None    # structured theory object (G2)
     instrument_guides: dict[str, InstrumentGuide] = {}
     stems: dict[str, str] = {}
+    # Online similar-song recommendations (G4). List of {title,artist,url,image,source,match}.
+    similar_songs: list[dict] = []
     # Default "ok" backfills pre-existing Mongo documents that were written
     # before the status field existed and therefore lack the key entirely.
     status: Literal["ok", "degraded", "failed"] = "ok"

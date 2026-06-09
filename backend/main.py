@@ -602,6 +602,7 @@ async def get_analysis(
         vibe_palette=song_analysis.vibe_palette,
         theory=song_analysis.theory,                        # structured object (G2)
         theory_explanation=song_analysis.theory_explanation,
+        similar_songs=song_analysis.similar_songs,          # online recommendations (G4)
     )
 
     # Pick the *requested* instrument's guide, if any. Previously this returned
@@ -862,6 +863,7 @@ async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeRespons
         roman=song.roman,
         vibe_palette=song.vibe_palette,
         theory_explanation=song.theory_explanation,
+        similar_songs=song.similar_songs,               # online recommendations (G4)
     )
     return AnalyzeResponse(
         job_id=job_id,

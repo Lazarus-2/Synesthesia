@@ -23,6 +23,7 @@ from taskiq import Context, TaskiqDepends
 from backend.models import SongAnalysisModel
 from backend.schemas import AnalyzeResponse, SongAnalysis
 from backend.services.job_store import get_job_store
+from backend.services.similar_songs import fetch_similar_songs
 from backend.tools.synesthesia_colors import get_vibe_palette
 from backend.worker import broker
 
@@ -215,6 +216,13 @@ async def run_analysis_pipeline(
         chord_names = [c.chord for c in chords]
         vibe_pal = get_vibe_palette(result.get("key", "C major"), chord_names)
 
+        # Fetch online similar songs (graceful no-op if no API key / failure).
+        similar_songs_result = await fetch_similar_songs(
+            result.get("title") or _clean_audio_title(audio_path, youtube_url),
+            result.get("artist") or ("Local Engine" if audio_path else "YouTube Stream"),
+            limit=8,
+        )
+
         analysis = SongAnalysis(
             title=_clean_audio_title(audio_path, youtube_url),
             artist="Local Engine" if audio_path else "YouTube Stream",
@@ -231,6 +239,7 @@ async def run_analysis_pipeline(
             theory_explanation=result.get("theory_explanation"),
             instrument_guides={},
             stems=result.get("stems", {}),
+            similar_songs=similar_songs_result,
         )
 
         await _progress(90, "Saving to database...")
@@ -263,6 +272,7 @@ async def run_analysis_pipeline(
             theory=analysis.theory,                # NEW — persist structured object (G2)
             instrument_guides=guides,
             stems=analysis.stems,
+            similar_songs=analysis.similar_songs,  # G4 — online similar songs
             status=status,
         )
 
