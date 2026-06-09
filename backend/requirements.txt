@@ -50,6 +50,9 @@ pyacoustid>=1.3.1
 # system ffmpeg if `which ffmpeg` finds one.
 imageio-ffmpeg>=0.5.1
 
+# === Music theory analysis ===
+music21>=10.3.0
+
 # === Music ML Models ===
 # All pre-trained, no training needed
 # madmom>=0.16.1  # WARN: unmaintained since 2018; we keep librosa fallback
