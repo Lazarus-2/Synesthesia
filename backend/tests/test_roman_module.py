@@ -149,3 +149,53 @@ def test_diatonic_chords_not_borrowed_not_secondary():
         rn = smart_analyze(sym, k)
         assert not is_secondary(rn), f"{sym} wrongly flagged as secondary"
         assert not is_borrowed(rn), f"{sym} wrongly flagged as borrowed"
+
+
+# ---------------------------------------------------------------------------
+# G1.5 — harmonic_function
+# ---------------------------------------------------------------------------
+
+def test_function_classifier_major():
+    from backend.theory.roman import smart_analyze, harmonic_function
+    from music21 import key as m21key
+    k = m21key.Key("C", "major")
+    cases = [
+        ("C",    "tonic"),
+        ("Am",   "submediant"),
+        ("G",    "dominant"),
+        ("G7",   "dominant"),
+        ("F",    "subdominant"),
+        ("Fmaj7","subdominant"),
+        ("Dm",   "supertonic"),
+        ("Em",   "mediant"),
+        ("Bdim", "leading_tone"),
+        ("D7",   "secondary_dominant"),
+        ("Bb",   "chromatic"),       # borrowed -> chromatic function
+    ]
+    for sym, expected_func in cases:
+        rn = smart_analyze(sym, k)
+        result = harmonic_function(rn)
+        assert result == expected_func, (
+            f"harmonic_function({sym!r}) = {result!r}, expected {expected_func!r}"
+        )
+
+
+def test_function_classifier_minor():
+    from backend.theory.roman import smart_analyze, harmonic_function
+    from music21 import key as m21key
+    k = m21key.Key("a", "minor")
+    cases = [
+        ("Am",   "tonic"),
+        ("E",    "dominant"),
+        ("E7",   "dominant"),   # V7 in minor is diatonic with raised leading tone
+        ("Dm",   "subdominant"),
+        # Adaptation: F in Am = bVI (submediant), not bIII (mediant).
+        # music21 returns bVI for F in A minor (6th degree of natural minor scale).
+        ("F",    "submediant"),
+    ]
+    for sym, expected_func in cases:
+        rn = smart_analyze(sym, k)
+        result = harmonic_function(rn)
+        assert result == expected_func, (
+            f"harmonic_function({sym!r}, a minor) = {result!r}, expected {expected_func!r}"
+        )

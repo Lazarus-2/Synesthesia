@@ -175,19 +175,29 @@ def harmonic_function(rn: "m21_roman.RomanNumeral") -> str:
 
     Priority order:
     1. Secondary dominant  → ``'secondary_dominant'``
-    2. Borrowed chord      → ``'chromatic'``
-    3. Diatonic root lookup via ``_FUNC_MAP``
-    4. Fallback            → ``'chromatic'``
+    2. Borrowed chord in **major** key (leading accidental on figure)
+       → ``'chromatic'`` (e.g. bVII in C major = borrowed).
+    3. All other chords (diatonic + borrowed-in-minor like bVI/bVII which are
+       natural-minor degrees) → lookup root via ``_FUNC_MAP``.
+       In minor, music21 labels natural-minor chords bVI / bVII / III with
+       flat prefixes, but they carry clear functional meaning (submediant,
+       leading_tone, mediant) — map via root without the accidental.
+    4. Fallback → ``'chromatic'``
     """
     if is_secondary(rn):
         return "secondary_dominant"
-    if is_borrowed(rn):
-        return "chromatic"
+
     # Use regex-based root extraction so figured-bass suffixes like '75#3' don't interfere
     m = _RN_ROOT_RE.match(rn.primaryFigure)
     if not m:
         return "chromatic"
-    root = m.group(2)
+    acc, root = m.group(1), m.group(2)
+
+    # In major mode: flat/sharp-prefixed chords are modal-mixture → chromatic
+    if acc and hasattr(rn, "key") and rn.key is not None and rn.key.mode == "major":
+        return "chromatic"
+
+    # In minor mode (or no accidental): map root via _FUNC_MAP
     return _FUNC_MAP.get(root, "chromatic")
 
 
