@@ -24,6 +24,22 @@ export const API_BASE_URL: string = (
  *  the unversioned aliases (see backend/main.py). */
 export const API_V1 = `${API_BASE_URL}/api/v1`;
 
+/** Returns `{ Authorization: "Bearer <jwt>" }` if a token is in localStorage,
+ *  else `{}`. Read directly from storage so apiClient stays free of a
+ *  store import cycle (useAuthStore imports apiClient). Mirrors the
+ *  TOKEN_KEY in useAuthStore. */
+export function authHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const raw = window.localStorage.getItem("synesthesia.auth.token");
+  if (!raw) return {};
+  try {
+    const token = JSON.parse(raw) as string;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Shape of the backend's APIError envelope (mirrors backend/main.py). */
 export interface ApiErrorPayload {
   status: "error";
@@ -83,7 +99,7 @@ export async function apiGet<T = unknown>(
 ): Promise<T> {
   const res = await fetch(resolveUrl(path, opts), {
     method: "GET",
-    headers: { Accept: "application/json", ...(opts?.headers || {}) },
+    headers: { Accept: "application/json", ...authHeader(), ...(opts?.headers || {}) },
     signal: opts?.signal,
   });
   if (!res.ok) throw new ApiError(res.status, await parseErrorBody(res));
@@ -99,6 +115,7 @@ export async function apiPostJson<T = unknown>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...authHeader(),
       ...(opts?.headers || {}),
     },
     body: JSON.stringify(body),
@@ -114,7 +131,7 @@ export async function apiPostForm<T = unknown>(
 ): Promise<T> {
   const res = await fetch(resolveUrl(path, opts), {
     method: "POST",
-    headers: { Accept: "application/json", ...(opts?.headers || {}) },
+    headers: { Accept: "application/json", ...authHeader(), ...(opts?.headers || {}) },
     body: form,
     signal: opts?.signal,
   });
@@ -136,6 +153,10 @@ interface SseHandlers<TChunk = unknown, TDone = unknown> {
   onChunk?: (data: TChunk) => void;
   onDone?: (data: TDone) => void;
   onError?: (data: { code?: string; message: string; details?: unknown }) => void;
+  /** Phase-2 AURA: the "Discussing: …" authoritative facts frame. */
+  onContext?: (data: unknown) => void;
+  /** Phase-2 AURA: tool start/end status pills ({name, phase}). */
+  onTool?: (data: unknown) => void;
   /** Catch-all for unknown event names — used during the D6 transition so
    *  legacy `data: ...` frames without an `event:` tag still surface. */
   onUnknown?: (event: SseEvent) => void;
@@ -220,6 +241,12 @@ function handleFrame<TChunk, TDone>(
       return;
     case "error":
       handlers.onError?.(data as { message: string; code?: string });
+      return;
+    case "context":
+      handlers.onContext?.(data);
+      return;
+    case "tool":
+      handlers.onTool?.(data);
       return;
     default:
       // Untagged frame (legacy): infer from payload shape.
