@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # =============================================================================
 # Core music primitives -- Module 1
@@ -100,6 +100,64 @@ class RomanAnalysis(BaseModel):
     )
 
 
+class TheoryExplanation(BaseModel):
+    """Structured harmonic analysis returned by the theory LLM.
+
+    The ``.text`` computed property renders the same Markdown that
+    ``_flatten`` used to produce, preserving back-compat for any code
+    that reads ``analysis.theory_explanation`` as a string.
+    """
+
+    key_summary: str = Field(
+        description=(
+            "One sentence stating the song's key and why. "
+            "Example: 'The song is in C major; the I-V-vi-IV progression "
+            "centers tonally on C.'"
+        )
+    )
+    function_explanation: str = Field(
+        description=(
+            "Two-to-three sentences naming the harmonic function of each "
+            "chord (tonic, dominant, subdominant, etc.)."
+        )
+    )
+    pattern_name: str | None = Field(
+        default=None,
+        description=(
+            "Well-known progression name if applicable "
+            "(e.g. 'I-V-vi-IV pop progression', 'ii-V-I jazz turnaround'). "
+            "Null if none fit."
+        ),
+    )
+    notable_techniques: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Any standout techniques: modal mixture, secondary dominants, "
+            "borrowed chords, modulations. Empty list if none."
+        ),
+    )
+    similar_song: str | None = Field(
+        default=None,
+        description=(
+            "One famous song using a similar progression, in 'Title — Artist' "
+            "form. Null if you can't recall one with confidence."
+        ),
+    )
+
+    @property
+    def text(self) -> str:
+        """Render the structured fields as the Markdown string consumers expect."""
+        lines = [self.key_summary, "", self.function_explanation]
+        if self.pattern_name:
+            lines += ["", f"**Pattern:** {self.pattern_name}"]
+        if self.notable_techniques:
+            bullets = "\n".join(f"- {t}" for t in self.notable_techniques)
+            lines += ["", "**Notable techniques:**", bullets]
+        if self.similar_song:
+            lines += ["", f"**Similar:** {self.similar_song}"]
+        return "\n".join(lines).strip()
+
+
 class SongAnalysis(BaseModel):
     """Top-level result returned to the client."""
 
@@ -121,13 +179,29 @@ class SongAnalysis(BaseModel):
         description="Synesthetic color palette representing the song's key/vibe",
     )
 
+    # Structured theory object (G2). Populated by theory_node.
+    theory: TheoryExplanation | None = None
+    # Legacy plain-string field. When ``theory`` is set and this is None,
+    # ``_sync_theory_explanation`` fills it with ``theory.text`` so old callers
+    # (API serialization, Mongo write, TheoryPanel.tsx) see an unchanged string.
     theory_explanation: str | None = None
+
     instrument_guides: dict[str, InstrumentGuide] = Field(default_factory=dict)
 
     # Relative paths to separated stems (vocals/drums/bass/other), keyed by
     # stem name. Empty when stem separation was disabled or unavailable.
     # Frontend builds the URL as ``/api/v1/stems/{job_id}/{stem_name}``.
     stems: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _sync_theory_explanation(self) -> "SongAnalysis":
+        """Keep theory_explanation in sync with theory.text when theory is set.
+
+        Does not overwrite an explicitly supplied theory_explanation string.
+        """
+        if self.theory is not None and self.theory_explanation is None:
+            object.__setattr__(self, "theory_explanation", self.theory.text)
+        return self
 
 
 # =============================================================================
