@@ -1,6 +1,11 @@
 """
-Chord detection using madmom's pre-trained CNN+CRF.
-Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 1)
+Chord detection via librosa CQT chromagram + weighted template matching.
+
+84 templates — maj, min, dom7, maj7, min7, dim, sus4 across 12 roots —
+scored by cosine similarity (vectorized), majority-vote smoothed, then
+segmented into ChordEvents. sus2/dim7/6th templates are deliberately
+absent: their pitch-class sets alias other chords in the bank
+(sus2(C) == sus4(G); dim7 is 4-fold rotationally symmetric; C6 == Am7).
 
 Usage:
     events = detect_chords("song.mp3")
@@ -16,101 +21,174 @@ from backend.schemas import ChordEvent
 
 logger = logging.getLogger(__name__)
 
+NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+# Quality suffix -> weighted (interval, weight) pairs. Root and the
+# quality-defining tones (3rd/4th/7th, the dim 5th) weigh 1.0-0.9; the
+# plain 5th weighs less because nearly every quality shares it.
+QUALITIES: dict[str, tuple[tuple[int, float], ...]] = {
+    "": ((0, 1.0), (4, 1.0), (7, 0.7)),
+    "m": ((0, 1.0), (3, 1.0), (7, 0.7)),
+    "7": ((0, 1.0), (4, 1.0), (7, 0.6), (10, 0.9)),
+    "maj7": ((0, 1.0), (4, 1.0), (7, 0.6), (11, 0.9)),
+    "m7": ((0, 1.0), (3, 1.0), (7, 0.6), (10, 0.9)),
+    "dim": ((0, 1.0), (3, 1.0), (6, 0.9)),
+    "sus4": ((0, 1.0), (5, 1.0), (7, 0.7)),
+}
+
+NC_LABEL = "N.C."
+# Frames whose harmonic-residual RMS sits below this are silence: chroma_cqt
+# max-normalizes every frame, so silence is invisible in the chroma itself.
+NC_RMS_THRESHOLD = 1e-3
+# Best cosine below this means "no template fits" (uniform chroma peaks ~0.57).
+NC_SCORE_THRESHOLD = 0.6
+# dom7 may only beat maj when the b7 bin carries at least this fraction of the
+# root bin's energy — real instruments leak energy near b7 via the 7th partial.
+DOM7_B7_MIN_RATIO = 0.5
+
+_SMOOTHING_WINDOW = 15
+
+
+def build_chord_templates():
+    """Return (names, matrix): 84 labels + row-unit-normalized (84, 12) bank.
+
+    Ordering is fixed (quality-major, chromatic roots within each quality) so
+    argmax tie-breaking is deterministic across processes.
+    """
+    import numpy as np
+
+    names: list[str] = []
+    rows = []
+    for suffix, weighted in QUALITIES.items():
+        for root in range(12):
+            vec = np.zeros(12)
+            for interval, weight in weighted:
+                vec[(root + interval) % 12] = weight
+            names.append(f"{NOTES[root]}{suffix}")
+            rows.append(vec / np.linalg.norm(vec))
+    return names, np.array(rows)
+
+
+def classify_frames(chroma, rms=None) -> list[tuple[str, float]]:
+    """Classify each chroma frame -> (label, confidence in [0, 1]).
+
+    ``chroma`` is (12, n_frames); ``rms`` is an optional per-frame energy
+    array used to force N.C. on silent frames. Confidence is the plain
+    cosine between the unit chroma and the unit template (single
+    normalization — see ML-08 in docs/audit/PHASE4_PREFLIGHT_AUDIT.md).
+    """
+    import numpy as np
+
+    names, templates = build_chord_templates()
+    chroma = np.asarray(chroma, dtype=float)
+    n_frames = chroma.shape[1]
+
+    norms = np.linalg.norm(chroma, axis=0)
+    valid = norms > 1e-9
+    unit = np.zeros_like(chroma)
+    unit[:, valid] = chroma[:, valid] / norms[valid]
+
+    scores = templates @ unit  # (84, n_frames)
+    best_idx = scores.argmax(axis=0)
+
+    # dom7 guard: demote dom7 picks whose b7 evidence is too weak.
+    quality_of = np.array([_suffix_of(name) for name in names])
+    roots = np.array([NOTES.index(_root_of(name)) for name in names])
+    dom7_picked = np.flatnonzero(quality_of[best_idx] == "7")
+    if dom7_picked.size:
+        picked_roots = roots[best_idx[dom7_picked]]
+        b7_bins = (picked_roots + 10) % 12
+        root_energy = chroma[picked_roots, dom7_picked]
+        b7_energy = chroma[b7_bins, dom7_picked]
+        weak = dom7_picked[b7_energy < DOM7_B7_MIN_RATIO * root_energy]
+        if weak.size:
+            non_dom7 = scores.copy()
+            non_dom7[quality_of == "7", :] = -np.inf
+            best_idx[weak] = non_dom7[:, weak].argmax(axis=0)
+
+    best_scores = scores[best_idx, np.arange(n_frames)]
+    confidences = np.clip(best_scores, 0.0, 1.0)
+
+    nc = ~valid | (best_scores < NC_SCORE_THRESHOLD)
+    if rms is not None:
+        rms = np.asarray(rms, dtype=float).reshape(-1)[:n_frames]
+        nc[: rms.shape[0]] |= rms < NC_RMS_THRESHOLD
+
+    return [
+        (NC_LABEL, 0.0) if nc[t] else (names[best_idx[t]], float(confidences[t]))
+        for t in range(n_frames)
+    ]
+
+
+def _root_of(name: str) -> str:
+    return name[:2] if len(name) > 1 and name[1] == "#" else name[:1]
+
+
+def _suffix_of(name: str) -> str:
+    return name[len(_root_of(name)) :]
+
+
+def _smooth_frames(
+    frame_chords: list[tuple[str, float]], window_size: int = _SMOOTHING_WINDOW
+) -> list[tuple[str, float]]:
+    """Majority-vote smoothing; ties break to the earliest label in the window."""
+    n = len(frame_chords)
+    half_w = window_size // 2
+    smoothed: list[tuple[str, float]] = []
+    for i in range(n):
+        neighbors = frame_chords[max(0, i - half_w) : min(n, i + half_w + 1)]
+        neighbor_chords = [c for c, _ in neighbors]
+        counts: dict[str, int] = {}
+        for c in neighbor_chords:
+            counts[c] = counts.get(c, 0) + 1
+        # max() keeps the first-seen key on count ties (insertion order).
+        most_common = max(counts, key=counts.get)
+        matching = [s for c, s in neighbors if c == most_common]
+        smoothed.append((most_common, sum(matching) / len(matching)))
+    return smoothed
+
 
 def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
-    """Return list of ChordEvent for the song using a pure Python template matching algorithm."""
+    """Return the song's ChordEvents via template matching on CQT chroma."""
     import librosa
     import numpy as np
 
     from backend.tools.synesthesia_colors import get_chord_color
 
+    hop_length = 512
     try:
         y, sr = librosa.load(str(audio_path), sr=22050, duration=MAX_AUDIO_DURATION_S)
         y_harmonic, _ = librosa.effects.hpss(y)
-        chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, hop_length=512)
+        chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, hop_length=hop_length)
+        rms = librosa.feature.rms(y=y_harmonic, hop_length=hop_length)[0]
     except Exception as e:
         logger.warning("Chord detection failed for %s: %s", audio_path, e)
         return []
 
     num_frames = chroma.shape[1]
-    hop_length = 512
     time_per_frame = hop_length / sr
 
-    # 1. Define standard pitch names
-    notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    frame_chords = classify_frames(chroma, rms=rms)
+    smoothed = _smooth_frames(frame_chords)
 
-    # 2. Define pitch templates (12 major, 12 minor)
-    # Major template (root, third, fifth) -> (0, 4, 7)
-    base_major = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
-    # Minor template (root, minor third, fifth) -> (0, 3, 7)
-    base_minor = np.array([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
-
-    templates = {}
-    for i in range(12):
-        templates[f"{notes[i]}"] = np.roll(base_major, i)
-        templates[f"{notes[i]}m"] = np.roll(base_minor, i)
-
-    # 3. Classify each frame (store chord + confidence score)
-    frame_chords = []  # (chord_name, confidence_score)
-    for t in range(num_frames):
-        chroma_vec = chroma[:, t]
-        chroma_norm = np.linalg.norm(chroma_vec)
-        if chroma_norm == 0:
-            frame_chords.append(("N.C.", 0.0))
-            continue
-
-        chroma_vec = chroma_vec / chroma_norm
-
-        best_score = -1.0
-        best_chord = "N.C."
-
-        for chord_name, template in templates.items():
-            temp_norm = np.linalg.norm(template)
-            score = np.dot(chroma_vec, template) / (chroma_norm * temp_norm)
-            if score > best_score:
-                best_score = score
-                best_chord = chord_name
-
-        # Clamp confidence to [0, 1]
-        confidence = max(0.0, min(1.0, float(best_score)))
-        frame_chords.append((best_chord, confidence))
-
-    # 4. Smooth chord transitions (majority vote filter of size 15 to prevent flickering)
-    smoothed = []  # (chord_name, avg_confidence)
-    window_size = 15
-    half_w = window_size // 2
-    for i in range(num_frames):
-        start_idx = max(0, i - half_w)
-        end_idx = min(num_frames, i + half_w + 1)
-        neighbors = frame_chords[start_idx:end_idx]
-        neighbor_chords = [n[0] for n in neighbors]
-        # Most frequent chord in the window
-        most_common = max(set(neighbor_chords), key=neighbor_chords.count)
-        # Average confidence of frames matching the winning chord
-        matching_scores = [n[1] for n in neighbors if n[0] == most_common]
-        avg_conf = sum(matching_scores) / len(matching_scores) if matching_scores else 0.5
-        smoothed.append((most_common, avg_conf))
-
-    # 5. Segment frames into events
-    events = []
+    events: list[ChordEvent] = []
     if not smoothed:
         return events
 
     curr_chord, curr_conf = smoothed[0]
     start_time = 0.0
-    conf_accum = [curr_conf]  # accumulate confidence scores for averaging
+    conf_accum = [curr_conf]
 
     for i in range(1, num_frames):
         chord, conf = smoothed[i]
         if chord != curr_chord:
             end_time = i * time_per_frame
-            avg_confidence = sum(conf_accum) / len(conf_accum)
             events.append(
                 ChordEvent(
                     start=float(start_time),
                     end=float(end_time),
                     chord=curr_chord,
-                    confidence=round(avg_confidence, 3),
+                    confidence=round(sum(conf_accum) / len(conf_accum), 3),
                     color=get_chord_color(curr_chord),
                 )
             )
@@ -120,14 +198,12 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
         else:
             conf_accum.append(conf)
 
-    # Add final segment
-    avg_confidence = sum(conf_accum) / len(conf_accum)
     events.append(
         ChordEvent(
             start=float(start_time),
             end=float(num_frames * time_per_frame),
             chord=curr_chord,
-            confidence=round(avg_confidence, 3),
+            confidence=round(sum(conf_accum) / len(conf_accum), 3),
             color=get_chord_color(curr_chord),
         )
     )

@@ -1,5 +1,8 @@
 """
-Beat tracking with madmom. Returns beat times + downbeats for measure detection.
+Beat tracking. Returns beat times + downbeats for measure detection.
+
+Tries madmom's RNN tracker first, but madmom does not install on
+Python 3.12, so in practice the librosa onset/beat fallback is what runs.
 Vault ref: 06-Projects/05-Project-SoundBreak.md (Phase 1)
 """
 
