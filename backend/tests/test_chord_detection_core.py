@@ -12,13 +12,16 @@ import pytest
 
 from backend.ml.chord_detection import (
     DOM7_B7_MIN_RATIO,
+    MIN_BEATS_FOR_SYNC,
     NC_LABEL,
     NC_RMS_THRESHOLD,
     NC_SCORE_THRESHOLD,
     NOTES,
     QUALITIES,
+    _beats_are_sane,
     _smooth_frames,
     build_chord_templates,
+    classify_beat_segments,
     classify_frames,
 )
 
@@ -153,6 +156,114 @@ class TestNoChordGuards:
         rms = np.array([0.2])
         [(label, _)] = classify_frames(chroma, rms=rms)
         assert label == "C"
+
+
+class TestBeatSync:
+    """Phase 4 G2 — beat-synchronous decoding (pure chroma, no audio)."""
+
+    def _two_chord_chroma(self, n_frames: int = 100, switch: int = 50) -> np.ndarray:
+        """C major for frames [0, switch), G7 for [switch, n_frames)."""
+        c = _chroma_for(0, QUALITY_TONES[""])
+        g7 = _chroma_for(7, QUALITY_TONES["7"])
+        return np.hstack([c] * switch + [g7] * (n_frames - switch))
+
+    def test_segments_follow_beat_boundaries(self):
+        chroma = self._two_chord_chroma()
+        beats = [float(i) for i in range(1, 10)]  # 1.0..9.0s over a 10s clip
+        labeled, bounds = classify_beat_segments(chroma, beats, time_per_frame=0.1)
+        assert len(labeled) == 10
+        assert len(bounds) == 11
+        np.testing.assert_allclose(bounds, [float(i) for i in range(11)], atol=0.05)
+        labels = [label for label, _ in labeled]
+        assert labels[:5] == ["C"] * 5
+        assert labels[5:] == ["G7"] * 5
+
+    def test_single_beat_passing_chord_survives(self):
+        # A one-beat V chord is musically real: the beat path must NOT smear
+        # it away the way the 15-frame majority smoother would.
+        c = _chroma_for(0, QUALITY_TONES[""])
+        g7 = _chroma_for(7, QUALITY_TONES["7"])
+        chroma = np.hstack([c] * 30 + [g7] * 10 + [c] * 60)
+        beats = [float(i) for i in range(1, 10)]
+        labeled, _ = classify_beat_segments(chroma, beats, time_per_frame=0.1)
+        labels = [label for label, _ in labeled]
+        assert labels[3] == "G7"
+        assert labels[:3] == ["C"] * 3 and labels[4:] == ["C"] * 6
+
+    def test_silent_beat_segments_become_nc(self):
+        chroma = np.hstack([_chroma_for(0, QUALITY_TONES[""])] * 100)
+        rms = np.concatenate([np.full(50, 0.2), np.full(50, NC_RMS_THRESHOLD / 10)])
+        beats = [float(i) for i in range(1, 10)]
+        labeled, _ = classify_beat_segments(chroma, beats, time_per_frame=0.1, rms=rms)
+        labels = [label for label, _ in labeled]
+        assert labels[:5] == ["C"] * 5
+        assert labels[5:] == [NC_LABEL] * 5
+
+    def test_out_of_range_and_duplicate_beats_are_tolerated(self):
+        chroma = self._two_chord_chroma()
+        beats = [-1.0, 0.0, 2.0, 2.0, 2.001, 5.0, 99.0]  # junk in, clean out
+        labeled, bounds = classify_beat_segments(chroma, beats, time_per_frame=0.1)
+        assert bounds[0] == 0.0
+        assert bounds[-1] == pytest.approx(10.0)
+        assert all(b2 > b1 for b1, b2 in zip(bounds, bounds[1:]))
+        assert len(labeled) == len(bounds) - 1
+
+    def test_beats_sanity_gate(self):
+        good = [0.5 * i for i in range(1, 21)]  # 20 beats @ 120 BPM
+        assert _beats_are_sane(good, duration=12.0)
+        assert not _beats_are_sane(good[: MIN_BEATS_FOR_SYNC - 1], duration=12.0)
+        assert not _beats_are_sane([], duration=12.0)
+        non_monotonic = list(good)
+        non_monotonic[5] = non_monotonic[3]
+        assert not _beats_are_sane(non_monotonic, duration=12.0)
+        too_fast = [0.01 * i for i in range(1, 50)]  # 6000 BPM
+        assert not _beats_are_sane(too_fast, duration=12.0)
+        too_slow = [4.0 * i for i in range(1, 12)]  # 15 BPM
+        assert not _beats_are_sane(too_slow, duration=48.0)
+
+
+class TestFeaturesNodeBeatThreading:
+    def test_features_node_passes_beat_times_to_detect_chords(self, monkeypatch):
+        from backend.graph import nodes
+        from backend.schemas import BeatEvent
+
+        captured: dict = {}
+
+        def fake_detect(path, beats=None):
+            captured["beats"] = beats
+            return []
+
+        monkeypatch.setattr(
+            "backend.ml.key_estimation.estimate_key_and_tempo", lambda _p: ("C major", 120.0)
+        )
+        monkeypatch.setattr(
+            "backend.ml.beat_tracking.track_beats",
+            lambda _p: [BeatEvent(time=0.5, beat_number=1), BeatEvent(time=1.0, beat_number=2)],
+        )
+        monkeypatch.setattr("backend.ml.chord_detection.detect_chords", fake_detect)
+        monkeypatch.setattr("backend.ml.structure_detection.detect_sections", lambda _p: [])
+
+        nodes.features_node({"audio_path": "song.mp3", "retries": 0})
+        assert captured["beats"] == [0.5, 1.0]
+
+    def test_features_node_passes_none_when_no_beats(self, monkeypatch):
+        from backend.graph import nodes
+
+        captured: dict = {}
+
+        def fake_detect(path, beats=None):
+            captured["beats"] = beats
+            return []
+
+        monkeypatch.setattr(
+            "backend.ml.key_estimation.estimate_key_and_tempo", lambda _p: ("C major", 120.0)
+        )
+        monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
+        monkeypatch.setattr("backend.ml.chord_detection.detect_chords", fake_detect)
+        monkeypatch.setattr("backend.ml.structure_detection.detect_sections", lambda _p: [])
+
+        nodes.features_node({"audio_path": "song.mp3", "retries": 0})
+        assert captured["beats"] is None
 
 
 class TestSmoothingDeterminism:

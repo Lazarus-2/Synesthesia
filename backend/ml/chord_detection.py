@@ -48,6 +48,11 @@ DOM7_B7_MIN_RATIO = 0.5
 
 _SMOOTHING_WINDOW = 15
 
+# Beat-sync quality gate: librosa's tracker (madmom is absent on py3.12) can
+# return sparse or degenerate beats; below these floors we decode frame-level.
+MIN_BEATS_FOR_SYNC = 8
+_BEAT_INTERVAL_RANGE_S = (0.2, 2.0)  # 30-300 BPM
+
 
 def build_chord_templates():
     """Return (names, matrix): 84 labels + row-unit-normalized (84, 12) bank.
@@ -120,6 +125,58 @@ def classify_frames(chroma, rms=None) -> list[tuple[str, float]]:
     ]
 
 
+def _beats_are_sane(beat_times: list[float], duration: float) -> bool:
+    """True when beats are dense, monotonic, and at a plausible musical rate."""
+    if len(beat_times) < MIN_BEATS_FOR_SYNC:
+        return False
+    intervals = [b - a for a, b in zip(beat_times, beat_times[1:])]
+    if any(iv <= 0 for iv in intervals):
+        return False
+    if duration > 0 and (beat_times[-1] - beat_times[0]) < 0.25 * duration:
+        return False  # beats cover too little of the clip to trust
+    median = sorted(intervals)[len(intervals) // 2]
+    lo, hi = _BEAT_INTERVAL_RANGE_S
+    return lo <= median <= hi
+
+
+def classify_beat_segments(chroma, beat_times, time_per_frame: float, rms=None):
+    """Average chroma between beat boundaries and classify each segment.
+
+    Beat times are snapped to the frame grid; out-of-range or duplicate
+    boundaries collapse away. Returns ``(labeled, boundaries)`` where
+    ``labeled`` is one ``(label, confidence)`` per segment and
+    ``boundaries`` has ``len(labeled) + 1`` ascending times covering the
+    whole clip.
+    """
+    import numpy as np
+
+    chroma = np.asarray(chroma, dtype=float)
+    n_frames = chroma.shape[1]
+    duration = n_frames * time_per_frame
+
+    cuts = {int(round(t / time_per_frame)) for t in beat_times if 0.0 < t < duration}
+    frame_bounds = sorted({0, n_frames} | {c for c in cuts if 0 < c < n_frames})
+
+    seg_chroma = np.stack(
+        [chroma[:, a:b].mean(axis=1) for a, b in zip(frame_bounds, frame_bounds[1:])],
+        axis=1,
+    )
+    seg_rms = None
+    if rms is not None:
+        rms = np.asarray(rms, dtype=float).reshape(-1)
+        seg_rms = np.array(
+            [rms[a : min(b, rms.shape[0])].mean() if a < rms.shape[0] else 0.0
+             for a, b in zip(frame_bounds, frame_bounds[1:])]
+        )
+
+    # No cross-segment smoothing here: per-beat chroma averaging already
+    # smooths within the beat, and a majority window would erase real
+    # one-beat chords.
+    labeled = classify_frames(seg_chroma, rms=seg_rms)
+    boundaries = [f * time_per_frame for f in frame_bounds]
+    return labeled, boundaries
+
+
 def _root_of(name: str) -> str:
     return name[:2] if len(name) > 1 and name[1] == "#" else name[:1]
 
@@ -148,12 +205,60 @@ def _smooth_frames(
     return smoothed
 
 
-def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
-    """Return the song's ChordEvents via template matching on CQT chroma."""
-    import librosa
-    import numpy as np
-
+def _segments_to_events(
+    labeled: list[tuple[str, float]], boundaries: list[float]
+) -> list[ChordEvent]:
+    """Merge consecutive same-label segments into ChordEvents."""
     from backend.tools.synesthesia_colors import get_chord_color
+
+    events: list[ChordEvent] = []
+    if not labeled:
+        return events
+
+    curr_chord, _ = labeled[0]
+    start_time = boundaries[0]
+    conf_accum: list[float] = []
+
+    for i, (chord, conf) in enumerate(labeled):
+        if chord != curr_chord:
+            events.append(
+                ChordEvent(
+                    start=float(start_time),
+                    end=float(boundaries[i]),
+                    chord=curr_chord,
+                    confidence=round(sum(conf_accum) / len(conf_accum), 3),
+                    color=get_chord_color(curr_chord),
+                )
+            )
+            curr_chord = chord
+            start_time = boundaries[i]
+            conf_accum = [conf]
+        else:
+            conf_accum.append(conf)
+
+    events.append(
+        ChordEvent(
+            start=float(start_time),
+            end=float(boundaries[-1]),
+            chord=curr_chord,
+            confidence=round(sum(conf_accum) / len(conf_accum), 3),
+            color=get_chord_color(curr_chord),
+        )
+    )
+    return events
+
+
+def detect_chords(
+    audio_path: str | Path, beats: list[float] | None = None
+) -> list[ChordEvent]:
+    """Return the song's ChordEvents via template matching on CQT chroma.
+
+    When ``beats`` (ascending beat times from the beat tracker) pass the
+    sanity gate, chroma is averaged per beat segment and events land on
+    beat boundaries; otherwise the frame-level path with majority-vote
+    smoothing runs.
+    """
+    import librosa
 
     hop_length = 512
     try:
@@ -167,45 +272,20 @@ def detect_chords(audio_path: str | Path) -> list[ChordEvent]:
 
     num_frames = chroma.shape[1]
     time_per_frame = hop_length / sr
+    duration = num_frames * time_per_frame
 
-    frame_chords = classify_frames(chroma, rms=rms)
-    smoothed = _smooth_frames(frame_chords)
-
-    events: list[ChordEvent] = []
-    if not smoothed:
-        return events
-
-    curr_chord, curr_conf = smoothed[0]
-    start_time = 0.0
-    conf_accum = [curr_conf]
-
-    for i in range(1, num_frames):
-        chord, conf = smoothed[i]
-        if chord != curr_chord:
-            end_time = i * time_per_frame
-            events.append(
-                ChordEvent(
-                    start=float(start_time),
-                    end=float(end_time),
-                    chord=curr_chord,
-                    confidence=round(sum(conf_accum) / len(conf_accum), 3),
-                    color=get_chord_color(curr_chord),
-                )
-            )
-            curr_chord = chord
-            start_time = end_time
-            conf_accum = [conf]
-        else:
-            conf_accum.append(conf)
-
-    events.append(
-        ChordEvent(
-            start=float(start_time),
-            end=float(num_frames * time_per_frame),
-            chord=curr_chord,
-            confidence=round(sum(conf_accum) / len(conf_accum), 3),
-            color=get_chord_color(curr_chord),
+    if beats and _beats_are_sane(beats, duration):
+        labeled, boundaries = classify_beat_segments(
+            chroma, beats, time_per_frame, rms=rms
         )
-    )
+    else:
+        if beats:
+            logger.info(
+                "Beat-sync gate rejected %d beats for %s; frame-level decode",
+                len(beats),
+                audio_path,
+            )
+        labeled = _smooth_frames(classify_frames(chroma, rms=rms))
+        boundaries = [i * time_per_frame for i in range(num_frames + 1)]
 
-    return events
+    return _segments_to_events(labeled, boundaries)

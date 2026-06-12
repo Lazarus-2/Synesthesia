@@ -107,7 +107,9 @@ class TestFeaturesNodeFailThenSucceed:
             "backend.ml.key_estimation.estimate_key_and_tempo", flaky_key_tempo
         )
         monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
-        monkeypatch.setattr("backend.ml.chord_detection.detect_chords", lambda _p: [])
+        monkeypatch.setattr(
+            "backend.ml.chord_detection.detect_chords", lambda _p, beats=None: []
+        )
         monkeypatch.setattr(
             "backend.ml.structure_detection.detect_sections", lambda _p: []
         )

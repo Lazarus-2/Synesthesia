@@ -51,6 +51,18 @@ class TestChordDetection:
         assert isinstance(e.chord, str) and len(e.chord) > 0
         assert 0.0 <= e.confidence <= 1.0
 
+    def test_beat_synchronous_events_land_on_beat_boundaries(self, synthetic_song: Path):
+        from backend.ml.chord_detection import detect_chords
+
+        beats = [0.5 * i for i in range(1, 12)]  # 120 BPM grid over the 6s clip
+        events = detect_chords(synthetic_song, beats=beats)
+        assert events, "beat-sync path returned no events"
+        grid = {0.0, *beats}
+        frame_quantum = 512 / 22050  # boundaries are snapped to the frame grid
+        for e in events[:-1]:
+            assert any(abs(e.end - b) <= frame_quantum for b in grid), e.end
+        assert 0.0 <= events[0].start < frame_quantum
+
 
 class TestBeatTracking:
     def test_returns_list_of_beat_events_or_empty(self, synthetic_song: Path):

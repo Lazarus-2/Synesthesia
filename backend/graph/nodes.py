@@ -388,7 +388,10 @@ def features_node(state: AnalysisState) -> dict:
     try:
         key, tempo = estimate_key_and_tempo(audio_path)
         beats = track_beats(audio_path)
-        chords = detect_chords(audio_path)
+        # Beat-synchronous chord decoding (Phase 4 G2): chord events snap to
+        # beat boundaries when the tracker produced usable beats.
+        beat_times = [b.time for b in beats] if beats else None
+        chords = detect_chords(audio_path, beats=beat_times)
         sections = detect_sections(audio_path)  # Plan 3 B2; may return []
         # Append an actionable degradation message when chord detection
         # returned nothing (speech, silence, non-harmonic audio).  We do NOT
