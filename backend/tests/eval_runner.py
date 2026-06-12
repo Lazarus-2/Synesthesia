@@ -19,12 +19,46 @@ AUDIO_DIR = Path(__file__).parent / "audio"
 
 
 def chord_accuracy(predicted: list[str], expected: list[str]) -> float:
-    """% of expected chords present in the same order in predicted (Sequence Matcher)."""
+    """Quality-aware chord accuracy (Phase 4 G6).
+
+    The old exact-string SequenceMatcher zeroed ``C7`` against an expected
+    ``C`` even though the root was right — the richer Phase 4 vocabulary
+    would have tanked every golden spuriously. Roots are aligned with a
+    SequenceMatcher; aligned positions then earn a quality bonus:
+
+        score = root_ratio * (0.7 + 0.3 * quality_match_rate_on_aligned)
+
+    Exact matches still score 1.0; a root-perfect but quality-richer
+    prediction keeps >= 0.7.
+    """
     if not expected:
         return 1.0
+    if not predicted:
+        return 0.0
 
-    sm = difflib.SequenceMatcher(None, predicted, expected)
-    return sm.ratio()
+    from backend.tools.chords import parse_chord
+
+    def root_of(label: str) -> str:
+        return parse_chord(label).root or label
+
+    def quality_of(label: str) -> str:
+        return parse_chord(label).quality
+
+    pred_roots = [root_of(c) for c in predicted]
+    exp_roots = [root_of(c) for c in expected]
+    sm = difflib.SequenceMatcher(None, pred_roots, exp_roots)
+    root_ratio = sm.ratio()
+
+    aligned = 0
+    quality_hits = 0
+    for block in sm.get_matching_blocks():
+        for k in range(block.size):
+            aligned += 1
+            if quality_of(predicted[block.a + k]) == quality_of(expected[block.b + k]):
+                quality_hits += 1
+    quality_rate = quality_hits / aligned if aligned else 0.0
+
+    return root_ratio * (0.7 + 0.3 * quality_rate)
 
 
 def key_correct(predicted: str, expected: str) -> bool:
