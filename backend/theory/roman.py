@@ -73,12 +73,38 @@ _NATURAL_MINOR_MODAL = frozenset({"bVII", "bVI", "bIII"})
 # iv, i, v would be modal mixture / borrowed from parallel minor).
 _MAJOR_DIATONIC_LOWER = frozenset({"ii", "iii", "vi", "vii"})
 
-# Normalise harmonic-minor V7 figured-bass noise (e.g. 'V75#3') to plain 'V7'.
-# Matches: optional leading accidental + roman numeral root + '7' + any figured-bass junk
-# (digits, '#', 'b') with NO '/' (secondary dominants are left as-is).
-_SIMPLIFY_V7_RE = re.compile(
-    r"^([b#]?(?:VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)7)[\d#b]+$"
-)
+# Figured-bass junk on 7th chords: only digits/accidentals, containing a '7'
+# AND at least one accidental (e.g. '75#3', 'b753', 'b75b3'). Plain inversion
+# figures (6, 64, 65, 43, 42) never match — they carry real information.
+_FIGURE_JUNK_RE = re.compile(r"^[\db#]+$")
+_QUALITY_MARKS = ("o", "ø", "+")
+
+
+def _simplify_figure(figure: str) -> str:
+    """Normalise figured-bass noise on 7th chords to a plain '7'.
+
+    ``V75#3`` → ``V7`` (harmonic-minor dominant), ``IVb753`` → ``IV7``,
+    ``viiob753`` → ``viio7`` (ROMAN-FIG, Phase 4 G3). Quality marks (o/ø/+)
+    and secondary slashes (``V7/IV``) are preserved; inversion figures
+    (``I6``, ``V65``…) are untouched.
+    """
+    pre, sep, post = figure.partition("/")
+    m = _RN_ROOT_RE.match(pre)
+    if not m:
+        return figure
+    root = pre[: m.end()]
+    suffix = pre[m.end():]
+    quality = ""
+    while suffix and suffix[0] in _QUALITY_MARKS:
+        quality += suffix[0]
+        suffix = suffix[1:]
+    if (
+        "7" in suffix
+        and _CHROMATIC_SUFFIX_RE.search(suffix)
+        and _FIGURE_JUNK_RE.match(suffix)
+    ):
+        suffix = "7"
+    return f"{root}{quality}{suffix}{sep}{post}"
 
 
 def _is_diatonic_primary(primary_figure: str) -> bool:
@@ -156,11 +182,51 @@ def smart_analyze(chord_sym: str, key_obj: m21_key_mod.Key) -> m21_roman.RomanNu
     ):
         return rn
 
+    # Blues guard (ROMAN-BLUES, Phase 4 G3): a dom7 built on the tonic or
+    # subdominant is idiomatic blues/rock vocabulary (C7 as tonic, F7 as
+    # subdominant in C) — keep the Pass-1 degree label (later simplified to
+    # I7/IV7) instead of relabelling it as a secondary dominant (V7/IV).
+    m_root = _RN_ROOT_RE.match(rn.primaryFigure)
+    if m_root and not m_root.group(1):
+        suffix = rn.primaryFigure[m_root.end():]
+        if m_root.group(2).upper() in ("I", "IV") and "7" in suffix:
+            return rn
+
     # Non-diatonic: try to identify as a secondary dominant
     rn2: m21_roman.RomanNumeral = m21_roman.romanNumeralFromChord(
         cs, key_obj, preferSecondaryDominants=True
     )
     return rn2 if rn2.secondaryRomanNumeral is not None else rn
+
+
+# ---------------------------------------------------------------------------
+# Suspended-chord handling (ROMAN-SUS, Phase 4 G3)
+# ---------------------------------------------------------------------------
+
+_SUS_QUALITIES = ("sus2", "sus4")
+
+
+def _sus_roman(root: str, sus_quality: str, key_obj: m21_key_mod.Key):
+    """Roman pieces for a sus chord: ``(rn_of_root_triad, numeral, function)``.
+
+    music21's ``romanNumeralFromChord`` has no concept of suspensions — it
+    reads Csus4 = {C,F,G} as some inverted minor sonority (``i54``) and the
+    pipeline then mislabels it borrowed/chromatic. A sus chord functions as
+    its scale degree, so we analyse the plain triad on the same root and
+    present ``<DEGREE>susN`` (e.g. ``Vsus4``). The root-triad RomanNumeral is
+    returned so the cadence pass can treat e.g. Gsus4→C as dominant motion.
+    """
+    try:
+        cs = m21_harmony.ChordSymbol(_to_m21(root))
+        rn_root = m21_roman.romanNumeralFromChord(cs, key_obj)
+    except Exception:
+        return None
+    m = _RN_ROOT_RE.match(rn_root.primaryFigure)
+    if not m:
+        return None
+    acc, degree = m.group(1), m.group(2)
+    numeral = f"{acc}{degree.upper()}{sus_quality}"
+    return rn_root, numeral, harmonic_function(rn_root)
 
 
 # ---------------------------------------------------------------------------
@@ -540,11 +606,37 @@ def analyze_roman(
     # pass can reuse them rather than calling smart_analyze a second time.
     rn_objects: list[m21_roman.RomanNumeral] = []
 
+    from backend.tools.chords import parse_chord
+
     for c in chords:
         if isinstance(c, dict):
             sym, start, end = c.get("chord", ""), float(c.get("start", 0)), float(c.get("end", 0))
         else:
             sym, start, end = c.chord, c.start, c.end
+
+        # ROMAN-SUS (Phase 4 G3): suspensions bypass romanNumeralFromChord —
+        # see _sus_roman. Entry is degree-based: Gsus4 in C -> 'Vsus4'.
+        parts = parse_chord(sym) if sym else None
+        if parts and parts.root and parts.quality in _SUS_QUALITIES:
+            sus = _sus_roman(parts.root, parts.quality, home_key)
+            if sus is not None:
+                rn_root, numeral, func = sus
+                chord_symbols.append(sym)
+                rn_objects.append(rn_root)
+                entries.append(
+                    RomanEntry(
+                        chord=sym,
+                        numeral=numeral,
+                        function=func,
+                        inversion=0,
+                        is_secondary=False,
+                        is_borrowed=False,
+                        cadence=None,
+                        start=start,
+                        end=end,
+                    )
+                )
+            continue
 
         # C1 fix: per-chord guard so a bad symbol (e.g. 'Bbb', '   ') is skipped
         # rather than aborting the whole analysis.
@@ -556,12 +648,9 @@ def analyze_roman(
         if rn is None:
             continue  # skip N.C. tokens
 
-        # Should-fix (E7-in-minor): normalise harmonic-minor V7 figured-bass
-        # notation (e.g. 'V75#3') to plain 'V7' for readability.
-        figure = rn.figure
-        m_simplify = _SIMPLIFY_V7_RE.match(figure)
-        if m_simplify:
-            figure = m_simplify.group(1)
+        # Normalise figured-bass noise ('V75#3'→'V7', 'IVb753'→'IV7',
+        # 'viiob753'→'viio7') for readability; inversions are preserved.
+        figure = _simplify_figure(rn.figure)
 
         chord_symbols.append(sym)
         rn_objects.append(rn)

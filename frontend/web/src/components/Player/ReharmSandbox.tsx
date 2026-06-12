@@ -166,13 +166,24 @@ const _NOTE_MIDI: Record<string, number> = {
   "F#": 66, Gb: 66, G: 67, "G#": 68, Ab: 68, A: 69, "A#": 70, Bb: 70, B: 71,
 };
 
+function qualityIntervals(quality: string): number[] {
+  // Order matters: specific qualities first so e.g. "dim7" never reads as "m7".
+  if (/dim7/.test(quality)) return [0, 3, 6, 9];
+  if (/dim|°|o(?![a-z])/.test(quality)) return [0, 3, 6];
+  if (/aug|\+/.test(quality)) return [0, 4, 8];
+  if (/sus2/.test(quality)) return [0, 2, 7];
+  if (/sus4|sus/.test(quality)) return [0, 5, 7];
+  const isMinor = /m(?![aA])/.test(quality);
+  if (/maj7/.test(quality)) return [0, 4, 7, 11];
+  if (/7/.test(quality)) return isMinor ? [0, 3, 7, 10] : [0, 4, 7, 10];
+  return isMinor ? [0, 3, 7] : [0, 4, 7];
+}
+
 function chordToMidi(chord: string): string[] {
   const { root, quality } = parse(chord);
   const base = _NOTE_MIDI[root];
   if (base == null) return [];
-  const isMinor = /m(?![aA])/.test(quality) && !/dim|aug/.test(quality);
-  const triad = isMinor ? [0, 3, 7] : [0, 4, 7];
-  return triad.map((s) => midiToNote(base + s));
+  return qualityIntervals(quality).map((s) => midiToNote(base + s));
 }
 
 const _PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

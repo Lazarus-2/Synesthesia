@@ -66,14 +66,16 @@ _PIANO_TRIADS: dict[str, dict] = {
 # Canonical quality -> the suffix for the DEGRADED fallback shape.
 #
 # Degradation policy (applied when the exact chord label is not in the table):
-#   - major-family (maj, maj7, maj9, maj11, maj13, dom7, 6, 9, 11, 13, sus*, add9,
-#     aug, power): degrade to the bare major triad ("").
+#   - major-family (maj, maj7, maj9, maj11, maj13, dom7, 6, 9, 11, 13, add9,
+#     power): degrade to the bare major triad ("").
 #   - minor-family (min, min7, min9, min11, min13): degrade to the minor triad ("m").
-#   - dim7 / m7b5 / dim: these are tonally DISTINCT from major/minor triads.
-#     Showing an Am shape for "Adim" would be musically WRONG and mislead the
-#     player. We therefore map them to None (sentinel) so _candidate_labels
-#     returns only the exact label — if the table has no dim shape, the chord
-#     is DROPPED (no diagram) rather than shown with an incorrect shape.
+#   - dim / dim7 / m7b5 / aug / sus2 / sus4: these are tonally DISTINCT from
+#     major/minor triads. Showing an Am shape for "Adim" — or the C-major open
+#     shape for "Csus4"/"Caug" (Phase 4 G3, VOICE-SUS) — would be musically
+#     WRONG and mislead the player. We therefore map them to None (sentinel) so
+#     _candidate_labels returns only the exact label — if neither the table nor
+#     the movable-template generator has a correct shape, the chord gets a
+#     no_voicing marker rather than a wrong shape.
 _DEGRADE_SUFFIX: dict[str, str | None] = {
     # major triad family
     "maj": "",
@@ -86,10 +88,7 @@ _DEGRADE_SUFFIX: dict[str, str | None] = {
     "9": "",
     "11": "",
     "13": "",
-    "sus2": "",
-    "sus4": "",
     "add9": "",
-    "aug": "",
     "power": "",
     # minor triad family
     "min": "m",
@@ -101,6 +100,9 @@ _DEGRADE_SUFFIX: dict[str, str | None] = {
     "dim": None,
     "dim7": None,
     "m7b5": None,
+    "aug": None,
+    "sus2": None,
+    "sus4": None,
 }
 
 
@@ -189,6 +191,36 @@ _MOVABLE_TEMPLATES: dict[tuple[str, str], dict] = {
         "root_pitch":   9,
         "barre_string": 5,
     },
+    # Esus4-shape: root on string 0 (E A D A B E -> root, 4th doubled, 5th)
+    ("Esus4", "sus4"): {
+        "open_frets":   [0, 2, 2, 2, 0, 0],
+        "open_fingers": [0, 2, 3, 4, 0, 0],
+        "root_string":  0,
+        "root_pitch":   4,
+    },
+    # Asus4-shape: root on string 1
+    ("Asus4", "sus4"): {
+        "open_frets":   [-1, 0, 2, 2, 3, 0],
+        "open_fingers": [ 0, 0, 1, 2, 4, 0],
+        "root_string":  1,
+        "root_pitch":   9,
+        "barre_string": 5,
+    },
+    # Asus2-shape: root on string 1
+    ("Asus2", "sus2"): {
+        "open_frets":   [-1, 0, 2, 2, 0, 0],
+        "open_fingers": [ 0, 0, 2, 3, 0, 0],
+        "root_string":  1,
+        "root_pitch":   9,
+        "barre_string": 5,
+    },
+    # Aaug-shape: root on string 1 (A F A C# = root, #5, root, 3rd)
+    ("Aaug", "aug"): {
+        "open_frets":   [-1, 0, 3, 2, 2, -1],
+        "open_fingers": [ 0, 0, 4, 2, 3, 0],
+        "root_string":  1,
+        "root_pitch":   9,
+    },
 }
 
 # Quality -> ordered list of template shapes to try.
@@ -199,7 +231,24 @@ _SHAPE_PRIORITY: dict[str, list[str]] = {
     "dom7": ["E", "A"],    # degrade dom7/maj7/min7 to the triad barre shape
     "maj7": ["E", "A"],
     "min7": ["Em", "Am"],
+    "sus4": ["Esus4", "Asus4"],
+    "sus2": ["Asus2"],
+    "aug":  ["Aaug"],
 }
+
+
+def _template_for(shape_name: str, quality: str) -> dict | None:
+    """Resolve a movable template for (shape, quality).
+
+    Exact (shape, quality) first; the classic E/A/Em/Am shapes double as the
+    degraded triad target for 7th-family qualities (dom7 -> E-shape major).
+    """
+    tmpl = _MOVABLE_TEMPLATES.get((shape_name, quality))
+    if tmpl is None and shape_name in ("E", "A"):
+        tmpl = _MOVABLE_TEMPLATES.get((shape_name, "maj"))
+    if tmpl is None and shape_name in ("Em", "Am"):
+        tmpl = _MOVABLE_TEMPLATES.get((shape_name, "min"))
+    return tmpl
 
 
 def _guitar_barre_shape(root: str, quality: str, prefer_low_fret: bool = False) -> dict | None:
@@ -233,8 +282,7 @@ def _guitar_barre_shape(root: str, quality: str, prefer_low_fret: bool = False) 
 
     if len(shape_names) >= 2:
         def fret_for_shape(sn: str) -> int:
-            tmpl_q = "maj" if sn in ("E", "A") else "min"
-            t = _MOVABLE_TEMPLATES.get((sn, tmpl_q))
+            t = _template_for(sn, quality)
             if t is None:
                 return 99
             return (root_sem - t["root_pitch"]) % 12
@@ -250,9 +298,7 @@ def _guitar_barre_shape(root: str, quality: str, prefer_low_fret: bool = False) 
                 shape_names = sorted(shape_names, key=fret_for_shape)
 
     for shape_name in shape_names:
-        # Match quality to the template's canonical quality (maj/min).
-        tmpl_quality = "maj" if shape_name in ("E", "A") else "min"
-        tmpl = _MOVABLE_TEMPLATES.get((shape_name, tmpl_quality))
+        tmpl = _template_for(shape_name, quality)
         if tmpl is None:
             continue
 
@@ -370,10 +416,12 @@ def _quality_chain(quality: str) -> list[str]:
     then fall through to Em-barre (defined).
     """
     chain = [quality]
-    # Broaden minor extensions to 'min', major extensions to 'maj'
+    # Broaden minor extensions to 'min', major extensions to 'maj'.
+    # sus2/sus4/aug are deliberately NOT broadened to 'maj' — they have their
+    # own movable templates, and a major barre would be a wrong shape (G3).
     if quality in ("min7", "min9", "min11", "min13"):
         chain.append("min")
-    elif quality in ("maj7", "maj9", "maj11", "maj13", "dom7", "6", "9", "11", "13", "add9", "aug", "power", "sus2", "sus4"):
+    elif quality in ("maj7", "maj9", "maj11", "maj13", "dom7", "6", "9", "11", "13", "add9", "power"):
         chain.append("maj")
     elif quality == "dim7":
         chain.append("dim")

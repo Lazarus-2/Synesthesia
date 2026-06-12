@@ -80,12 +80,16 @@ def get_chord_color(chord_symbol: str) -> str:
     elif quality == "aug":
         # Augmented -> radioactive lime shift
         return "#B6FF00"
-    elif quality in ("min", "min7", "min9"):
-        # Minor -> cooler, deeper, lower lightness & saturation
+    elif quality in ("min", "min7", "min9", "min11", "min13"):
+        # Minor (incl. deep extensions) -> cooler, deeper, lower lightness & saturation
         if norm_root in ("C", "G", "D", "A"):
             h = (h + 0.05) % 1.0  # Shift toward green/blue
         lt = max(0.15, lt * 0.5)  # Darker
         s = max(0.2, s * 0.6)  # Less saturated
+    elif quality in ("sus2", "sus4"):
+        # Suspended -> unresolved, airy: washed-out pastel of the root hue
+        s = max(0.25, s * 0.55)
+        lt = min(0.85, lt * 1.25)
     elif quality in ("dom7", "9", "11", "13", "maj7", "maj9", "6"):
         # 7th / extended -> highly saturated neon fluorescent boost
         s = min(1.0, s * 1.3)
