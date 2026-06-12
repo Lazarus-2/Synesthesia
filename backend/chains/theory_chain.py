@@ -24,11 +24,29 @@ from backend.prompts.theory_prompt import theory_prompt
 from backend.schemas import SongAnalysis, TheoryExplanation
 
 
+def _confidence_note(analysis: SongAnalysis) -> str:
+    """Render the key-confidence note the v3 prompt hedges on (Phase 4 G5)."""
+    conf = analysis.key_confidence
+    if conf is None:
+        return "unknown (analyzed before confidence tracking existed)"
+    threshold = get_settings().key_confidence_low_threshold
+    pct = f"{conf * 100:.0f}%"
+    if conf < threshold:
+        return (
+            f"LOW ({pct}) — the detected key is uncertain; hedge key-dependent "
+            f"claims (say the song is 'likely in {analysis.key}') and avoid "
+            "asserting borrowed-chord or modulation interpretations that hinge "
+            "on the exact key."
+        )
+    return f"{pct} — the detected key is reliable; state it plainly."
+
+
 def _format_inputs(analysis: SongAnalysis) -> dict:
     chord_str = " -> ".join(c.chord for c in analysis.chords[:32])
     roman = analysis.roman
 
-    roman_str = " -> ".join(roman.progression) if roman else "unknown"
+    # THEORY-CAP: cap Roman numerals like chords (long songs blew up the prompt).
+    roman_str = " -> ".join(roman.progression[:32]) if roman else "unknown"
 
     # G2.3: inject deterministic cadence facts if G1 has populated them.
     cadence_facts = ""
@@ -43,8 +61,19 @@ def _format_inputs(analysis: SongAnalysis) -> dict:
                 parts.append(str(c))
         cadence_facts = "; ".join(parts)
 
+    # THEORY-CAP: modulations were computed but never reached the prompt.
+    if roman and getattr(roman, "modulations", None):
+        mod_parts = [
+            f"modulation to {m.get('to_key', '?')} at index {m.get('at_index', '?')}"
+            for m in roman.modulations
+            if isinstance(m, dict)
+        ]
+        if mod_parts:
+            cadence_facts = "; ".join(filter(None, [cadence_facts, *mod_parts]))
+
     return {
         "key": analysis.key,
+        "key_confidence_note": _confidence_note(analysis),
         "tempo": f"{analysis.tempo:.0f}",
         "chords": chord_str,
         "roman": roman_str,

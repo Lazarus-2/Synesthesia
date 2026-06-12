@@ -20,6 +20,7 @@ from pathlib import Path
 
 from taskiq import Context, TaskiqDepends
 
+from backend.config import ANALYZER_VERSION
 from backend.models import SongAnalysisModel
 from backend.schemas import AnalyzeResponse, SongAnalysis
 from backend.services.job_store import get_job_store
@@ -228,7 +229,9 @@ async def run_analysis_pipeline(
             artist="Local Engine" if audio_path else "YouTube Stream",
             duration=float(chords[-1].end) if chords else 180.0,
             key=result.get("key", "C major"),
+            key_confidence=result.get("key_confidence"),
             tempo=result.get("tempo", 120.0),
+            tempo_confidence=result.get("tempo_confidence"),
             time_signature="4/4",
             chords=chords,
             beats=result.get("beats", []),
@@ -261,8 +264,11 @@ async def run_analysis_pipeline(
             artist=analysis.artist,
             duration=analysis.duration,
             key=analysis.key,
+            key_confidence=analysis.key_confidence,
             tempo=analysis.tempo,
+            tempo_confidence=analysis.tempo_confidence,
             time_signature=analysis.time_signature,
+            analyzer_version=ANALYZER_VERSION,
             chords=analysis.chords,
             beats=analysis.beats,
             sections=analysis.sections,

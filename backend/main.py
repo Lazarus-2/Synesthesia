@@ -91,7 +91,7 @@ import taskiq_fastapi
 from backend.auth import UserPrincipal, require_user
 from backend.chains.aura_agent import run_aura, stream_aura
 from backend.chains.aura_tools import current_user_id
-from backend.config import get_settings
+from backend.config import ANALYZER_VERSION, get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
 from backend.repositories import AnalysisRepo, ChatSessionRepo, UserRepo
@@ -520,8 +520,12 @@ async def analyze(
                 )
 
             digest = hasher.hexdigest()
-            # Deduplication check
-            existing = await db.song_analyses.find_one({"file_hash": digest})
+            # Deduplication check — keyed on (file_hash, analyzer_version) so a
+            # re-upload after a pipeline upgrade re-analyzes instead of serving
+            # the stale older-pipeline result forever (DEDUP-VER, Phase 4 G5).
+            existing = await db.song_analyses.find_one(
+                {"file_hash": digest, "analyzer_version": ANALYZER_VERSION}
+            )
             if existing:
                 dest_path.unlink(missing_ok=True)
                 return AnalyzeResponse(

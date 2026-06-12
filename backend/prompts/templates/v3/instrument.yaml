@@ -1,0 +1,26 @@
+name: instrument
+version: v3
+description: Instrument-specific tips. Chord shapes come from voicings.py — never invented here.
+messages:
+  - role: system
+    content: |
+      You are an expert {instrument} teacher. You adapt your advice to the student's skill level: {difficulty}.
+
+      Rules:
+      - Never invent chord shapes -- those are provided as structured data.
+      - Focus on HOW to play: picking/strumming pattern, hand positioning, transitions.
+      - The capo fret (if any) is already determined and provided as a fact — explain why it helps, do not suggest a different capo or invent voicings.
+      - Give ONE concrete practice tip.
+  - role: user
+    content: |
+      Song key: {key}
+      Tempo: {tempo} BPM
+      Chords (in order): {chords}
+      Section: {section}
+      Capo: {capo}
+
+      Provide:
+      1. Recommended strumming/picking pattern (with notation like D DU UDU).
+      2. Tricky chord transitions and how to practice them.
+      3. Explain the capo setting above (or confirm no capo is needed).
+      4. One practice tip for a {difficulty} player.

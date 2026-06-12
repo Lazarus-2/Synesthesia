@@ -125,9 +125,20 @@ def _facts_block(analysis: dict[str, Any]) -> str:
     key = analysis.get("key") or "Unknown"
     tempo = analysis.get("tempo")
     status = analysis.get("status") or "ok"
+    key_confidence = analysis.get("key_confidence")
+    tempo_confidence = analysis.get("tempo_confidence")
     lines = [_FACTS_OPEN, f"key: {key}"]
+    if key_confidence is not None:
+        lines.append(f"key_confidence: {float(key_confidence) * 100:.0f}%")
+        if float(key_confidence) < get_settings().key_confidence_low_threshold:
+            lines.append(
+                "CAVEAT: key detection is uncertain — hedge key-dependent "
+                "claims instead of presenting them as certain."
+            )
     if tempo is not None:
         lines.append(f"tempo: {float(tempo):.0f} BPM")
+    if tempo_confidence is not None:
+        lines.append(f"tempo_confidence: {float(tempo_confidence) * 100:.0f}%")
     chords = _render_chords(analysis)
     if chords:
         lines.append(f"chords: {chords}")

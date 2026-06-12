@@ -63,6 +63,12 @@ class SongAnalysisModel(BaseModel):
     key: str
     tempo: float
     time_signature: str = "4/4"
+    # Phase 4: estimator confidences; None on pre-Phase-4 documents.
+    key_confidence: float | None = None
+    tempo_confidence: float | None = None
+    # Pipeline version that produced this document (None = pre-Phase-4).
+    # Part of the file-hash dedup key — see backend.config.ANALYZER_VERSION.
+    analyzer_version: str | None = None
 
     # Native MongoDB queryable sub-documents
     chords: list[ChordEvent] = []

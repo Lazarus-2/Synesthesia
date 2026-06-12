@@ -27,6 +27,12 @@ _PROVIDERS_REQUIRING_KEY = frozenset({"openai", "anthropic", "gemini", "groq", "
 # the YouTube paste flow feel broken on the first track most users tried.
 MAX_AUDIO_DURATION_S = 600
 
+# Bumped whenever the analysis pipeline's output materially changes (chord
+# vocabulary, key/tempo estimation, Roman rules). Part of the file-hash dedup
+# key so re-uploads of previously analyzed files get re-analyzed instead of
+# being served a stale result from an older pipeline (DEDUP-VER, Phase 4 G5).
+ANALYZER_VERSION = "p4.0-chords84"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -116,6 +122,13 @@ class Settings(BaseSettings):
     theory_temperature: float = 0.2
     instrument_temperature: float = 0.3
     creative_temperature: float = 0.7
+
+    # --- Analysis confidence thresholds (Phase 4 G5) ---
+    # Below these, the theory prompt hedges key-dependent claims and the
+    # chat/AURA context carries an uncertainty caveat. The UI badge uses the
+    # raw confidence values directly.
+    key_confidence_low_threshold: float = 0.4
+    tempo_confidence_low_threshold: float = 0.4
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

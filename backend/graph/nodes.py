@@ -26,7 +26,9 @@ def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
     return SongAnalysis(
         duration=float(chords[-1].end) if chords else 0.0,
         key=state.get("key", "C major"),
+        key_confidence=state.get("key_confidence"),
         tempo=state.get("tempo", 120.0),
+        tempo_confidence=state.get("tempo_confidence"),
         chords=chords,
         roman=state.get("roman"),
     )
@@ -389,24 +391,27 @@ def features_node(state: AnalysisState) -> dict:
     )
     from backend.ml.structure_detection import detect_sections
 
+    from backend.observability.tracing import trace
+
     try:
-        estimate = estimate_key_and_tempo(audio_path)
-        key, key_confidence = estimate.key, estimate.key_confidence
-        beats = track_beats(audio_path)
-        beat_times = [b.time for b in beats] if beats else None
-        # Phase 4 G4: tempo comes from the SAME beats the UI renders (median
-        # interval + octave fold); the librosa onset estimate is the fallback.
-        tempo, tempo_confidence = refine_tempo(
-            estimate.tempo, estimate.tempo_confidence, beat_times
-        )
-        # Beat-synchronous chord decoding (Phase 4 G2): chord events snap to
-        # beat boundaries when the tracker produced usable beats.
-        chords = detect_chords(audio_path, beats=beat_times)
-        # Phase 4 G4: relative keys (C major / A minor) share every pitch, so
-        # chroma can't separate them — the detected chords' tonic evidence can.
-        if chords:
-            key = disambiguate_relative_key(key, [c.chord for c in chords])
-        sections = detect_sections(audio_path)  # Plan 3 B2; may return []
+        with trace("features", job_id=state.get("job_id", ""), retries=next_retries):
+            estimate = estimate_key_and_tempo(audio_path)
+            key, key_confidence = estimate.key, estimate.key_confidence
+            beats = track_beats(audio_path)
+            beat_times = [b.time for b in beats] if beats else None
+            # Phase 4 G4: tempo comes from the SAME beats the UI renders (median
+            # interval + octave fold); the librosa onset estimate is the fallback.
+            tempo, tempo_confidence = refine_tempo(
+                estimate.tempo, estimate.tempo_confidence, beat_times
+            )
+            # Beat-synchronous chord decoding (Phase 4 G2): chord events snap to
+            # beat boundaries when the tracker produced usable beats.
+            chords = detect_chords(audio_path, beats=beat_times)
+            # Phase 4 G4: relative keys (C major / A minor) share every pitch, so
+            # chroma can't separate them — the detected chords' tonic evidence can.
+            if chords:
+                key = disambiguate_relative_key(key, [c.chord for c in chords])
+            sections = detect_sections(audio_path)  # Plan 3 B2; may return []
         # Append an actionable degradation message when chord detection
         # returned nothing (speech, silence, non-harmonic audio).  We do NOT
         # set feature_error here — that would wrongly trigger a retry; chords

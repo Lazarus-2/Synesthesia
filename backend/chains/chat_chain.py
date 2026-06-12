@@ -12,6 +12,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.chains.llm_factory import build_llm
+from backend.config import get_settings
 from backend.prompts.chat_prompt import chat_prompt
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,22 @@ def _format_analysis_context(analysis: dict[str, Any] | None) -> str | None:
     elif roman_obj is not None:
         roman_progression = list(getattr(roman_obj, "progression", []) or [])
 
+    key_confidence = analysis.get("key_confidence")
+    key_line = f"- Key: {key}"
+    if key_confidence is not None:
+        key_line += f" (detection confidence {float(key_confidence) * 100:.0f}%)"
     lines = [
         "CURRENT SONG CONTEXT (use this when answering — refer to "
         "*this* song, not generic theory):",
-        f"- Key: {key}",
+        key_line,
     ]
+    if key_confidence is not None and float(
+        key_confidence
+    ) < get_settings().key_confidence_low_threshold:
+        lines.append(
+            "- NOTE: key detection is uncertain for this track — hedge "
+            "key-dependent answers."
+        )
     if tempo is not None:
         lines.append(f"- Tempo: {float(tempo):.0f} BPM")
     if chord_names:

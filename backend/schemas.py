@@ -170,6 +170,15 @@ class SongAnalysis(BaseModel):
     tempo: float = Field(description="BPM")
     time_signature: str = Field(default="4/4")
 
+    # Calibrated estimator confidences in [0,1] (Phase 4). None on documents
+    # analyzed before confidence existed — the UI hides the badge then.
+    key_confidence: float | None = Field(
+        default=None, description="Krumhansl-Schmuckler key confidence in [0,1]"
+    )
+    tempo_confidence: float | None = Field(
+        default=None, description="Beat-interval-consistency tempo confidence in [0,1]"
+    )
+
     chords: list[ChordEvent]
     beats: list[BeatEvent] = []
     sections: list[SongSection] = []
