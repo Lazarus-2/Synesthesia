@@ -33,14 +33,21 @@ const SimilarSongRow: React.FC<{ song: SimilarSong }> = ({ song }) => (
         build time and cannot be added to next.config remotePatterns.
         ESLint @next/next/no-img-element is suppressed intentionally. */}
     {song.image ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={song.image}
-        alt={`${song.title} cover`}
-        width={40}
-        height={40}
-        className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-surface-container-high"
-      />
+      <div className="w-10 h-10 rounded-md bg-surface-container-high overflow-hidden flex-shrink-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={song.image}
+          alt={`${song.title} cover`}
+          width={40}
+          height={40}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            // Dead artwork URL: hide the img so the wrapper reads as a
+            // plain placeholder tile instead of a broken-image box.
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      </div>
     ) : (
       <div className="w-10 h-10 rounded-md bg-surface-container-high flex items-center justify-center flex-shrink-0">
         <span className="material-symbols-outlined text-on-surface-variant text-lg">

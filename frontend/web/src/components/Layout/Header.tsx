@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ConfidenceDot } from "../Analysis/ConfidenceDot";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { useAppStore } from "../../store/useAppStore";
 import { useFavoritesStore } from "../../store/useFavoritesStore";
@@ -54,6 +55,7 @@ export const Header: React.FC = () => {
           <span className="text-sm font-semibold text-on-surface">
             {analysis.key || "—"}
           </span>
+          <ConfidenceDot value={analysis.key_confidence} label="Key detection" />
         </div>
         {/* Tempo Badge */}
         <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
@@ -63,6 +65,7 @@ export const Header: React.FC = () => {
           <span className="text-sm font-semibold text-on-surface">
             {Math.round(analysis.tempo) || "—"}
           </span>
+          <ConfidenceDot value={analysis.tempo_confidence} label="Tempo detection" />
         </div>
         {/* Favorite Button */}
         <button

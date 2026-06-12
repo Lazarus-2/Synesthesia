@@ -14,15 +14,15 @@ const TechniqueChip: React.FC<{ label: string }> = ({ label }) => (
 
 const CadenceCallout: React.FC<{ type: string; label: string }> = ({ type, label }) => {
   const colorMap: Record<string, string> = {
-    PAC: "border-secondary-container bg-secondary-container/10 text-on-secondary-container",
-    IAC: "border-secondary-container/60 bg-secondary-container/5 text-on-secondary-container",
-    half: "border-primary/40 bg-primary/5 text-primary",
-    deceptive: "border-error/40 bg-error/5 text-error-container",
-    plagal: "border-tertiary/40 bg-tertiary/5 text-on-surface-variant",
+    PAC: "border-secondary-container/50 bg-secondary-container/10 text-on-secondary-container",
+    IAC: "border-secondary-container/40 bg-secondary-container/5 text-on-secondary-container",
+    half: "border-primary/30 bg-primary/5 text-primary",
+    deceptive: "border-error/30 bg-error/5 text-error-container",
+    plagal: "border-tertiary/30 bg-tertiary/5 text-on-surface-variant",
   };
   const cls = colorMap[type] ?? "border-white/10 bg-white/5 text-on-surface-variant";
   return (
-    <div className={`flex items-center gap-2 border-l-2 ${cls} px-3 py-2 rounded-r-lg`}>
+    <div className={`flex items-center gap-2 border ${cls} px-3 py-2 rounded-lg`}>
       <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
         music_note
       </span>
@@ -63,7 +63,10 @@ export const TheoryPanel: React.FC = () => {
               {roman.entries?.[0]?.function ?? roman.function?.[0] ?? "Tonic Chord"}
             </p>
             <p className="text-sm text-on-surface-variant">
-              Key of {roman.key || analysis.key}
+              {analysis.key_confidence != null && analysis.key_confidence < 0.4
+                ? "Likely key of "
+                : "Key of "}
+              {roman.key || analysis.key}
             </p>
           </div>
         </div>
@@ -112,7 +115,7 @@ export const TheoryPanel: React.FC = () => {
 
           {/* Function explanation prose */}
           {theory.function_explanation && (
-            <div className="border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
+            <div className="border border-secondary-container/30 bg-secondary-container/10 p-5 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className="material-symbols-outlined text-secondary-container"
@@ -183,7 +186,7 @@ export const TheoryPanel: React.FC = () => {
       ) : (
         /* Legacy fallback — flat theory_explanation string */
         analysis.theory_explanation && (
-          <div className="mt-4 border-l-4 border-secondary-container bg-secondary-container/10 p-5 rounded-r-xl">
+          <div className="mt-4 border border-secondary-container/30 bg-secondary-container/10 p-5 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
               <span
                 className="material-symbols-outlined text-secondary-container"

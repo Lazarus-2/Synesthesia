@@ -79,6 +79,10 @@ export interface SongAnalysis {
   duration: number;
   key: string;
   tempo: number;
+  // Estimator confidences in [0,1] (Phase 4). Absent/null on analyses
+  // produced before confidence tracking — UI hides the indicator then.
+  key_confidence?: number | null;
+  tempo_confidence?: number | null;
   time_signature?: string;
   chords: ChordEvent[];
   beats?: number[];
