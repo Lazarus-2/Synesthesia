@@ -3,7 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.schemas import BeatEvent, ChordEvent, InstrumentGuide, RomanAnalysis, SongSection, TheoryExplanation
+from backend.schemas import (
+    BeatEvent,
+    ChordEvent,
+    InstrumentGuide,
+    RomanAnalysis,
+    SongSection,
+    TheoryExplanation,
+)
 
 
 class User(BaseModel):

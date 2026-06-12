@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 
 from backend.ml.key_estimation import (
-    KeyTempoResult,
     MIN_BEATS_FOR_TEMPO,
     TEMPO_FOLD_RANGE,
+    KeyTempoResult,
     _krumhansl_schmuckler,
     disambiguate_relative_key,
     refine_tempo,

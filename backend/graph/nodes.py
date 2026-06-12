@@ -390,7 +390,6 @@ def features_node(state: AnalysisState) -> dict:
         refine_tempo,
     )
     from backend.ml.structure_detection import detect_sections
-
     from backend.observability.tracing import trace
 
     try:
