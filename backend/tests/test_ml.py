@@ -26,13 +26,15 @@ class TestKeyEstimation:
     def test_returns_recognised_key_label_for_c_major_audio(self, synthetic_song: Path):
         from backend.ml.key_estimation import estimate_key_and_tempo
 
-        key, tempo = estimate_key_and_tempo(synthetic_song)
-        assert isinstance(key, str) and " " in key, key
-        root, mode = key.split(" ", 1)
+        result = estimate_key_and_tempo(synthetic_song)
+        assert isinstance(result.key, str) and " " in result.key, result.key
+        root, mode = result.key.split(" ", 1)
         assert root in {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
         assert mode in {"major", "minor"}
         # Tempo for a chord-block synth is not meaningful but must be a positive float.
-        assert isinstance(tempo, (int, float)) and tempo > 0
+        assert isinstance(result.tempo, (int, float)) and result.tempo > 0
+        assert 0.0 <= result.key_confidence <= 1.0
+        assert 0.0 <= result.tempo_confidence <= 1.0
 
 
 class TestChordDetection:

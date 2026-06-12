@@ -382,16 +382,30 @@ def features_node(state: AnalysisState) -> dict:
 
     from backend.ml.beat_tracking import track_beats
     from backend.ml.chord_detection import detect_chords
-    from backend.ml.key_estimation import estimate_key_and_tempo
+    from backend.ml.key_estimation import (
+        disambiguate_relative_key,
+        estimate_key_and_tempo,
+        refine_tempo,
+    )
     from backend.ml.structure_detection import detect_sections
 
     try:
-        key, tempo = estimate_key_and_tempo(audio_path)
+        estimate = estimate_key_and_tempo(audio_path)
+        key, key_confidence = estimate.key, estimate.key_confidence
         beats = track_beats(audio_path)
+        beat_times = [b.time for b in beats] if beats else None
+        # Phase 4 G4: tempo comes from the SAME beats the UI renders (median
+        # interval + octave fold); the librosa onset estimate is the fallback.
+        tempo, tempo_confidence = refine_tempo(
+            estimate.tempo, estimate.tempo_confidence, beat_times
+        )
         # Beat-synchronous chord decoding (Phase 4 G2): chord events snap to
         # beat boundaries when the tracker produced usable beats.
-        beat_times = [b.time for b in beats] if beats else None
         chords = detect_chords(audio_path, beats=beat_times)
+        # Phase 4 G4: relative keys (C major / A minor) share every pitch, so
+        # chroma can't separate them — the detected chords' tonic evidence can.
+        if chords:
+            key = disambiguate_relative_key(key, [c.chord for c in chords])
         sections = detect_sections(audio_path)  # Plan 3 B2; may return []
         # Append an actionable degradation message when chord detection
         # returned nothing (speech, silence, non-harmonic audio).  We do NOT
@@ -405,7 +419,9 @@ def features_node(state: AnalysisState) -> dict:
             extra_errors.append(NO_CHORDS_MESSAGE)
         result: dict = {
             "key": key,
+            "key_confidence": key_confidence,
             "tempo": tempo,
+            "tempo_confidence": tempo_confidence,
             "beats": beats,
             "chords": chords,
             "sections": sections,

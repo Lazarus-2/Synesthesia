@@ -55,7 +55,9 @@ class AnalysisState(TypedDict, total=False):
 
     # --- Derived features (Module 4 Lesson 2) ---
     key: str
+    key_confidence: float  # calibrated K-S confidence in [0,1] (Phase 4 G4)
     tempo: float
+    tempo_confidence: float  # beat-interval consistency in [0,1] (Phase 4 G4)
     chords: list[ChordEvent]
     beats: list[BeatEvent]
     sections: list[SongSection]

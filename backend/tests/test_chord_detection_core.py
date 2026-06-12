@@ -233,8 +233,11 @@ class TestFeaturesNodeBeatThreading:
             captured["beats"] = beats
             return []
 
+        from backend.ml.key_estimation import KeyTempoResult
+
         monkeypatch.setattr(
-            "backend.ml.key_estimation.estimate_key_and_tempo", lambda _p: ("C major", 120.0)
+            "backend.ml.key_estimation.estimate_key_and_tempo",
+            lambda _p: KeyTempoResult("C major", 0.8, 120.0, 0.4),
         )
         monkeypatch.setattr(
             "backend.ml.beat_tracking.track_beats",
@@ -255,8 +258,11 @@ class TestFeaturesNodeBeatThreading:
             captured["beats"] = beats
             return []
 
+        from backend.ml.key_estimation import KeyTempoResult
+
         monkeypatch.setattr(
-            "backend.ml.key_estimation.estimate_key_and_tempo", lambda _p: ("C major", 120.0)
+            "backend.ml.key_estimation.estimate_key_and_tempo",
+            lambda _p: KeyTempoResult("C major", 0.8, 120.0, 0.4),
         )
         monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
         monkeypatch.setattr("backend.ml.chord_detection.detect_chords", fake_detect)

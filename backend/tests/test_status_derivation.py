@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from backend.graph.state import NO_CHORDS_MESSAGE
 from backend.graph.status import derive_status
+from backend.ml.key_estimation import KeyTempoResult
 from backend.schemas import ChordEvent
 
 
@@ -78,7 +79,10 @@ class TestDeriveStatus:
         # Stub all four ML calls: key/tempo succeed, beats succeed, but
         # chord detection returns [] (speech/silence/non-harmonic audio).
         with (
-            patch("backend.ml.key_estimation.estimate_key_and_tempo", return_value=("C major", 120.0)),
+            patch(
+                "backend.ml.key_estimation.estimate_key_and_tempo",
+                return_value=KeyTempoResult("C major", 0.8, 120.0, 0.4),
+            ),
             patch("backend.ml.beat_tracking.track_beats", return_value=[]),
             patch("backend.ml.chord_detection.detect_chords", return_value=[]),
             patch("backend.ml.structure_detection.detect_sections", return_value=[]),
@@ -99,7 +103,10 @@ class TestDeriveStatus:
         from backend.graph.nodes import features_node
 
         with (
-            patch("backend.ml.key_estimation.estimate_key_and_tempo", return_value=("A minor", 90.0)),
+            patch(
+                "backend.ml.key_estimation.estimate_key_and_tempo",
+                return_value=KeyTempoResult("A minor", 0.7, 90.0, 0.4),
+            ),
             patch("backend.ml.beat_tracking.track_beats", return_value=[]),
             patch("backend.ml.chord_detection.detect_chords", return_value=[]),
             patch("backend.ml.structure_detection.detect_sections", return_value=[]),

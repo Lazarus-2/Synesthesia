@@ -98,10 +98,12 @@ class TestFeaturesNodeFailThenSucceed:
         calls = {"n": 0}
 
         def flaky_key_tempo(_path):
+            from backend.ml.key_estimation import KeyTempoResult
+
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RuntimeError("transient decode error")
-            return ("C major", 120.0)
+            return KeyTempoResult("C major", 0.8, 120.0, 0.4)
 
         monkeypatch.setattr(
             "backend.ml.key_estimation.estimate_key_and_tempo", flaky_key_tempo
