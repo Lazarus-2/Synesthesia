@@ -43,23 +43,25 @@ class MeterResult:
     confidence: float
 
 
-def beat_accents(onset_env, beat_frames) -> "object":
-    """Sample the onset envelope at each beat (peak in a short look-ahead).
+def beat_accents(env, beat_frames, lookback: int = 1, lookahead: int = 4) -> "object":
+    """Sample an envelope at each beat as the peak in a small window.
 
-    A downbeat's onset peak can land a frame or two after the tracked beat,
-    so we take the max of a tiny window starting at the beat frame.
+    A beat's energy/onset peak can land a frame or two off the tracked beat,
+    so we take the max of ``[f - lookback, f + lookahead)``. Works for any
+    per-frame envelope (onset strength, low-band energy, ...).
     """
     import numpy as np
 
-    onset = np.asarray(onset_env, dtype=float)
+    env = np.asarray(env, dtype=float)
     frames = np.asarray(beat_frames, dtype=int)
-    if frames.size == 0:
+    if frames.size == 0 or env.size == 0:
         return np.zeros(0)
-    window = 3
     out = np.empty(frames.size, dtype=float)
     for i, f in enumerate(frames):
-        f = max(0, min(int(f), onset.size - 1))
-        out[i] = float(onset[f : min(onset.size, f + window)].max())
+        f = int(f)
+        a = max(0, f - lookback)
+        b = min(env.size, f + lookahead)
+        out[i] = float(env[a:b].max()) if b > a else 0.0
     return out
 
 

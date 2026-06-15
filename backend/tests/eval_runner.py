@@ -5,7 +5,15 @@ Vault refs:
   - 05-Production-Systems/05-CI-Evals-Release.md
 
 Run:
-    python -m tests.eval_runner
+    python -m backend.tests.eval_runner
+
+Requires audio fixtures under ``backend/tests/audio/`` AND a running MongoDB
+(the LangGraph checkpointer is ``MongoDBSaver``), so this is a manual harness,
+not a CI gate. The CI-visible ML regression net is the deterministic unit
+tests (``test_meter.py``, ``test_chord_detection_core.py``, ``test_key_confidence.py``)
+plus the ``@pytest.mark.ml`` integration tests (``test_meter_integration.py``,
+``test_ml.py``). Scoring is quality-aware for chords and includes meter when a
+golden ``expected_time_signature`` is present (Phase 5).
 """
 
 from __future__ import annotations
@@ -69,6 +77,13 @@ def tempo_within(predicted: float, expected: float, tol_bpm: float = 5.0) -> boo
     return abs(predicted - expected) <= tol_bpm
 
 
+def meter_correct(predicted: str, expected: str | None) -> bool | None:
+    """Whether the detected time signature matches (None when no golden meter)."""
+    if not expected:
+        return None
+    return predicted.strip() == expected.strip()
+
+
 def run_eval():
     import asyncio
 
@@ -100,15 +115,29 @@ def run_eval():
                 predicted_chords = [c.chord for c in res.get("chords", [])]
                 predicted_key = res.get("key", "")
                 predicted_tempo = res.get("tempo", 0.0)
+                predicted_meter = res.get("time_signature", "4/4")
 
                 c_acc = chord_accuracy(predicted_chords, song.get("expected_progression", []))
                 k_cor = key_correct(predicted_key, song.get("expected_key", ""))
                 t_cor = tempo_within(predicted_tempo, song.get("expected_tempo_bpm", 0))
+                # Phase 5: meter scoring when the golden has an expected signature.
+                m_cor = meter_correct(predicted_meter, song.get("expected_time_signature"))
 
-                score = (c_acc * 0.5) + (0.3 if k_cor else 0.0) + (0.2 if t_cor else 0.0)
+                # Meter folds into the score only when a golden meter exists, so
+                # entries without one keep their original 0.5/0.3/0.2 weighting.
+                if m_cor is None:
+                    score = (c_acc * 0.5) + (0.3 if k_cor else 0.0) + (0.2 if t_cor else 0.0)
+                else:
+                    score = (
+                        (c_acc * 0.45)
+                        + (0.25 if k_cor else 0.0)
+                        + (0.15 if t_cor else 0.0)
+                        + (0.15 if m_cor else 0.0)
+                    )
 
                 print(
-                    f"  -> Score: {score:.2f} (Chords: {c_acc:.2f}, Key: {k_cor}, Tempo: {t_cor})"
+                    f"  -> Score: {score:.2f} (Chords: {c_acc:.2f}, Key: {k_cor}, "
+                    f"Tempo: {t_cor}, Meter: {m_cor})"
                 )
                 results.append(
                     {
@@ -118,6 +147,7 @@ def run_eval():
                             "chord_acc": c_acc,
                             "key_correct": k_cor,
                             "tempo_within": t_cor,
+                            "meter_correct": m_cor,
                         },
                     }
                 )

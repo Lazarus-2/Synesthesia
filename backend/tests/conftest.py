@@ -77,6 +77,57 @@ def _write_synthetic_wav(
             w.writeframes(_additive_chord(triad, chord_duration_s, sample_rate))
 
 
+def make_click_track_wav(
+    path: Path,
+    *,
+    bpm: int = 120,
+    numerator: int = 4,
+    n_measures: int = 8,
+    sample_rate: int = 22050,
+) -> Path:
+    """Render a metronome click track with accented downbeats (Phase 5 G1).
+
+    Every beat is a short percussive click; the first beat of each measure
+    (``i % numerator == 0``) is louder and carries a low-frequency thump, so
+    the onset envelope has a clear accent periodicity of ``numerator``. Used
+    to exercise the deterministic meter detector on real librosa features.
+    """
+    spb = 60.0 / bpm
+    total_beats = n_measures * numerator
+    n_total = int(total_beats * spb * sample_rate)
+    buf = bytearray()
+    click_dur = 0.05
+    click_n = int(click_dur * sample_rate)
+
+    samples = [0.0] * n_total
+    for b in range(total_beats):
+        start = int(b * spb * sample_rate)
+        downbeat = (b % numerator) == 0
+        amp = 0.6 if downbeat else 0.28
+        for j in range(click_n):
+            idx = start + j
+            if idx >= n_total:
+                break
+            env = math.exp(-8.0 * j / click_n)  # fast percussive decay
+            t = j / sample_rate
+            val = math.sin(2 * math.pi * 1000.0 * t)
+            if downbeat:
+                val += math.sin(2 * math.pi * 80.0 * t)  # kick thump on the 1
+                val *= 0.5
+            samples[idx] += amp * env * val
+
+    for s in samples:
+        clamped = max(-1.0, min(1.0, s))
+        buf += struct.pack("<h", int(clamped * 32767))
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.writeframes(bytes(buf))
+    return path
+
+
 @pytest.fixture(scope="session")
 def synthetic_song(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Return a Path to a deterministic 6-second test WAV.

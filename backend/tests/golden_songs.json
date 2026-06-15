@@ -7,6 +7,7 @@
       "artist": "The Beatles",
       "expected_key": "C major",
       "expected_tempo_bpm": 72,
+      "expected_time_signature": "4/4",
       "expected_progression": ["C", "G", "Am", "F", "C", "G", "F", "C"],
       "expected_roman": ["I", "V", "vi", "IV", "I", "V", "IV", "I"]
     },
@@ -16,6 +17,7 @@
       "artist": "Oasis",
       "expected_key": "F# minor",
       "expected_tempo_bpm": 87,
+      "expected_time_signature": "4/4",
       "expected_progression": ["Em7", "G", "Dsus4", "A7sus4"],
       "expected_capo": 2
     },
@@ -25,6 +27,7 @@
       "artist": "Various",
       "expected_key": "G minor",
       "expected_tempo_bpm": 120,
+      "expected_time_signature": "4/4",
       "expected_progression": ["Cm7", "F7", "BbMaj7", "EbMaj7", "Am7b5", "D7", "Gm"],
       "expected_roman": ["iv7", "VII7", "IIIMaj7", "VIMaj7", "iiø7", "V7", "i"]
     }

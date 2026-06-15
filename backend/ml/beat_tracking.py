@@ -24,6 +24,11 @@ from backend.schemas import BeatEvent
 logger = logging.getLogger(__name__)
 
 _HOP_LENGTH = 512
+# Downbeats are carried mostly by low-frequency kick/bass energy; onset flux
+# is a weaker secondary cue (log-compression flattens loudness). Combine them
+# low-band-first when deriving the per-beat accent for meter detection.
+_LOW_FREQ_HZ = 150.0
+_ONSET_ACCENT_WEIGHT = 0.4
 
 
 @dataclass(frozen=True)
@@ -35,15 +40,38 @@ class BeatTrackingResult:
     meter_confidence: float = 0.0
 
 
-def _assemble(beat_times, onset_env, sr: int) -> BeatTrackingResult:
-    """Turn beat times + onset envelope into a meter-aware BeatTrackingResult."""
+def _beat_accent_signal(y, sr: int, onset_env, beat_frames):
+    """Per-beat accent = low-band (kick/bass) energy + a touch of onset flux.
+
+    Downbeats stand out in low-frequency energy far more than in onset flux,
+    so the low band leads; onset adds nuance for percussion-light material.
+    """
+    import librosa
+    import numpy as np
+
+    spec = np.abs(librosa.stft(y, hop_length=_HOP_LENGTH)) ** 2
+    freqs = librosa.fft_frequencies(sr=sr)
+    low_env = spec[freqs < _LOW_FREQ_HZ].sum(axis=0)
+
+    low_acc = beat_accents(low_env, beat_frames)
+    onset_acc = beat_accents(onset_env, beat_frames)
+
+    def _norm(a):
+        m = float(a.max()) if a.size else 0.0
+        return a / m if m > 0 else a
+
+    return _norm(low_acc) + _ONSET_ACCENT_WEIGHT * _norm(onset_acc)
+
+
+def _assemble(beat_times, y, onset_env, sr: int) -> BeatTrackingResult:
+    """Turn beat times + audio features into a meter-aware BeatTrackingResult."""
     import librosa
 
     if beat_times is None or len(beat_times) == 0:
         return BeatTrackingResult()
 
     beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=_HOP_LENGTH)
-    accents = beat_accents(onset_env, beat_frames)
+    accents = _beat_accent_signal(y, sr, onset_env, beat_frames)
     meter = detect_meter(accents)
 
     beats = []
@@ -88,4 +116,4 @@ def track_beats(audio_path: str | Path) -> BeatTrackingResult:
             logger.warning("Beat tracking failed for %s: %s", audio_path, e)
             return BeatTrackingResult()
 
-    return _assemble(beat_times, onset_env, sr)
+    return _assemble(beat_times, y, onset_env, sr)
