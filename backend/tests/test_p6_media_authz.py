@@ -106,6 +106,28 @@ class TestMediaEndpointTraversal:
         assert resp.status_code in (404, 400)
 
 
+class TestMidiSymlinkGuard:
+    def test_full_branch_rejects_symlink_escaping_upload_dir(
+        self, client_as, mock_mongo, tmp_path, monkeypatch
+    ):
+        from backend.config import get_settings
+
+        settings = get_settings()
+        upload = tmp_path / "uploads"
+        upload.mkdir()
+        monkeypatch.setattr(settings, "audio_upload_dir", upload, raising=False)
+        # A staged file for the job is actually a symlink to a file OUTSIDE the
+        # upload dir — the resolve().relative_to guard must reject it.
+        outside = tmp_path / "secret.wav"
+        outside.write_bytes(b"RIFFsecret")
+        (upload / "symjob_song.wav").symlink_to(outside)
+
+        mock_mongo.song_analyses.find_one = AsyncMock(return_value={"user_id": None})
+        c = client_as(None)
+        resp = c.get("/api/v1/midi/symjob/full")
+        assert resp.status_code == 404
+
+
 class TestAudioOwnership:
     def test_other_user_gets_404_on_owned_audio(self, client_as, mock_mongo):
         mock_mongo.song_analyses.find_one = AsyncMock(return_value={"_id": "job1", "user_id": "A"})

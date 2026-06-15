@@ -981,6 +981,13 @@ async def export_midi(
         if not candidates:
             raise HTTPException(status_code=404, detail="No staged audio for job")
         source = candidates[0]
+        # Symlink guard (parity with /audio + /stems): glob can return a
+        # symlink pointing outside the upload dir — confirm the real path
+        # stays inside before transcribing it.
+        try:
+            source.resolve().relative_to(settings.audio_upload_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Audio file path escapes upload dir")
     else:
         if stem not in ("vocals", "drums", "bass", "other"):
             raise HTTPException(status_code=400, detail=f"Unknown stem {stem!r}")
@@ -990,6 +997,10 @@ async def export_midi(
                 status_code=404,
                 detail=f"Stem {stem!r} not separated yet; run analysis with stems enabled",
             )
+        try:
+            source.resolve().relative_to(settings.stems_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Stem path escapes stems dir")
 
     midi_dir = settings.stems_dir / job_id / "midi"
     midi_dir.mkdir(parents=True, exist_ok=True)
