@@ -10,6 +10,13 @@ export interface SongSection {
   name: string;
   start: number;
   end: number;
+  confidence?: number; // clustering confidence in [0,1] (Phase 5)
+}
+
+export interface BeatEvent {
+  time: number;
+  beat_number: number; // 1 = downbeat
+  is_downbeat?: boolean; // Phase 5
 }
 
 export interface RomanEntry {
@@ -84,8 +91,9 @@ export interface SongAnalysis {
   key_confidence?: number | null;
   tempo_confidence?: number | null;
   time_signature?: string;
+  time_signature_confidence?: number | null; // meter-detection confidence (Phase 5)
   chords: ChordEvent[];
-  beats?: number[];
+  beats?: BeatEvent[];
   sections: SongSection[];
   roman?: RomanAnalysis;
   theory?: TheoryExplanation | null;   // G4 structured object; preferred when present

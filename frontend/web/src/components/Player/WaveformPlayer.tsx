@@ -62,27 +62,42 @@ export const WaveformPlayer: React.FC = () => {
 
   return (
     <section className="glass-panel rounded-xl p-6 relative overflow-hidden flex flex-col gap-4">
-      {/* Song Structure Ribbon */}
+      {/* Song Structure Ribbon — click a section to jump to it (Phase 5 G7) */}
       {analysis?.sections && analysis.sections.length > 0 && (
         <div className="flex w-full h-8 rounded-md overflow-hidden bg-white/5 border border-white/5 text-xs font-semibold">
           {analysis.sections.map((sec, i) => {
             const pct = duration > 0 ? ((sec.end - sec.start) / duration) * 100 : 100 / analysis.sections.length;
             const isVerse = sec.name.toLowerCase().includes("verse");
             const isChorus = sec.name.toLowerCase().includes("chorus");
+            // Lower-confidence sections read fainter so the label honesty
+            // matches the clustering certainty (Phase 5 section confidence).
+            const conf = sec.confidence ?? 1;
+            const seekTo = () => {
+              const ws = wsRef.current;
+              if (ws && duration > 0) {
+                ws.seekTo(Math.min(0.999, Math.max(0, sec.start / duration)));
+                setCurrentTime(sec.start);
+              }
+            };
             return (
-              <div
+              <button
                 key={i}
-                className={`flex items-center justify-center border-r border-white/5 last:border-r-0 ${
+                type="button"
+                onClick={seekTo}
+                title={`${sec.name} · ${formatTime(sec.start)}${
+                  sec.confidence != null ? ` · ${Math.round(conf * 100)}% confident` : ""
+                }`}
+                className={`flex items-center justify-center border-r border-white/5 last:border-r-0 cursor-pointer transition-colors hover:brightness-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
                   isChorus
                     ? "bg-secondary-container/20 text-on-secondary-container"
                     : isVerse
                     ? "bg-primary-container/10 text-primary"
                     : "bg-surface-variant/40 text-on-surface-variant"
                 }`}
-                style={{ width: `${pct}%` }}
+                style={{ width: `${pct}%`, opacity: 0.55 + 0.45 * conf }}
               >
                 {sec.name}
-              </div>
+              </button>
             );
           })}
         </div>

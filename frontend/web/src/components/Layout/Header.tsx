@@ -67,6 +67,16 @@ export const Header: React.FC = () => {
           </span>
           <ConfidenceDot value={analysis.tempo_confidence} label="Tempo detection" />
         </div>
+        {/* Time Signature Badge */}
+        <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
+          <span className="text-xs text-on-surface-variant tracking-wider uppercase font-medium">
+            Time
+          </span>
+          <span className="text-sm font-semibold text-on-surface">
+            {analysis.time_signature || "—"}
+          </span>
+          <ConfidenceDot value={analysis.time_signature_confidence} label="Meter detection" />
+        </div>
         {/* Favorite Button */}
         <button
           className="w-12 h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group ml-2 disabled:opacity-40"
