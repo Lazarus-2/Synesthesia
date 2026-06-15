@@ -101,8 +101,10 @@ class TestDetectMeterContracts:
         assert detect_meter(a) == detect_meter(a)
 
     def test_result_is_frozen_dataclass(self):
+        from dataclasses import FrozenInstanceError
+
         r = MeterResult(numerator=4, offset=0, time_signature="4/4", confidence=0.9)
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             r.numerator = 3  # frozen
 
     def test_time_signatures_map_covers_candidates(self):

@@ -43,7 +43,7 @@ class MeterResult:
     confidence: float
 
 
-def beat_accents(env, beat_frames, lookback: int = 1, lookahead: int = 4) -> "object":
+def beat_accents(env, beat_frames, lookback: int = 1, lookahead: int = 4):
     """Sample an envelope at each beat as the peak in a small window.
 
     A beat's energy/onset peak can land a frame or two off the tracked beat,

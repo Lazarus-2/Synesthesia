@@ -154,7 +154,8 @@ def ingest_node(state: AnalysisState) -> dict:
 
             from backend.config import get_settings
 
-            out_dir = get_settings().audio_upload_dir
+            _settings = get_settings()
+            out_dir = _settings.audio_upload_dir
             out_dir.mkdir(parents=True, exist_ok=True)
 
             # In 2026 yt-dlp needs an EJS JS runtime to solve YouTube's
@@ -207,7 +208,9 @@ def ingest_node(state: AnalysisState) -> dict:
                 # Hardening: never expand playlists, cap file size, fail
                 # fast on unexpected redirects to non-YouTube hosts.
                 "noplaylist": True,
-                "max_filesize": 100 * 1024 * 1024,  # 100 MB
+                # FT-08: cap downloads at the same limit as uploads instead of
+                # a hardcoded 100 MB, so one knob bounds both ingestion paths.
+                "max_filesize": _settings.max_upload_mb * 1024 * 1024,
                 # 2026 client roster — web_safari + tv bypass SABR throttling
                 # better than plain web; android is deprecated for unauth requests.
                 "extractor_args": {"youtube": {"player_client": ["web_safari", "tv", "web"]}},
@@ -474,10 +477,12 @@ def roman_analysis_node(state: AnalysisState) -> dict:
     if not chords:
         return {"roman": None}
 
+    from backend.observability.tracing import trace
     from backend.theory.roman import analyze_roman
 
     try:
-        roman = analyze_roman(chords, key)
+        with trace("roman", job_id=state.get("job_id", "")):
+            roman = analyze_roman(chords, key)
         return {"roman": roman}
     except Exception as exc:  # pragma: no cover
         # Degradation: log and return None so the fan-out doesn't block
@@ -490,12 +495,14 @@ def roman_analysis_node(state: AnalysisState) -> dict:
 def theory_node(state: AnalysisState) -> dict:
     """LLM call: generate structured theory explanation."""
     from backend.chains.theory_chain import build_theory_chain, to_text
+    from backend.observability.tracing import trace
 
     song_obj = _song_analysis_from_state(state)
 
     try:
-        chain = build_theory_chain()
-        te = chain.invoke(song_obj)
+        with trace("theory", job_id=state.get("job_id", "")):
+            chain = build_theory_chain()
+            te = chain.invoke(song_obj)
         # Write both the structured object AND the back-compat string so
         # tasks.py, Mongo persistence, and old consumers all keep working.
         return {
@@ -527,6 +534,7 @@ def theory_node(state: AnalysisState) -> dict:
 def instrument_node(state: AnalysisState) -> dict:
     """LLM + deterministic chord-diagram merge -> InstrumentGuide."""
     from backend.chains.instrument_chain import build_instrument_chain
+    from backend.observability.tracing import trace
 
     song_obj = _song_analysis_from_state(state)
 
@@ -537,8 +545,9 @@ def instrument_node(state: AnalysisState) -> dict:
     }
 
     try:
-        chain = build_instrument_chain()
-        guide: InstrumentGuide = chain.invoke(payload)
+        with trace("instrument", job_id=state.get("job_id", "")):
+            chain = build_instrument_chain()
+            guide: InstrumentGuide = chain.invoke(payload)
         return {"instrument_guide": guide}
     except Exception as e:
         # Fall back to a guide containing just the deterministic chord
@@ -577,6 +586,7 @@ def stems_node(state: AnalysisState) -> dict:
     """
     from backend.config import get_settings
     from backend.ml.stem_separation import separate_stems
+    from backend.observability.tracing import trace
 
     audio_path = state.get("audio_path")
     settings = get_settings()
@@ -593,7 +603,8 @@ def stems_node(state: AnalysisState) -> dict:
     job_id = state.get("job_id") or Path(audio_path).stem.split("_")[0]
     out_dir = settings.stems_dir / job_id
     try:
-        result = separate_stems(audio_path, out_dir)
+        with trace("stems", job_id=job_id):
+            result = separate_stems(audio_path, out_dir)
     except Exception as e:
         logger.warning("stems_node: separation failed for %s: %s", job_id, e)
         return {"errors": [f"stems: separation failed for job {job_id} ({e})"]}
