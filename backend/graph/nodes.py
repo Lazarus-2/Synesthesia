@@ -29,6 +29,8 @@ def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
         key_confidence=state.get("key_confidence"),
         tempo=state.get("tempo", 120.0),
         tempo_confidence=state.get("tempo_confidence"),
+        time_signature=state.get("time_signature", "4/4"),
+        time_signature_confidence=state.get("time_signature_confidence"),
         chords=chords,
         roman=state.get("roman"),
     )
@@ -396,7 +398,11 @@ def features_node(state: AnalysisState) -> dict:
         with trace("features", job_id=state.get("job_id", ""), retries=next_retries):
             estimate = estimate_key_and_tempo(audio_path)
             key, key_confidence = estimate.key, estimate.key_confidence
-            beats = track_beats(audio_path)
+            # Phase 5 G2: real downbeats + detected meter (replaces (i%4)+1).
+            beat_result = track_beats(audio_path)
+            beats = beat_result.beats
+            time_signature = beat_result.time_signature
+            time_signature_confidence = beat_result.meter_confidence
             beat_times = [b.time for b in beats] if beats else None
             # Phase 4 G4: tempo comes from the SAME beats the UI renders (median
             # interval + octave fold); the librosa onset estimate is the fallback.
@@ -426,6 +432,8 @@ def features_node(state: AnalysisState) -> dict:
             "key_confidence": key_confidence,
             "tempo": tempo,
             "tempo_confidence": tempo_confidence,
+            "time_signature": time_signature,
+            "time_signature_confidence": time_signature_confidence,
             "beats": beats,
             "chords": chords,
             "sections": sections,

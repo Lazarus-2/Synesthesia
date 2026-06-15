@@ -108,7 +108,10 @@ class TestFeaturesNodeFailThenSucceed:
         monkeypatch.setattr(
             "backend.ml.key_estimation.estimate_key_and_tempo", flaky_key_tempo
         )
-        monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
+        from backend.ml.beat_tracking import BeatTrackingResult
+        monkeypatch.setattr(
+            "backend.ml.beat_tracking.track_beats", lambda _p: BeatTrackingResult()
+        )
         monkeypatch.setattr(
             "backend.ml.chord_detection.detect_chords", lambda _p, beats=None: []
         )

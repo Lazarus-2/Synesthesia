@@ -31,7 +31,10 @@ class ChordEvent(BaseModel):
 
 class BeatEvent(BaseModel):
     time: float
-    beat_number: int = Field(description="1, 2, 3, 4 for 4/4 time")
+    beat_number: int = Field(description="position within the measure: 1 = downbeat")
+    is_downbeat: bool = Field(
+        default=False, description="True on the first beat of each measure (Phase 5)"
+    )
 
 
 class SongSection(BaseModel):
@@ -177,6 +180,9 @@ class SongAnalysis(BaseModel):
     )
     tempo_confidence: float | None = Field(
         default=None, description="Beat-interval-consistency tempo confidence in [0,1]"
+    )
+    time_signature_confidence: float | None = Field(
+        default=None, description="Deterministic meter-detection confidence in [0,1] (Phase 5)"
     )
 
     chords: list[ChordEvent]

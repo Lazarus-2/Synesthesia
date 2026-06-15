@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from backend.graph.state import NO_CHORDS_MESSAGE
 from backend.graph.status import derive_status
+from backend.ml.beat_tracking import BeatTrackingResult
 from backend.ml.key_estimation import KeyTempoResult
 from backend.schemas import ChordEvent
 
@@ -83,7 +84,7 @@ class TestDeriveStatus:
                 "backend.ml.key_estimation.estimate_key_and_tempo",
                 return_value=KeyTempoResult("C major", 0.8, 120.0, 0.4),
             ),
-            patch("backend.ml.beat_tracking.track_beats", return_value=[]),
+            patch("backend.ml.beat_tracking.track_beats", return_value=BeatTrackingResult()),
             patch("backend.ml.chord_detection.detect_chords", return_value=[]),
             patch("backend.ml.structure_detection.detect_sections", return_value=[]),
         ):
@@ -107,7 +108,7 @@ class TestDeriveStatus:
                 "backend.ml.key_estimation.estimate_key_and_tempo",
                 return_value=KeyTempoResult("A minor", 0.7, 90.0, 0.4),
             ),
-            patch("backend.ml.beat_tracking.track_beats", return_value=[]),
+            patch("backend.ml.beat_tracking.track_beats", return_value=BeatTrackingResult()),
             patch("backend.ml.chord_detection.detect_chords", return_value=[]),
             patch("backend.ml.structure_detection.detect_sections", return_value=[]),
         ):

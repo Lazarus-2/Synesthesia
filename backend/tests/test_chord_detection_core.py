@@ -239,9 +239,15 @@ class TestFeaturesNodeBeatThreading:
             "backend.ml.key_estimation.estimate_key_and_tempo",
             lambda _p: KeyTempoResult("C major", 0.8, 120.0, 0.4),
         )
+        from backend.ml.beat_tracking import BeatTrackingResult
+
         monkeypatch.setattr(
             "backend.ml.beat_tracking.track_beats",
-            lambda _p: [BeatEvent(time=0.5, beat_number=1), BeatEvent(time=1.0, beat_number=2)],
+            lambda _p: BeatTrackingResult(
+                beats=[BeatEvent(time=0.5, beat_number=1), BeatEvent(time=1.0, beat_number=2)],
+                time_signature="4/4",
+                meter_confidence=0.9,
+            ),
         )
         monkeypatch.setattr("backend.ml.chord_detection.detect_chords", fake_detect)
         monkeypatch.setattr("backend.ml.structure_detection.detect_sections", lambda _p: [])
@@ -264,7 +270,11 @@ class TestFeaturesNodeBeatThreading:
             "backend.ml.key_estimation.estimate_key_and_tempo",
             lambda _p: KeyTempoResult("C major", 0.8, 120.0, 0.4),
         )
-        monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: [])
+        from backend.ml.beat_tracking import BeatTrackingResult
+
+        monkeypatch.setattr(
+            "backend.ml.beat_tracking.track_beats", lambda _p: BeatTrackingResult()
+        )
         monkeypatch.setattr("backend.ml.chord_detection.detect_chords", fake_detect)
         monkeypatch.setattr("backend.ml.structure_detection.detect_sections", lambda _p: [])
 

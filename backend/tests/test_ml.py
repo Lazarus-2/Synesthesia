@@ -68,13 +68,18 @@ class TestChordDetection:
 
 class TestBeatTracking:
     def test_returns_list_of_beat_events_or_empty(self, synthetic_song: Path):
-        from backend.ml.beat_tracking import track_beats
+        from backend.ml.beat_tracking import BeatTrackingResult, track_beats
 
-        beats = track_beats(synthetic_song)
+        result = track_beats(synthetic_song)
+        assert isinstance(result, BeatTrackingResult)
+        assert result.time_signature in {"2/4", "3/4", "4/4", "6/8"}
+        assert 0.0 <= result.meter_confidence <= 1.0
+        beats = result.beats
         assert isinstance(beats, list)
         for b in beats[:10]:
             assert b.time >= 0.0
-            assert 1 <= b.beat_number <= 4
+            assert b.beat_number >= 1
+            assert b.is_downbeat == (b.beat_number == 1)
 
 
 class TestStructureDetection:

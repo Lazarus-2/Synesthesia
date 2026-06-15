@@ -31,7 +31,7 @@ MAX_AUDIO_DURATION_S = 600
 # vocabulary, key/tempo estimation, Roman rules). Part of the file-hash dedup
 # key so re-uploads of previously analyzed files get re-analyzed instead of
 # being served a stale result from an older pipeline (DEDUP-VER, Phase 4 G5).
-ANALYZER_VERSION = "p4.0-chords84"
+ANALYZER_VERSION = "p5.0-meter"
 
 
 class Settings(BaseSettings):

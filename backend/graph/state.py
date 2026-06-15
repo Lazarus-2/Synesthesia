@@ -58,6 +58,8 @@ class AnalysisState(TypedDict, total=False):
     key_confidence: float  # calibrated K-S confidence in [0,1] (Phase 4 G4)
     tempo: float
     tempo_confidence: float  # beat-interval consistency in [0,1] (Phase 4 G4)
+    time_signature: str  # detected meter, e.g. "4/4", "3/4" (Phase 5 G2)
+    time_signature_confidence: float  # meter-detection confidence in [0,1] (Phase 5 G2)
     chords: list[ChordEvent]
     beats: list[BeatEvent]
     sections: list[SongSection]

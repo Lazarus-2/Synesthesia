@@ -129,6 +129,7 @@ class TestRefineTempo:
 class TestFeaturesNodeConfidenceThreading:
     def _run(self, monkeypatch, chords_labels: list[str]):
         from backend.graph import nodes
+        from backend.ml.beat_tracking import BeatTrackingResult
         from backend.schemas import BeatEvent, ChordEvent
 
         result = KeyTempoResult(
@@ -142,7 +143,10 @@ class TestFeaturesNodeConfidenceThreading:
         monkeypatch.setattr(
             "backend.ml.key_estimation.estimate_key_and_tempo", lambda _p: result
         )
-        monkeypatch.setattr("backend.ml.beat_tracking.track_beats", lambda _p: beats)
+        monkeypatch.setattr(
+            "backend.ml.beat_tracking.track_beats",
+            lambda _p: BeatTrackingResult(beats=beats, time_signature="4/4", meter_confidence=0.9),
+        )
         monkeypatch.setattr(
             "backend.ml.chord_detection.detect_chords", lambda _p, beats=None: chords
         )
