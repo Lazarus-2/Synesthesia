@@ -91,12 +91,14 @@ class TestErrorEnvelope:
 
 class TestVersionedRouting:
     def test_versioned_route_works(self, api_client):
-        r = api_client.get("/api/v1/user/u-nope")
+        # /user/* now requires auth (Phase 6 G3); use the public /share route,
+        # which 404s on a missing job, to prove the versioned mount resolves.
+        r = api_client.get("/api/v1/share/u-nope")
         assert r.status_code == 404
         assert r.json()["code"] == "NOT_FOUND"
 
     def test_legacy_alias_works(self, api_client):
-        r = api_client.get("/user/u-nope")
+        r = api_client.get("/share/u-nope")
         assert r.status_code == 404
 
     def test_openapi_includes_both_mounts(self, api_client):
@@ -260,16 +262,41 @@ class TestShare:
 
 
 class TestPreferences:
+    @staticmethod
+    def _as(user_id: str):
+        """Force require_user to a principal matching the path user_id (Phase 6 G3)."""
+        from backend.auth import UserPrincipal, require_user
+        from backend.main import app
+
+        app.dependency_overrides[require_user] = lambda: UserPrincipal(
+            user_id=user_id, username=user_id
+        )
+
+    @staticmethod
+    def _clear():
+        from backend.auth import require_user
+        from backend.main import app
+
+        app.dependency_overrides.pop(require_user, None)
+
     def test_get_preferences_404_for_unknown_user(self, api_client, mock_mongo):
         mock_mongo.users.find_one = AsyncMock(return_value=None)
-        r = api_client.get("/api/v1/user/nope/preferences")
+        self._as("nope")
+        try:
+            r = api_client.get("/api/v1/user/nope/preferences")
+        finally:
+            self._clear()
         assert r.status_code == 404
 
     def test_put_preferences_upserts(self, api_client, mock_mongo):
-        r = api_client.put(
-            "/api/v1/user/u1/preferences",
-            json={"default_instrument": "piano", "default_capo": 3},
-        )
+        self._as("u1")
+        try:
+            r = api_client.put(
+                "/api/v1/user/u1/preferences",
+                json={"default_instrument": "piano", "default_capo": 3},
+            )
+        finally:
+            self._clear()
         assert r.status_code == 200
         body = r.json()
         assert body["default_instrument"] == "piano"
