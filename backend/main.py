@@ -19,7 +19,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import (
     APIRouter,
@@ -88,7 +88,7 @@ def _is_audio_magic(head: bytes) -> bool:
 
 import taskiq_fastapi
 
-from backend.auth import UserPrincipal, require_user
+from backend.auth import UserPrincipal, current_user, require_user
 from backend.chains.aura_agent import run_aura, stream_aura
 from backend.chains.aura_tools import current_user_id
 from backend.config import ANALYZER_VERSION, get_settings
@@ -339,7 +339,9 @@ router = APIRouter()
 
 
 class UserRequest(BaseModel):
-    id: str
+    # Optional: identity is taken from the auth token (Phase 6 G1). When
+    # present it must match the caller's own id, else the write is rejected.
+    id: str | None = None
     username: str
     instrument: str = "guitar"
     difficulty: str = "beginner"
@@ -441,11 +443,17 @@ async def analyze(
     youtube_url: str | None = Form(default=None),
     instrument: str = Form(default="guitar"),
     difficulty: str = Form(default="beginner"),
-    user_id: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
     db=Depends(get_mongodb),
 ) -> AnalyzeResponse:
-    """Kicks off the audio chord and theory analysis pipeline."""
+    """Kicks off the audio chord and theory analysis pipeline.
+
+    Security (Phase 6 G1): ownership is derived from the auth token, never a
+    client-supplied field. Anonymous callers (default config, no token) get
+    ``user_id=None`` — a public analysis, exactly as before.
+    """
+    user_id = principal.user_id if principal is not None else None
     settings = get_settings()
     job_id = str(uuid.uuid4())
 
@@ -1169,22 +1177,40 @@ async def get_analysis_progress(job_id: str, request: Request):
 
 
 @router.post("/user")
-async def create_or_update_user(req: UserRequest, db=Depends(get_mongodb)):
-    """Registers user identity or updates musical preferences in MongoDB."""
-    user_dict = {
-        "_id": req.id,
+async def create_or_update_user(
+    req: UserRequest,
+    principal: UserPrincipal = Depends(require_user),
+    db=Depends(get_mongodb),
+):
+    """Update the *caller's own* identity/musical-preference fields.
+
+    Security (Phase 6 G1): identity is taken from the auth token, never the
+    client-supplied ``req.id`` (which is ignored — a body id that differs is
+    rejected). Uses ``update_one``/``$set`` on only the mutable fields so a
+    call can never clobber ``password_hash`` (which the old whole-document
+    ``replace_one`` silently wiped — an unauthenticated account-lockout).
+    """
+    user_id = principal.user_id
+    if req.id and req.id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot modify another user")
+    await db.users.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "username": req.username,
+                "instrument": req.instrument,
+                "difficulty": req.difficulty,
+                "updated_at": datetime.now(UTC),
+            },
+            "$setOnInsert": {"_id": user_id, "created_at": datetime.now(UTC)},
+        },
+        upsert=True,
+    )
+    return {
+        "id": user_id,
         "username": req.username,
         "instrument": req.instrument,
         "difficulty": req.difficulty,
-        "created_at": datetime.now(UTC),
-    }
-    await db.users.replace_one({"_id": req.id}, user_dict, upsert=True)
-    return {
-        "id": user_dict["_id"],
-        "username": user_dict["username"],
-        "instrument": user_dict["instrument"],
-        "difficulty": user_dict["difficulty"],
-        "created_at": user_dict["created_at"].isoformat(),
     }
 
 

@@ -30,6 +30,32 @@ class AnalysisRepo:
         """
         return await self._coll.find_one({"_id": job_id})
 
+    async def resolve_readable(
+        self, job_id: str, requester_user_id: str | None
+    ) -> dict[str, Any] | None:
+        """Return the doc the requester is allowed to read, else ``None`` (Phase 6 G1).
+
+        The single ownership rule for every analysis-keyed media/read endpoint:
+
+        - missing doc -> ``None`` (caller returns 404);
+        - anonymous doc (``user_id is None``) -> readable by anyone, incl.
+          token-less callers and the public ``/share`` flow;
+        - owned doc -> readable only when ``requester_user_id`` matches the
+          owner; any mismatch (or anonymous requester) -> ``None``.
+
+        Endpoints map a ``None`` result to 404 (not 403) so an authenticated
+        attacker can't use the response to confirm another user's job exists.
+        """
+        doc = await self.get(job_id)
+        if doc is None:
+            return None
+        owner = doc.get("user_id")
+        if owner is None:
+            return doc  # anonymous / public — preserves anon + /share
+        if requester_user_id is not None and requester_user_id == owner:
+            return doc
+        return None
+
     async def save(self, job_id: str, doc: dict[str, Any]) -> None:
         """Upsert ``doc`` keyed by ``job_id`` via a whole-document replace.
 
