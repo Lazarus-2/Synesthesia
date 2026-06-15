@@ -90,17 +90,22 @@ class TestTheoryPromptV2:
         result = _format_inputs(song)
         assert result["cadence_facts"] == "None detected"
 
-    def test_theory_prompt_module_loads_latest_which_is_v3(self):
-        """After Phase 4 G5, 'latest' must resolve to v3 (lexicographically highest)."""
+    def test_theory_prompt_module_loads_latest_which_is_v4(self):
+        """After Phase 5 G3, 'latest' must resolve to v4 (lexicographically highest)."""
         from backend.prompts.registry import load_template
 
         load_template.cache_clear()
         prompt_latest = load_template("theory", version="latest")
-        prompt_v3 = load_template("theory", version="v3")
+        prompt_v4 = load_template("theory", version="v4")
         # Both should be structurally identical (same input_variables)
-        assert set(prompt_latest.input_variables) == set(prompt_v3.input_variables)
-        # v3 = v2 + the confidence-hedging variable
+        assert set(prompt_latest.input_variables) == set(prompt_v4.input_variables)
+        # v3 = v2 + confidence hedging; v4 = v3 + meter + sections (Phase 5 G3).
         prompt_v2 = load_template("theory", version="v2")
+        prompt_v3 = load_template("theory", version="v3")
         assert set(prompt_v3.input_variables) - set(prompt_v2.input_variables) == {
             "key_confidence_note"
+        }
+        assert set(prompt_v4.input_variables) - set(prompt_v3.input_variables) == {
+            "time_signature",
+            "sections",
         }

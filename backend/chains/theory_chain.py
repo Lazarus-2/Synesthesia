@@ -71,12 +71,18 @@ def _format_inputs(analysis: SongAnalysis) -> dict:
         if mod_parts:
             cadence_facts = "; ".join(filter(None, [cadence_facts, *mod_parts]))
 
+    # Phase 5 G3: surface meter + section structure to the v4 prompt.
+    section_names = [s.name for s in (analysis.sections or []) if getattr(s, "name", None)]
+    sections_str = " → ".join(section_names) if section_names else "None detected"
+
     return {
         "key": analysis.key,
         "key_confidence_note": _confidence_note(analysis),
         "tempo": f"{analysis.tempo:.0f}",
+        "time_signature": analysis.time_signature,
         "chords": chord_str,
         "roman": roman_str,
+        "sections": sections_str,
         "cadence_facts": cadence_facts or "None detected",
     }
 

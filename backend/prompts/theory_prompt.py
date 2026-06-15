@@ -7,4 +7,4 @@ See ``backend/prompts/registry.py`` for the schema and versioning rules.
 
 from backend.prompts.registry import load_template
 
-theory_prompt = load_template("theory", version="v3")
+theory_prompt = load_template("theory", version="v4")

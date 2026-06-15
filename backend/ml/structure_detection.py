@@ -100,8 +100,12 @@ def detect_sections(
             seeds = normed[[0, len(normed) // 2, len(normed) - 1]]
             sims = normed @ seeds.T  # (n_segments, 3)
             labels = list(sims.argmax(axis=1))
+            # Confidence = how strongly each segment matches its assigned
+            # centroid (cosine sim, clipped to [0,1]).
+            confidences = [float(np.clip(sims[i].max(), 0.0, 1.0)) for i in range(len(segments))]
         else:
             labels = list(range(len(segments)))
+            confidences = [1.0] * len(segments)
 
         sections: list[SongSection] = []
         for idx, ((start, end, _), lbl) in enumerate(zip(segments, labels)):
@@ -110,6 +114,7 @@ def detect_sections(
                     name=_label_section(idx, int(lbl), [int(x) for x in labels]),
                     start=start,
                     end=end,
+                    confidence=round(confidences[idx], 3),
                 )
             )
         return sections

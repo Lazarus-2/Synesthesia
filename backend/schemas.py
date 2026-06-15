@@ -43,6 +43,9 @@ class SongSection(BaseModel):
     name: str
     start: float
     end: float
+    confidence: float = Field(
+        ge=0.0, le=1.0, default=1.0, description="Clustering confidence for this section (Phase 5)"
+    )
 
 
 # =============================================================================

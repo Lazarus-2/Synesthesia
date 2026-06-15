@@ -139,6 +139,9 @@ def _facts_block(analysis: dict[str, Any]) -> str:
         lines.append(f"tempo: {float(tempo):.0f} BPM")
     if tempo_confidence is not None:
         lines.append(f"tempo_confidence: {float(tempo_confidence) * 100:.0f}%")
+    time_signature = analysis.get("time_signature")
+    if time_signature:
+        lines.append(f"time_signature: {time_signature}")
     chords = _render_chords(analysis)
     if chords:
         lines.append(f"chords: {chords}")

@@ -92,6 +92,7 @@ class TestStructureDetection:
         for s in sections:
             assert s.end > s.start
             assert s.name in {"Intro", "Verse", "Chorus", "Bridge", "Outro"}
+            assert 0.0 <= s.confidence <= 1.0  # Phase 5 G3
 
 
 class TestMLRegistry:

@@ -59,12 +59,22 @@ def _format_analysis_context(analysis: dict[str, Any] | None) -> str | None:
         )
     if tempo is not None:
         lines.append(f"- Tempo: {float(tempo):.0f} BPM")
+    time_signature = analysis.get("time_signature")
+    if time_signature:
+        lines.append(f"- Time signature: {time_signature}")
     if chord_names:
         lines.append(
             f"- Progression (first {len(chord_names)}): " + " → ".join(str(c) for c in chord_names)
         )
     if roman_progression:
         lines.append("- Roman numerals: " + " → ".join(roman_progression[:16]))
+    section_names = [
+        s.get("name") if isinstance(s, dict) else getattr(s, "name", None)
+        for s in (analysis.get("sections") or [])
+    ]
+    section_names = [n for n in section_names if n]
+    if section_names:
+        lines.append("- Sections: " + " → ".join(str(n) for n in section_names))
     title = analysis.get("title")
     if title:
         lines.append(f"- Title: {title}")
