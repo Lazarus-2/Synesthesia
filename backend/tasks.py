@@ -90,6 +90,29 @@ async def _write_dlq(
         logger.exception("DLQ insert failed for job %s", job_id)
 
 
+@broker.task
+async def reap_orphaned_media_task() -> dict[str, int]:
+    """Delete upload/stem files older than the retention window (Phase 6 G5).
+
+    Scheduling: trigger this daily from a deployment scheduler (taskiq cron /
+    a system cron calling ``broker``). The on-disk files outlive the 90-day
+    Mongo TTL otherwise — unbounded storage growth. Keyed on file age, so
+    anonymous and owned media age out identically.
+    """
+    import time
+
+    from backend.config import get_settings
+    from backend.services.disk_reaper import reap_orphaned_media
+
+    s = get_settings()
+    return reap_orphaned_media(
+        s.audio_upload_dir,
+        s.stems_dir,
+        max_age_s=s.media_retention_days * 86400.0,
+        now_ts=time.time(),
+    )
+
+
 @broker.task(retry_on_error=True, max_retries=2)
 async def run_analysis_pipeline(
     job_id: str,

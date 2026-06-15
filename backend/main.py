@@ -460,6 +460,18 @@ async def analyze(
     if not youtube_url and file is None:
         raise HTTPException(status_code=400, detail="Provide either youtube_url or a file upload")
 
+    # Phase 6 G5: defense-in-depth disk guard (disabled when max_disk_usage_gb
+    # is 0). Refuse new ingestion when storage is already over the limit so a
+    # full disk degrades gracefully instead of corrupting writes mid-pipeline.
+    from backend.services.disk_reaper import storage_over_limit
+
+    if storage_over_limit(
+        [settings.audio_upload_dir, settings.stems_dir], settings.max_disk_usage_gb
+    ):
+        raise HTTPException(
+            status_code=503, detail="Server storage is full; please try again later."
+        )
+
     # Preflight URL validation (Plan 3 live-test report 2): catch the
     # "user typed a file path into the URL field" case at the request edge
     # so the client gets a synchronous error envelope instead of seeing
