@@ -244,7 +244,10 @@ class TestFeaturesNodeBeatThreading:
         monkeypatch.setattr(
             "backend.ml.beat_tracking.track_beats",
             lambda _p: BeatTrackingResult(
-                beats=[BeatEvent(time=0.5, beat_number=1), BeatEvent(time=1.0, beat_number=2)],
+                beats=[
+                    BeatEvent(time=0.5, beat_number=1, is_downbeat=True),
+                    BeatEvent(time=1.0, beat_number=2),
+                ],
                 time_signature="4/4",
                 meter_confidence=0.9,
             ),

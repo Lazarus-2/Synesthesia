@@ -135,7 +135,10 @@ class TestFeaturesNodeConfidenceThreading:
         result = KeyTempoResult(
             key="C major", key_confidence=0.8, tempo=99.0, tempo_confidence=0.4
         )
-        beats = [BeatEvent(time=0.5 * i, beat_number=(i - 1) % 4 + 1) for i in range(1, 17)]
+        beats = [
+            BeatEvent(time=0.5 * i, beat_number=(i - 1) % 4 + 1, is_downbeat=((i - 1) % 4 == 0))
+            for i in range(1, 17)
+        ]
         chords = [
             ChordEvent(start=float(i), end=float(i + 1), chord=c, confidence=0.9, color="#fff")
             for i, c in enumerate(chords_labels)

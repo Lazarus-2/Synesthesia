@@ -40,6 +40,30 @@ class TestSongSectionConfidence:
         assert s.confidence == 0.42
 
 
+class TestStateToAnalysisSections:
+    def test_song_analysis_from_state_threads_sections_and_meter(self):
+        """Regression: _song_analysis_from_state must pass sections + meter so
+        the theory prompt actually receives them (they were dropped)."""
+        from backend.graph.nodes import _song_analysis_from_state
+
+        state = {
+            "key": "C major",
+            "tempo": 120.0,
+            "time_signature": "3/4",
+            "time_signature_confidence": 0.7,
+            "chords": [_chord("C")],
+            "sections": [SongSection(name="Verse", start=0.0, end=4.0, confidence=0.6)],
+        }
+        a = _song_analysis_from_state(state)
+        assert a.time_signature == "3/4"
+        assert [s.name for s in a.sections] == ["Verse"]
+
+        # And the theory prompt inputs then see the section names.
+        from backend.chains.theory_chain import _format_inputs
+
+        assert "Verse" in _format_inputs(a)["sections"]
+
+
 class TestChatGrounding:
     def test_context_includes_time_signature(self):
         from backend.chains.chat_chain import _format_analysis_context

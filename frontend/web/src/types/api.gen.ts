@@ -96,6 +96,254 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup
+         * @description Create a user with a hashed password and return a JWT (Plan 3 A9).
+         *
+         *     Idempotency: returns 409 if the username is already taken. Note that
+         *     the server still operates in anonymous-friendly mode unless
+         *     ``REQUIRE_AUTH=true`` — sign-up is opt-in for users who want
+         *     persistent libraries / preferences.
+         */
+        post: operations["signup_api_v1_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Verify password and return a JWT (Plan 3 A9).
+         */
+        post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whoami
+         * @description Return the authenticated principal, or ``null`` when anonymous.
+         */
+        get: operations["whoami_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Library
+         * @description List previously-analyzed songs (Plan 3 A7).
+         *
+         *     Sorted by ``created_at`` descending. When ``user_id`` is provided we
+         *     will (in the auth-on world) filter to that user — for now we surface
+         *     the whole collection since ownership isn't enforced.
+         */
+        get: operations["list_library_api_v1_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Tracks
+         * @description Search the merged Deezer + MusicBrainz catalog.
+         *
+         *     Returns ``{results: [...]}`` where each entry has at minimum
+         *     ``title``, ``artist``, plus whichever of ``deezer_id``, ``mbid``,
+         *     ``preview_url``, ``image_url``, ``album``, ``year`` were resolved.
+         *
+         *     Deezer (no auth, rich metadata) + MusicBrainz (rate-limited 1/sec,
+         *     authoritative MBIDs) run in parallel. Merged and deduped by
+         *     ``(title.lower, artist.lower)``.
+         *
+         *     Cached for 1h via HybridCache — search queries are stable, and
+         *     the upstream APIs (especially MusicBrainz) have aggressive rate
+         *     limits we should respect.
+         */
+        get: operations["search_tracks_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lyrics
+         * @description Fetch synced + plain lyrics from LRCLIB.
+         *
+         *     Returns ``{synced_lyrics, plain_lyrics, source}``. Both lyric
+         *     fields are empty strings on a no-match — the frontend interprets
+         *     that as "no lyrics available for this track".
+         *
+         *     ``duration`` (seconds) is optional but helps LRCLIB disambiguate
+         *     covers and live versions.
+         */
+        get: operations["get_lyrics_api_v1_lyrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/share/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Share Analysis
+         * @description Read-only public view of a completed analysis (Plan 3 B8).
+         *
+         *     Same shape as ``GET /analyze/{job_id}`` but explicitly read-only,
+         *     requires no instrument selector, and is the documented stable URL for
+         *     "show this analysis to someone." Frontend builds the share link as
+         *     ``/s/{job_id}`` which proxies here.
+         */
+        get: operations["share_analysis_api_v1_share__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/midi/{job_id}/{stem}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Midi
+         * @description Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).
+         *
+         *     ``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs
+         *     basic-pitch over the staged audio file (no stem separation required).
+         *     Other values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem
+         *     separation step — if that file doesn't exist yet, returns 404.
+         */
+        get: operations["export_midi_api_v1_midi__job_id___stem__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stems/{job_id}/{stem}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Serve Stem
+         * @description Stream a separated stem WAV (Plan 3 A2 + B7).
+         *
+         *     ``stem`` is one of ``vocals|drums|bass|other``. Looks under
+         *     ``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by
+         *     ``stems_node`` via demucs).
+         */
+        get: operations["serve_stem_api_v1_stems__job_id___stem__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audio/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Serve Audio
+         * @description Stream the analysed audio file by job id.
+         *
+         *     Looks for any file in ``audio_upload_dir`` whose name starts with the
+         *     job id (the upload pipeline stores them as ``{job_id}_{original_name}``,
+         *     and yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by
+         *     ``ingest_node``). Falls back to a 404 envelope if nothing matches —
+         *     better than serving an arbitrary file.
+         */
+        get: operations["serve_audio_api_v1_audio__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/progress": {
         parameters: {
             query?: never;
@@ -113,9 +361,9 @@ export interface paths {
          *         event: error    data: {code, message}                    (terminal)
          *
          *     Successful jobs end with ``done``; downstream LLM failure or worker
-         *     crash ends with ``error``. The frontend ``openProgressStream`` consumer
-         *     in :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy
-         *     formats; once it ships, the backend can stop emitting untagged frames.
+         *     crash ends with ``error``. The generator also exits promptly once the
+         *     HTTP client disconnects (``await request.is_disconnected()``) so a
+         *     closed browser tab doesn't keep us polling Redis for the full lifetime.
          */
         get: operations["get_analysis_progress_api_v1_jobs__job_id__progress_get"];
         put?: never;
@@ -140,6 +388,30 @@ export interface paths {
          * @description Registers user identity or updates musical preferences in MongoDB.
          */
         post: operations["create_or_update_user_api_v1_user_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user/{user_id}/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Preferences
+         * @description Read the user's persisted analyze/playback defaults (Plan 3 A8).
+         */
+        get: operations["get_user_preferences_api_v1_user__user_id__preferences_get"];
+        /**
+         * Update User Preferences
+         * @description Persist analyze/playback defaults (Plan 3 A8). Upserts the user row.
+         */
+        put: operations["update_user_preferences_api_v1_user__user_id__preferences_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -177,7 +449,8 @@ export interface paths {
         put?: never;
         /**
          * Chat
-         * @description Conversational AI assistant. Stores messages and coordinates session caching.
+         * @description Grounded AURA chat (non-stream). Identity from the JWT; session +
+         *     history are server-owned; over-budget turns refuse before the model.
          */
         post: operations["chat_api_v1_chat_post"];
         delete?: never;
@@ -197,7 +470,9 @@ export interface paths {
         put?: never;
         /**
          * Chat Stream
-         * @description Conversational AI assistant with SSE streaming response.
+         * @description Grounded AURA chat (SSE). Same resolution as /chat; streams
+         *     context/tool/chunk/done/error frames from stream_aura via
+         *     EventSourceResponse (client-disconnect + keepalive for free).
          */
         post: operations["chat_stream_api_v1_chat_stream_post"];
         delete?: never;
@@ -215,7 +490,8 @@ export interface paths {
         };
         /**
          * Get Chat History
-         * @description Retrieves standard discussion threads from Cache or drops back to MongoDB.
+         * @description Owner-only chat history. Returns 404 (not 403) for a session the caller
+         *     doesn't own so we don't confirm the existence of someone else's session.
          */
         get: operations["get_chat_history_api_v1_chat_history__session_id__get"];
         put?: never;
@@ -269,6 +545,254 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup
+         * @description Create a user with a hashed password and return a JWT (Plan 3 A9).
+         *
+         *     Idempotency: returns 409 if the username is already taken. Note that
+         *     the server still operates in anonymous-friendly mode unless
+         *     ``REQUIRE_AUTH=true`` — sign-up is opt-in for users who want
+         *     persistent libraries / preferences.
+         */
+        post: operations["signup_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Verify password and return a JWT (Plan 3 A9).
+         */
+        post: operations["login_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whoami
+         * @description Return the authenticated principal, or ``null`` when anonymous.
+         */
+        get: operations["whoami_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Library
+         * @description List previously-analyzed songs (Plan 3 A7).
+         *
+         *     Sorted by ``created_at`` descending. When ``user_id`` is provided we
+         *     will (in the auth-on world) filter to that user — for now we surface
+         *     the whole collection since ownership isn't enforced.
+         */
+        get: operations["list_library_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Tracks
+         * @description Search the merged Deezer + MusicBrainz catalog.
+         *
+         *     Returns ``{results: [...]}`` where each entry has at minimum
+         *     ``title``, ``artist``, plus whichever of ``deezer_id``, ``mbid``,
+         *     ``preview_url``, ``image_url``, ``album``, ``year`` were resolved.
+         *
+         *     Deezer (no auth, rich metadata) + MusicBrainz (rate-limited 1/sec,
+         *     authoritative MBIDs) run in parallel. Merged and deduped by
+         *     ``(title.lower, artist.lower)``.
+         *
+         *     Cached for 1h via HybridCache — search queries are stable, and
+         *     the upstream APIs (especially MusicBrainz) have aggressive rate
+         *     limits we should respect.
+         */
+        get: operations["search_tracks_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lyrics
+         * @description Fetch synced + plain lyrics from LRCLIB.
+         *
+         *     Returns ``{synced_lyrics, plain_lyrics, source}``. Both lyric
+         *     fields are empty strings on a no-match — the frontend interprets
+         *     that as "no lyrics available for this track".
+         *
+         *     ``duration`` (seconds) is optional but helps LRCLIB disambiguate
+         *     covers and live versions.
+         */
+        get: operations["get_lyrics_lyrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Share Analysis
+         * @description Read-only public view of a completed analysis (Plan 3 B8).
+         *
+         *     Same shape as ``GET /analyze/{job_id}`` but explicitly read-only,
+         *     requires no instrument selector, and is the documented stable URL for
+         *     "show this analysis to someone." Frontend builds the share link as
+         *     ``/s/{job_id}`` which proxies here.
+         */
+        get: operations["share_analysis_share__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/midi/{job_id}/{stem}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Midi
+         * @description Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).
+         *
+         *     ``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs
+         *     basic-pitch over the staged audio file (no stem separation required).
+         *     Other values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem
+         *     separation step — if that file doesn't exist yet, returns 404.
+         */
+        get: operations["export_midi_midi__job_id___stem__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stems/{job_id}/{stem}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Serve Stem
+         * @description Stream a separated stem WAV (Plan 3 A2 + B7).
+         *
+         *     ``stem`` is one of ``vocals|drums|bass|other``. Looks under
+         *     ``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by
+         *     ``stems_node`` via demucs).
+         */
+        get: operations["serve_stem_stems__job_id___stem__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audio/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Serve Audio
+         * @description Stream the analysed audio file by job id.
+         *
+         *     Looks for any file in ``audio_upload_dir`` whose name starts with the
+         *     job id (the upload pipeline stores them as ``{job_id}_{original_name}``,
+         *     and yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by
+         *     ``ingest_node``). Falls back to a 404 envelope if nothing matches —
+         *     better than serving an arbitrary file.
+         */
+        get: operations["serve_audio_audio__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{job_id}/progress": {
         parameters: {
             query?: never;
@@ -286,9 +810,9 @@ export interface paths {
          *         event: error    data: {code, message}                    (terminal)
          *
          *     Successful jobs end with ``done``; downstream LLM failure or worker
-         *     crash ends with ``error``. The frontend ``openProgressStream`` consumer
-         *     in :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy
-         *     formats; once it ships, the backend can stop emitting untagged frames.
+         *     crash ends with ``error``. The generator also exits promptly once the
+         *     HTTP client disconnects (``await request.is_disconnected()``) so a
+         *     closed browser tab doesn't keep us polling Redis for the full lifetime.
          */
         get: operations["get_analysis_progress_jobs__job_id__progress_get"];
         put?: never;
@@ -313,6 +837,30 @@ export interface paths {
          * @description Registers user identity or updates musical preferences in MongoDB.
          */
         post: operations["create_or_update_user_user_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{user_id}/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Preferences
+         * @description Read the user's persisted analyze/playback defaults (Plan 3 A8).
+         */
+        get: operations["get_user_preferences_user__user_id__preferences_get"];
+        /**
+         * Update User Preferences
+         * @description Persist analyze/playback defaults (Plan 3 A8). Upserts the user row.
+         */
+        put: operations["update_user_preferences_user__user_id__preferences_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -350,7 +898,8 @@ export interface paths {
         put?: never;
         /**
          * Chat
-         * @description Conversational AI assistant. Stores messages and coordinates session caching.
+         * @description Grounded AURA chat (non-stream). Identity from the JWT; session +
+         *     history are server-owned; over-budget turns refuse before the model.
          */
         post: operations["chat_chat_post"];
         delete?: never;
@@ -370,7 +919,9 @@ export interface paths {
         put?: never;
         /**
          * Chat Stream
-         * @description Conversational AI assistant with SSE streaming response.
+         * @description Grounded AURA chat (SSE). Same resolution as /chat; streams
+         *     context/tool/chunk/done/error frames from stream_aura via
+         *     EventSourceResponse (client-disconnect + keepalive for free).
          */
         post: operations["chat_stream_chat_stream_post"];
         delete?: never;
@@ -388,7 +939,8 @@ export interface paths {
         };
         /**
          * Get Chat History
-         * @description Retrieves standard discussion threads from Cache or drops back to MongoDB.
+         * @description Owner-only chat history. Returns 404 (not 403) for a session the caller
+         *     doesn't own so we don't confirm the existence of someone else's session.
          */
         get: operations["get_chat_history_chat_history__session_id__get"];
         put?: never;
@@ -416,6 +968,17 @@ export interface components {
             instrument_guide?: components["schemas"]["InstrumentGuide"] | null;
             /** Error */
             error?: string | null;
+            /** Audio Url */
+            audio_url?: string | null;
+        };
+        /** AuthResponse */
+        AuthResponse: {
+            /** Token */
+            token: string;
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
         };
         /** BeatEvent */
         BeatEvent: {
@@ -423,9 +986,15 @@ export interface components {
             time: number;
             /**
              * Beat Number
-             * @description 1, 2, 3, 4 for 4/4 time
+             * @description position within the measure: 1 = downbeat
              */
             beat_number: number;
+            /**
+             * Is Downbeat
+             * @description True on the first beat of each measure (Phase 5)
+             * @default false
+             */
+            is_downbeat: boolean;
         };
         /** Body_analyze_analyze_post */
         Body_analyze_analyze_post: {
@@ -465,26 +1034,38 @@ export interface components {
             /** File */
             file?: string | null;
         };
-        /** ChatRequest */
+        /**
+         * ChatRequest
+         * @description Client → /chat payload.
+         *
+         *     Phase-2 hardening: identity (``user_id``) comes from the JWT, never the
+         *     body; conversation ``history`` is reconstructed server-side from Mongo
+         *     ``chat_sessions`` (a forged body history could otherwise rewrite context).
+         *     Those two fields are intentionally absent.
+         */
         ChatRequest: {
             /** Message */
             message: string;
-            /**
-             * History
-             * @default []
-             */
-            history: {
-                [key: string]: unknown;
-            }[];
+            /** Analysis Job Id */
+            analysis_job_id?: string | null;
             /** Session Id */
             session_id?: string | null;
-            /** User Id */
-            user_id?: string | null;
+            /**
+             * Tutor Mode
+             * @default false
+             */
+            tutor_mode: boolean;
         };
-        /** ChatResponse */
+        /**
+         * ChatResponse
+         * @description Non-stream /chat reply. ``session_id`` echoes the server-owned id so a
+         *     client that omitted it learns which session its turn was persisted to.
+         */
         ChatResponse: {
             /** Reply */
             reply: string;
+            /** Session Id */
+            session_id?: string | null;
         };
         /**
          * ChordDiagram
@@ -506,6 +1087,11 @@ export interface components {
             right_hand?: string[] | null;
             /** Left Hand */
             left_hand?: string[] | null;
+            /**
+             * No Voicing
+             * @default false
+             */
+            no_voicing: boolean;
         };
         /**
          * ChordEvent
@@ -569,6 +1155,49 @@ export interface components {
             capo?: number | null;
         };
         /**
+         * LibraryEntry
+         * @description Summary row for the library page (Plan 3 A7).
+         */
+        LibraryEntry: {
+            /** Job Id */
+            job_id: string;
+            /** Title */
+            title?: string | null;
+            /** Artist */
+            artist?: string | null;
+            /** Key */
+            key: string;
+            /** Tempo */
+            tempo: number;
+            /** Duration */
+            duration: number;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Vibe Palette
+             * @default []
+             */
+            vibe_palette: string[];
+        };
+        /** LibraryResponse */
+        LibraryResponse: {
+            /** Items */
+            items: components["schemas"]["LibraryEntry"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
+        /**
          * RomanAnalysis
          * @description Roman-numeral analysis of the progression.
          */
@@ -577,14 +1206,99 @@ export interface components {
             key: string;
             /**
              * Progression
-             * @description e.g. ['I', 'V', 'vi', 'IV']
+             * @description Full per-chord numeral list (no dedup, no truncation). e.g. ['I', 'V7', 'vi', 'IV']
              */
-            progression: string[];
+            progression?: string[];
             /**
              * Function
-             * @description e.g. ['tonic', 'dominant', 'submediant', 'subdominant']
+             * @description Per-chord function list aligned with progression.
              */
-            function: string[];
+            function?: string[];
+            /**
+             * Summary Progression
+             * @description Deduped + truncated to ≤8 numerals for compact UI display.
+             */
+            summary_progression?: string[] | null;
+            /**
+             * Entries
+             * @description Time-aligned per-chord entries with full figured-bass data.
+             */
+            entries?: components["schemas"]["RomanEntry"][];
+            /**
+             * Cadences
+             * @description Detected cadences: {type: PAC|IAC|half|deceptive|plagal, index: int}
+             */
+            cadences?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Modulations
+             * @description Detected key modulations: {to_key: str, at_index: int}
+             */
+            modulations?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * RomanEntry
+         * @description Time-aligned per-chord Roman-numeral entry.
+         */
+        RomanEntry: {
+            /**
+             * Chord
+             * @description Original chord symbol, e.g. 'G7'
+             */
+            chord: string;
+            /**
+             * Numeral
+             * @description Figured-bass Roman numeral, e.g. 'V7', 'V7/V', 'I6'
+             */
+            numeral: string;
+            /**
+             * Function
+             * @description Harmonic function: tonic/dominant/subdominant/supertonic/submediant/mediant/leading_tone/secondary_dominant/chromatic
+             */
+            function: string;
+            /**
+             * Inversion
+             * @description Inversion number (0=root, 1=1st, etc.)
+             * @default 0
+             */
+            inversion: number;
+            /**
+             * Is Secondary
+             * @description True if secondary dominant (V/V etc.)
+             * @default false
+             */
+            is_secondary: boolean;
+            /**
+             * Is Borrowed
+             * @description True if borrowed / modal-mixture chord
+             * @default false
+             */
+            is_borrowed: boolean;
+            /**
+             * Cadence
+             * @description Cadence type ending on this chord: PAC/IAC/half/deceptive/plagal or None
+             */
+            cadence?: string | null;
+            /**
+             * Start
+             * @description Start time in seconds
+             */
+            start: number;
+            /**
+             * End
+             * @description End time in seconds
+             */
+            end: number;
+        };
+        /** SignUpRequest */
+        SignUpRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
         };
         /**
          * SongAnalysis
@@ -612,6 +1326,21 @@ export interface components {
              * @default 4/4
              */
             time_signature: string;
+            /**
+             * Key Confidence
+             * @description Krumhansl-Schmuckler key confidence in [0,1]
+             */
+            key_confidence?: number | null;
+            /**
+             * Tempo Confidence
+             * @description Beat-interval-consistency tempo confidence in [0,1]
+             */
+            tempo_confidence?: number | null;
+            /**
+             * Time Signature Confidence
+             * @description Deterministic meter-detection confidence in [0,1] (Phase 5)
+             */
+            time_signature_confidence?: number | null;
             /** Chords */
             chords: components["schemas"]["ChordEvent"][];
             /**
@@ -630,12 +1359,24 @@ export interface components {
              * @description Synesthetic color palette representing the song's key/vibe
              */
             vibe_palette?: string[];
+            theory?: components["schemas"]["TheoryExplanation"] | null;
             /** Theory Explanation */
             theory_explanation?: string | null;
             /** Instrument Guides */
             instrument_guides?: {
                 [key: string]: components["schemas"]["InstrumentGuide"];
             };
+            /** Stems */
+            stems?: {
+                [key: string]: string;
+            };
+            /**
+             * Similar Songs
+             * @description Online similar-song recommendations (Last.fm / Deezer).
+             */
+            similar_songs?: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * SongSection
@@ -648,6 +1389,64 @@ export interface components {
             start: number;
             /** End */
             end: number;
+            /**
+             * Confidence
+             * @description Clustering confidence for this section (Phase 5)
+             * @default 1
+             */
+            confidence: number;
+        };
+        /**
+         * TheoryExplanation
+         * @description Structured harmonic analysis returned by the theory LLM.
+         *
+         *     The ``.text`` computed property renders the same Markdown that
+         *     ``_flatten`` used to produce, preserving back-compat for any code
+         *     that reads ``analysis.theory_explanation`` as a string.
+         */
+        TheoryExplanation: {
+            /**
+             * Key Summary
+             * @description One sentence stating the song's key and why. Example: 'The song is in C major; the I-V-vi-IV progression centers tonally on C.'
+             */
+            key_summary: string;
+            /**
+             * Function Explanation
+             * @description Two-to-three sentences naming the harmonic function of each chord (tonic, dominant, subdominant, etc.).
+             */
+            function_explanation: string;
+            /**
+             * Pattern Name
+             * @description Well-known progression name if applicable (e.g. 'I-V-vi-IV pop progression', 'ii-V-I jazz turnaround'). Null if none fit.
+             */
+            pattern_name?: string | null;
+            /**
+             * Notable Techniques
+             * @description Any standout techniques: modal mixture, secondary dominants, borrowed chords, modulations. Empty list if none.
+             */
+            notable_techniques?: string[];
+            /**
+             * Similar Song
+             * @description One famous song using a similar progression, in 'Title — Artist' form. Null if you can't recall one with confidence.
+             */
+            similar_song?: string | null;
+            /**
+             * Text
+             * @description Render the structured fields as the Markdown string consumers expect.
+             */
+            readonly text: string;
+        };
+        /**
+         * UserPreferences
+         * @description Persistent personalization defaults (Plan 3 A8).
+         */
+        UserPreferences: {
+            /** Default Instrument */
+            default_instrument?: string | null;
+            /** Default Difficulty */
+            default_difficulty?: string | null;
+            /** Default Capo */
+            default_capo?: number | null;
         };
         /** UserRequest */
         UserRequest: {
@@ -796,6 +1595,322 @@ export interface operations {
             };
         };
     };
+    signup_api_v1_auth_signup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whoami_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_library_api_v1_library_get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_tracks_api_v1_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lyrics_api_v1_lyrics_get: {
+        parameters: {
+            query: {
+                track_name: string;
+                artist_name: string;
+                duration?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_analysis_api_v1_share__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyzeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_midi_api_v1_midi__job_id___stem__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_stem_api_v1_stems__job_id___stem__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_audio_api_v1_audio__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_analysis_progress_api_v1_jobs__job_id__progress_get: {
         parameters: {
             query?: never;
@@ -847,6 +1962,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_preferences_api_v1_user__user_id__preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_preferences_api_v1_user__user_id__preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
                 };
             };
             /** @description Validation Error */
@@ -1054,6 +2235,322 @@ export interface operations {
             };
         };
     };
+    signup_auth_signup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whoami_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_library_library_get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_tracks_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lyrics_lyrics_get: {
+        parameters: {
+            query: {
+                track_name: string;
+                artist_name: string;
+                duration?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_analysis_share__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyzeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_midi_midi__job_id___stem__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_stem_stems__job_id___stem__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                stem: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_audio_audio__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_analysis_progress_jobs__job_id__progress_get: {
         parameters: {
             query?: never;
@@ -1105,6 +2602,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_preferences_user__user_id__preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_preferences_user__user_id__preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
                 };
             };
             /** @description Validation Error */

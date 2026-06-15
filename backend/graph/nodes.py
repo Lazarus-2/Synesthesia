@@ -32,6 +32,7 @@ def _song_analysis_from_state(state: AnalysisState) -> SongAnalysis:
         time_signature=state.get("time_signature", "4/4"),
         time_signature_confidence=state.get("time_signature_confidence"),
         chords=chords,
+        sections=state.get("sections") or [],  # G3: reach the theory prompt's {sections}
         roman=state.get("roman"),
     )
 

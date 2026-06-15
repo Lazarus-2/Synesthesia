@@ -79,24 +79,32 @@ export const WaveformPlayer: React.FC = () => {
                 setCurrentTime(sec.start);
               }
             };
+            const confLabel =
+              sec.confidence != null ? ` · ${Math.round(conf * 100)}% confident` : "";
             return (
               <button
                 key={i}
                 type="button"
                 onClick={seekTo}
-                title={`${sec.name} · ${formatTime(sec.start)}${
-                  sec.confidence != null ? ` · ${Math.round(conf * 100)}% confident` : ""
-                }`}
-                className={`flex items-center justify-center border-r border-white/5 last:border-r-0 cursor-pointer transition-colors hover:brightness-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                title={`${sec.name} · ${formatTime(sec.start)}${confLabel}`}
+                aria-label={`Jump to ${sec.name} at ${formatTime(sec.start)}${confLabel}`}
+                className={`relative flex min-w-0 items-center justify-center border-r border-white/5 last:border-r-0 cursor-pointer transition-colors hover:brightness-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
                   isChorus
                     ? "bg-secondary-container/20 text-on-secondary-container"
                     : isVerse
                     ? "bg-primary-container/10 text-primary"
                     : "bg-surface-variant/40 text-on-surface-variant"
                 }`}
-                style={{ width: `${pct}%`, opacity: 0.55 + 0.45 * conf }}
+                style={{ width: `${pct}%` }}
               >
-                {sec.name}
+                {/* Text stays full-opacity for legibility; a bottom underline
+                    fill (width ∝ confidence) conveys clustering certainty. */}
+                <span className="truncate px-1">{sec.name}</span>
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-current"
+                  style={{ width: `${conf * 100}%`, opacity: 0.6 }}
+                />
               </button>
             );
           })}

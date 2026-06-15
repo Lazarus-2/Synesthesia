@@ -137,10 +137,467 @@
         }
       }
     },
+    "/api/v1/auth/signup": {
+      "post": {
+        "summary": "Signup",
+        "description": "Create a user with a hashed password and return a JWT (Plan 3 A9).\n\nIdempotency: returns 409 if the username is already taken. Note that\nthe server still operates in anonymous-friendly mode unless\n``REQUIRE_AUTH=true`` \u2014 sign-up is opt-in for users who want\npersistent libraries / preferences.",
+        "operationId": "signup_api_v1_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Verify password and return a JWT (Plan 3 A9).",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "summary": "Whoami",
+        "description": "Return the authenticated principal, or ``null`` when anonymous.",
+        "operationId": "whoami_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Whoami Api V1 Auth Me Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/library": {
+      "get": {
+        "summary": "List Library",
+        "description": "List previously-analyzed songs (Plan 3 A7).\n\nSorted by ``created_at`` descending. When ``user_id`` is provided we\nwill (in the auth-on world) filter to that user \u2014 for now we surface\nthe whole collection since ownership isn't enforced.",
+        "operationId": "list_library_api_v1_library_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "summary": "Search Tracks",
+        "description": "Search the merged Deezer + MusicBrainz catalog.\n\nReturns ``{results: [...]}`` where each entry has at minimum\n``title``, ``artist``, plus whichever of ``deezer_id``, ``mbid``,\n``preview_url``, ``image_url``, ``album``, ``year`` were resolved.\n\nDeezer (no auth, rich metadata) + MusicBrainz (rate-limited 1/sec,\nauthoritative MBIDs) run in parallel. Merged and deduped by\n``(title.lower, artist.lower)``.\n\nCached for 1h via HybridCache \u2014 search queries are stable, and\nthe upstream APIs (especially MusicBrainz) have aggressive rate\nlimits we should respect.",
+        "operationId": "search_tracks_api_v1_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Search Tracks Api V1 Search Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lyrics": {
+      "get": {
+        "summary": "Get Lyrics",
+        "description": "Fetch synced + plain lyrics from LRCLIB.\n\nReturns ``{synced_lyrics, plain_lyrics, source}``. Both lyric\nfields are empty strings on a no-match \u2014 the frontend interprets\nthat as \"no lyrics available for this track\".\n\n``duration`` (seconds) is optional but helps LRCLIB disambiguate\ncovers and live versions.",
+        "operationId": "get_lyrics_api_v1_lyrics_get",
+        "parameters": [
+          {
+            "name": "track_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Track Name"
+            }
+          },
+          {
+            "name": "artist_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artist Name"
+            }
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Lyrics Api V1 Lyrics Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/share/{job_id}": {
+      "get": {
+        "summary": "Share Analysis",
+        "description": "Read-only public view of a completed analysis (Plan 3 B8).\n\nSame shape as ``GET /analyze/{job_id}`` but explicitly read-only,\nrequires no instrument selector, and is the documented stable URL for\n\"show this analysis to someone.\" Frontend builds the share link as\n``/s/{job_id}`` which proxies here.",
+        "operationId": "share_analysis_api_v1_share__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/midi/{job_id}/{stem}": {
+      "get": {
+        "summary": "Export Midi",
+        "description": "Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).\n\n``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs\nbasic-pitch over the staged audio file (no stem separation required).\nOther values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem\nseparation step \u2014 if that file doesn't exist yet, returns 404.",
+        "operationId": "export_midi_api_v1_midi__job_id___stem__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stems/{job_id}/{stem}": {
+      "get": {
+        "summary": "Serve Stem",
+        "description": "Stream a separated stem WAV (Plan 3 A2 + B7).\n\n``stem`` is one of ``vocals|drums|bass|other``. Looks under\n``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by\n``stems_node`` via demucs).",
+        "operationId": "serve_stem_api_v1_stems__job_id___stem__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audio/{job_id}": {
+      "get": {
+        "summary": "Serve Audio",
+        "description": "Stream the analysed audio file by job id.\n\nLooks for any file in ``audio_upload_dir`` whose name starts with the\njob id (the upload pipeline stores them as ``{job_id}_{original_name}``,\nand yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by\n``ingest_node``). Falls back to a 404 envelope if nothing matches \u2014\nbetter than serving an arbitrary file.",
+        "operationId": "serve_audio_api_v1_audio__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/jobs/{job_id}/progress": {
       "get": {
         "summary": "Get Analysis Progress",
-        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The frontend ``openProgressStream`` consumer\nin :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy\nformats; once it ships, the backend can stop emitting untagged frames.",
+        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The generator also exits promptly once the\nHTTP client disconnects (``await request.is_disconnected()``) so a\nclosed browser tab doesn't keep us polling Redis for the full lifetime.",
         "operationId": "get_analysis_progress_api_v1_jobs__job_id__progress_get",
         "parameters": [
           {
@@ -212,6 +669,94 @@
         }
       }
     },
+    "/api/v1/user/{user_id}/preferences": {
+      "get": {
+        "summary": "Get User Preferences",
+        "description": "Read the user's persisted analyze/playback defaults (Plan 3 A8).",
+        "operationId": "get_user_preferences_api_v1_user__user_id__preferences_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update User Preferences",
+        "description": "Persist analyze/playback defaults (Plan 3 A8). Upserts the user row.",
+        "operationId": "update_user_preferences_api_v1_user__user_id__preferences_put",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPreferences"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/user/{user_id}": {
       "get": {
         "summary": "Get User Profile",
@@ -253,7 +798,7 @@
     "/api/v1/chat": {
       "post": {
         "summary": "Chat",
-        "description": "Conversational AI assistant. Stores messages and coordinates session caching.",
+        "description": "Grounded AURA chat (non-stream). Identity from the JWT; session +\nhistory are server-owned; over-budget turns refuse before the model.",
         "operationId": "chat_api_v1_chat_post",
         "requestBody": {
           "content": {
@@ -292,7 +837,7 @@
     "/api/v1/chat/stream": {
       "post": {
         "summary": "Chat Stream",
-        "description": "Conversational AI assistant with SSE streaming response.",
+        "description": "Grounded AURA chat (SSE). Same resolution as /chat; streams\ncontext/tool/chunk/done/error frames from stream_aura via\nEventSourceResponse (client-disconnect + keepalive for free).",
         "operationId": "chat_stream_api_v1_chat_stream_post",
         "requestBody": {
           "content": {
@@ -329,7 +874,7 @@
     "/api/v1/chat/history/{session_id}": {
       "get": {
         "summary": "Get Chat History",
-        "description": "Retrieves standard discussion threads from Cache or drops back to MongoDB.",
+        "description": "Owner-only chat history. Returns 404 (not 403) for a session the caller\ndoesn't own so we don't confirm the existence of someone else's session.",
         "operationId": "get_chat_history_api_v1_chat_history__session_id__get",
         "parameters": [
           {
@@ -458,10 +1003,467 @@
         }
       }
     },
+    "/auth/signup": {
+      "post": {
+        "summary": "Signup",
+        "description": "Create a user with a hashed password and return a JWT (Plan 3 A9).\n\nIdempotency: returns 409 if the username is already taken. Note that\nthe server still operates in anonymous-friendly mode unless\n``REQUIRE_AUTH=true`` \u2014 sign-up is opt-in for users who want\npersistent libraries / preferences.",
+        "operationId": "signup_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Verify password and return a JWT (Plan 3 A9).",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Whoami",
+        "description": "Return the authenticated principal, or ``null`` when anonymous.",
+        "operationId": "whoami_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Whoami Auth Me Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library": {
+      "get": {
+        "summary": "List Library",
+        "description": "List previously-analyzed songs (Plan 3 A7).\n\nSorted by ``created_at`` descending. When ``user_id`` is provided we\nwill (in the auth-on world) filter to that user \u2014 for now we surface\nthe whole collection since ownership isn't enforced.",
+        "operationId": "list_library_library_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search Tracks",
+        "description": "Search the merged Deezer + MusicBrainz catalog.\n\nReturns ``{results: [...]}`` where each entry has at minimum\n``title``, ``artist``, plus whichever of ``deezer_id``, ``mbid``,\n``preview_url``, ``image_url``, ``album``, ``year`` were resolved.\n\nDeezer (no auth, rich metadata) + MusicBrainz (rate-limited 1/sec,\nauthoritative MBIDs) run in parallel. Merged and deduped by\n``(title.lower, artist.lower)``.\n\nCached for 1h via HybridCache \u2014 search queries are stable, and\nthe upstream APIs (especially MusicBrainz) have aggressive rate\nlimits we should respect.",
+        "operationId": "search_tracks_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Search Tracks Search Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lyrics": {
+      "get": {
+        "summary": "Get Lyrics",
+        "description": "Fetch synced + plain lyrics from LRCLIB.\n\nReturns ``{synced_lyrics, plain_lyrics, source}``. Both lyric\nfields are empty strings on a no-match \u2014 the frontend interprets\nthat as \"no lyrics available for this track\".\n\n``duration`` (seconds) is optional but helps LRCLIB disambiguate\ncovers and live versions.",
+        "operationId": "get_lyrics_lyrics_get",
+        "parameters": [
+          {
+            "name": "track_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Track Name"
+            }
+          },
+          {
+            "name": "artist_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artist Name"
+            }
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duration"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Lyrics Lyrics Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/share/{job_id}": {
+      "get": {
+        "summary": "Share Analysis",
+        "description": "Read-only public view of a completed analysis (Plan 3 B8).\n\nSame shape as ``GET /analyze/{job_id}`` but explicitly read-only,\nrequires no instrument selector, and is the documented stable URL for\n\"show this analysis to someone.\" Frontend builds the share link as\n``/s/{job_id}`` which proxies here.",
+        "operationId": "share_analysis_share__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/midi/{job_id}/{stem}": {
+      "get": {
+        "summary": "Export Midi",
+        "description": "Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).\n\n``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs\nbasic-pitch over the staged audio file (no stem separation required).\nOther values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem\nseparation step \u2014 if that file doesn't exist yet, returns 404.",
+        "operationId": "export_midi_midi__job_id___stem__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stems/{job_id}/{stem}": {
+      "get": {
+        "summary": "Serve Stem",
+        "description": "Stream a separated stem WAV (Plan 3 A2 + B7).\n\n``stem`` is one of ``vocals|drums|bass|other``. Looks under\n``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by\n``stems_node`` via demucs).",
+        "operationId": "serve_stem_stems__job_id___stem__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "stem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stem"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audio/{job_id}": {
+      "get": {
+        "summary": "Serve Audio",
+        "description": "Stream the analysed audio file by job id.\n\nLooks for any file in ``audio_upload_dir`` whose name starts with the\njob id (the upload pipeline stores them as ``{job_id}_{original_name}``,\nand yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by\n``ingest_node``). Falls back to a 404 envelope if nothing matches \u2014\nbetter than serving an arbitrary file.",
+        "operationId": "serve_audio_audio__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs/{job_id}/progress": {
       "get": {
         "summary": "Get Analysis Progress",
-        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The frontend ``openProgressStream`` consumer\nin :mod:`frontend/web/src/lib/apiClient.ts` handles both new and legacy\nformats; once it ships, the backend can stop emitting untagged frames.",
+        "description": "Server-Sent Events stream of analysis progress.\n\nProtocol (Plan 2 D6 \u2014 tagged events):\n    event: chunk    data: {status, progress, message, ...}   (repeated)\n    event: done     data: {job_id, status: \"done\", ...}      (terminal)\n    event: error    data: {code, message}                    (terminal)\n\nSuccessful jobs end with ``done``; downstream LLM failure or worker\ncrash ends with ``error``. The generator also exits promptly once the\nHTTP client disconnects (``await request.is_disconnected()``) so a\nclosed browser tab doesn't keep us polling Redis for the full lifetime.",
         "operationId": "get_analysis_progress_jobs__job_id__progress_get",
         "parameters": [
           {
@@ -533,6 +1535,94 @@
         }
       }
     },
+    "/user/{user_id}/preferences": {
+      "get": {
+        "summary": "Get User Preferences",
+        "description": "Read the user's persisted analyze/playback defaults (Plan 3 A8).",
+        "operationId": "get_user_preferences_user__user_id__preferences_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update User Preferences",
+        "description": "Persist analyze/playback defaults (Plan 3 A8). Upserts the user row.",
+        "operationId": "update_user_preferences_user__user_id__preferences_put",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPreferences"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/user/{user_id}": {
       "get": {
         "summary": "Get User Profile",
@@ -574,7 +1664,7 @@
     "/chat": {
       "post": {
         "summary": "Chat",
-        "description": "Conversational AI assistant. Stores messages and coordinates session caching.",
+        "description": "Grounded AURA chat (non-stream). Identity from the JWT; session +\nhistory are server-owned; over-budget turns refuse before the model.",
         "operationId": "chat_chat_post",
         "requestBody": {
           "content": {
@@ -613,7 +1703,7 @@
     "/chat/stream": {
       "post": {
         "summary": "Chat Stream",
-        "description": "Conversational AI assistant with SSE streaming response.",
+        "description": "Grounded AURA chat (SSE). Same resolution as /chat; streams\ncontext/tool/chunk/done/error frames from stream_aura via\nEventSourceResponse (client-disconnect + keepalive for free).",
         "operationId": "chat_stream_chat_stream_post",
         "requestBody": {
           "content": {
@@ -650,7 +1740,7 @@
     "/chat/history/{session_id}": {
       "get": {
         "summary": "Get Chat History",
-        "description": "Retrieves standard discussion threads from Cache or drops back to MongoDB.",
+        "description": "Owner-only chat history. Returns 404 (not 403) for a session the caller\ndoesn't own so we don't confirm the existence of someone else's session.",
         "operationId": "get_chat_history_chat_history__session_id__get",
         "parameters": [
           {
@@ -734,6 +1824,17 @@
               }
             ],
             "title": "Error"
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
           }
         },
         "type": "object",
@@ -742,6 +1843,29 @@
           "status"
         ],
         "title": "AnalyzeResponse"
+      },
+      "AuthResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "user_id",
+          "username"
+        ],
+        "title": "AuthResponse"
       },
       "BeatEvent": {
         "properties": {
@@ -752,7 +1876,13 @@
           "beat_number": {
             "type": "integer",
             "title": "Beat Number",
-            "description": "1, 2, 3, 4 for 4/4 time"
+            "description": "position within the measure: 1 = downbeat"
+          },
+          "is_downbeat": {
+            "type": "boolean",
+            "title": "Is Downbeat",
+            "description": "True on the first beat of each measure (Phase 5)",
+            "default": false
           }
         },
         "type": "object",
@@ -868,14 +1998,16 @@
             "type": "string",
             "title": "Message"
           },
-          "history": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "History",
-            "default": []
+          "analysis_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Job Id"
           },
           "session_id": {
             "anyOf": [
@@ -888,7 +2020,26 @@
             ],
             "title": "Session Id"
           },
-          "user_id": {
+          "tutor_mode": {
+            "type": "boolean",
+            "title": "Tutor Mode",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "description": "Client \u2192 /chat payload.\n\nPhase-2 hardening: identity (``user_id``) comes from the JWT, never the\nbody; conversation ``history`` is reconstructed server-side from Mongo\n``chat_sessions`` (a forged body history could otherwise rewrite context).\nThose two fields are intentionally absent."
+      },
+      "ChatResponse": {
+        "properties": {
+          "reply": {
+            "type": "string",
+            "title": "Reply"
+          },
+          "session_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -897,27 +2048,15 @@
                 "type": "null"
               }
             ],
-            "title": "User Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "message"
-        ],
-        "title": "ChatRequest"
-      },
-      "ChatResponse": {
-        "properties": {
-          "reply": {
-            "type": "string",
-            "title": "Reply"
+            "title": "Session Id"
           }
         },
         "type": "object",
         "required": [
           "reply"
         ],
-        "title": "ChatResponse"
+        "title": "ChatResponse",
+        "description": "Non-stream /chat reply. ``session_id`` echoes the server-owned id so a\nclient that omitted it learns which session its turn was persisted to."
       },
       "ChordDiagram": {
         "properties": {
@@ -990,6 +2129,11 @@
               }
             ],
             "title": "Left Hand"
+          },
+          "no_voicing": {
+            "type": "boolean",
+            "title": "No Voicing",
+            "default": false
           }
         },
         "type": "object",
@@ -1120,6 +2264,126 @@
         ],
         "title": "InstrumentGuide"
       },
+      "LibraryEntry": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "tempo": {
+            "type": "number",
+            "title": "Tempo"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "vibe_palette": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vibe Palette",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "key",
+          "tempo",
+          "duration"
+        ],
+        "title": "LibraryEntry",
+        "description": "Summary row for the library page (Plan 3 A7)."
+      },
+      "LibraryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "LibraryResponse"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
       "RomanAnalysis": {
         "properties": {
           "key": {
@@ -1132,7 +2396,7 @@
             },
             "type": "array",
             "title": "Progression",
-            "description": "e.g. ['I', 'V', 'vi', 'IV']"
+            "description": "Full per-chord numeral list (no dedup, no truncation). e.g. ['I', 'V7', 'vi', 'IV']"
           },
           "function": {
             "items": {
@@ -1140,17 +2404,143 @@
             },
             "type": "array",
             "title": "Function",
-            "description": "e.g. ['tonic', 'dominant', 'submediant', 'subdominant']"
+            "description": "Per-chord function list aligned with progression."
+          },
+          "summary_progression": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Progression",
+            "description": "Deduped + truncated to \u22648 numerals for compact UI display."
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/RomanEntry"
+            },
+            "type": "array",
+            "title": "Entries",
+            "description": "Time-aligned per-chord entries with full figured-bass data."
+          },
+          "cadences": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Cadences",
+            "description": "Detected cadences: {type: PAC|IAC|half|deceptive|plagal, index: int}"
+          },
+          "modulations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Modulations",
+            "description": "Detected key modulations: {to_key: str, at_index: int}"
           }
         },
         "type": "object",
         "required": [
-          "key",
-          "progression",
-          "function"
+          "key"
         ],
         "title": "RomanAnalysis",
         "description": "Roman-numeral analysis of the progression."
+      },
+      "RomanEntry": {
+        "properties": {
+          "chord": {
+            "type": "string",
+            "title": "Chord",
+            "description": "Original chord symbol, e.g. 'G7'"
+          },
+          "numeral": {
+            "type": "string",
+            "title": "Numeral",
+            "description": "Figured-bass Roman numeral, e.g. 'V7', 'V7/V', 'I6'"
+          },
+          "function": {
+            "type": "string",
+            "title": "Function",
+            "description": "Harmonic function: tonic/dominant/subdominant/supertonic/submediant/mediant/leading_tone/secondary_dominant/chromatic"
+          },
+          "inversion": {
+            "type": "integer",
+            "title": "Inversion",
+            "description": "Inversion number (0=root, 1=1st, etc.)",
+            "default": 0
+          },
+          "is_secondary": {
+            "type": "boolean",
+            "title": "Is Secondary",
+            "description": "True if secondary dominant (V/V etc.)",
+            "default": false
+          },
+          "is_borrowed": {
+            "type": "boolean",
+            "title": "Is Borrowed",
+            "description": "True if borrowed / modal-mixture chord",
+            "default": false
+          },
+          "cadence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cadence",
+            "description": "Cadence type ending on this chord: PAC/IAC/half/deceptive/plagal or None"
+          },
+          "start": {
+            "type": "number",
+            "title": "Start",
+            "description": "Start time in seconds"
+          },
+          "end": {
+            "type": "number",
+            "title": "End",
+            "description": "End time in seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chord",
+          "numeral",
+          "function",
+          "start",
+          "end"
+        ],
+        "title": "RomanEntry",
+        "description": "Time-aligned per-chord Roman-numeral entry."
+      },
+      "SignUpRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "SignUpRequest"
       },
       "SongAnalysis": {
         "properties": {
@@ -1195,6 +2585,42 @@
             "title": "Time Signature",
             "default": "4/4"
           },
+          "key_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Confidence",
+            "description": "Krumhansl-Schmuckler key confidence in [0,1]"
+          },
+          "tempo_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tempo Confidence",
+            "description": "Beat-interval-consistency tempo confidence in [0,1]"
+          },
+          "time_signature_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Signature Confidence",
+            "description": "Deterministic meter-detection confidence in [0,1] (Phase 5)"
+          },
           "chords": {
             "items": {
               "$ref": "#/components/schemas/ChordEvent"
@@ -1236,6 +2662,16 @@
             "title": "Vibe Palette",
             "description": "Synesthetic color palette representing the song's key/vibe"
           },
+          "theory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TheoryExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "theory_explanation": {
             "anyOf": [
               {
@@ -1253,6 +2689,22 @@
             },
             "type": "object",
             "title": "Instrument Guides"
+          },
+          "stems": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Stems"
+          },
+          "similar_songs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Similar Songs",
+            "description": "Online similar-song recommendations (Last.fm / Deezer)."
           }
         },
         "type": "object",
@@ -1278,6 +2730,14 @@
           "end": {
             "type": "number",
             "title": "End"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Clustering confidence for this section (Phase 5)",
+            "default": 1.0
           }
         },
         "type": "object",
@@ -1288,6 +2748,106 @@
         ],
         "title": "SongSection",
         "description": "Intro, verse, chorus, bridge, outro, etc."
+      },
+      "TheoryExplanation": {
+        "properties": {
+          "key_summary": {
+            "type": "string",
+            "title": "Key Summary",
+            "description": "One sentence stating the song's key and why. Example: 'The song is in C major; the I-V-vi-IV progression centers tonally on C.'"
+          },
+          "function_explanation": {
+            "type": "string",
+            "title": "Function Explanation",
+            "description": "Two-to-three sentences naming the harmonic function of each chord (tonic, dominant, subdominant, etc.)."
+          },
+          "pattern_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern Name",
+            "description": "Well-known progression name if applicable (e.g. 'I-V-vi-IV pop progression', 'ii-V-I jazz turnaround'). Null if none fit."
+          },
+          "notable_techniques": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notable Techniques",
+            "description": "Any standout techniques: modal mixture, secondary dominants, borrowed chords, modulations. Empty list if none."
+          },
+          "similar_song": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similar Song",
+            "description": "One famous song using a similar progression, in 'Title \u2014 Artist' form. Null if you can't recall one with confidence."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Render the structured fields as the Markdown string consumers expect.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_summary",
+          "function_explanation",
+          "text"
+        ],
+        "title": "TheoryExplanation",
+        "description": "Structured harmonic analysis returned by the theory LLM.\n\nThe ``.text`` computed property renders the same Markdown that\n``_flatten`` used to produce, preserving back-compat for any code\nthat reads ``analysis.theory_explanation`` as a string."
+      },
+      "UserPreferences": {
+        "properties": {
+          "default_instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Instrument"
+          },
+          "default_difficulty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Difficulty"
+          },
+          "default_capo": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Capo"
+          }
+        },
+        "type": "object",
+        "title": "UserPreferences",
+        "description": "Persistent personalization defaults (Plan 3 A8)."
       },
       "UserRequest": {
         "properties": {
