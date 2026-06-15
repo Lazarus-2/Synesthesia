@@ -577,26 +577,40 @@ async def analyze(
 async def get_analysis(
     job_id: str,
     instrument: str | None = None,
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
     db=Depends(get_mongodb),
 ) -> AnalyzeResponse:
     """Retrieves the current status or completed result of a song analysis job from MongoDB.
 
     Pass ``?instrument=guitar`` (etc.) to receive the matching instrument guide;
     omitting it returns no guide rather than an arbitrary one.
-    """
-    # 1. Cache-first (caches a per-job payload; we don't cache per-instrument so
-    # the cached payload's instrument_guide may not match the request — we
-    # re-pick from the persisted analysis below when an instrument is specified).
-    job_store = get_job_store()
-    # FT-03: the :result key is the fast path; Mongo is the durable fallback.
-    cached = await job_store.get_cached_response(job_id)
-    if cached and instrument is None:
-        return AnalyzeResponse.model_validate_json(cached)
 
-    # 2. Pull from persistent MongoDB database
-    db_record = await db.song_analyses.find_one({"_id": job_id})
-    if not db_record:
-        raise HTTPException(status_code=404, detail=f"Analysis job {job_id} not found")
+    Security (Phase 6 G2): an authenticated caller may only read an OWNED
+    analysis they own; anonymous analyses (``user_id is None``) stay public —
+    so the cache fast-path is preserved unchanged for anonymous deployments,
+    and ownership is enforced *before* the cache can leak an owned payload.
+    """
+    job_store = get_job_store()
+    repo = AnalysisRepo(db)
+
+    if principal is not None:
+        # Authenticated: the resolver returns the readable doc (owner or
+        # anonymous) or None (missing / someone else's) -> 404, no oracle.
+        db_record = await repo.resolve_readable(job_id, principal.user_id)
+        if db_record is None:
+            raise HTTPException(status_code=404, detail=f"Analysis job {job_id} not found")
+        # FT-03 cache fast-path, now gated behind the ownership check above.
+        cached = await job_store.get_cached_response(job_id)
+        if cached and instrument is None:
+            return AnalyzeResponse.model_validate_json(cached)
+    else:
+        # Anonymous deployment: every analysis is public; cache-first as before.
+        cached = await job_store.get_cached_response(job_id)
+        if cached and instrument is None:
+            return AnalyzeResponse.model_validate_json(cached)
+        db_record = await db.song_analyses.find_one({"_id": job_id})
+        if not db_record:
+            raise HTTPException(status_code=404, detail=f"Analysis job {job_id} not found")
 
     song_analysis = SongAnalysisModel.model_validate(db_record)
 
@@ -893,8 +907,47 @@ async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeRespons
     )
 
 
+async def _enforce_owned_read(
+    job_id: str,
+    principal: UserPrincipal | None,
+    db,
+    *,
+    allow_missing: bool = False,
+) -> None:
+    """404 when an authenticated caller requests another user's OWNED job (Phase 6 G2).
+
+    No-op for anonymous callers (``principal is None``) — in the default
+    anonymous deployment every analysis is public, and the public ``/share``
+    player fetches media token-less, so those flows are unchanged. Anonymous
+    docs (``user_id is None``) stay readable for everyone. ``allow_missing``
+    lets the progress SSE keep streaming an in-flight job whose final doc is
+    not written yet (ownership isn't determinable then; low-sensitivity).
+    """
+    if principal is None:
+        return
+    doc = await db.song_analyses.find_one({"_id": job_id}, {"user_id": 1})
+    if doc is None:
+        if allow_missing:
+            return
+        raise HTTPException(status_code=404, detail="Not found")
+    owner = doc.get("user_id")
+    if owner is not None and owner != principal.user_id:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _reject_job_id_traversal(job_id: str) -> None:
+    """Reject a job_id that could escape its storage dir via path separators."""
+    if "/" in job_id or "\\" in job_id or ".." in job_id:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @router.get("/midi/{job_id}/{stem}")
-async def export_midi(job_id: str, stem: str):
+async def export_midi(
+    job_id: str,
+    stem: str,
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
+    db=Depends(get_mongodb),
+):
     """Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).
 
     ``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs
@@ -902,6 +955,8 @@ async def export_midi(job_id: str, stem: str):
     Other values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem
     separation step — if that file doesn't exist yet, returns 404.
     """
+    _reject_job_id_traversal(job_id)
+    await _enforce_owned_read(job_id, principal, db)
     settings = get_settings()
     if stem == "full":
         candidates = sorted(settings.audio_upload_dir.glob(f"{job_id}*"))
@@ -940,13 +995,20 @@ async def export_midi(job_id: str, stem: str):
 
 
 @router.get("/stems/{job_id}/{stem}")
-async def serve_stem(job_id: str, stem: str):
+async def serve_stem(
+    job_id: str,
+    stem: str,
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
+    db=Depends(get_mongodb),
+):
     """Stream a separated stem WAV (Plan 3 A2 + B7).
 
     ``stem`` is one of ``vocals|drums|bass|other``. Looks under
     ``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by
     ``stems_node`` via demucs).
     """
+    _reject_job_id_traversal(job_id)
+    await _enforce_owned_read(job_id, principal, db)
     if stem not in ("vocals", "drums", "bass", "other"):
         raise HTTPException(status_code=400, detail=f"Unknown stem {stem!r}")
     settings = get_settings()
@@ -966,7 +1028,11 @@ async def serve_stem(job_id: str, stem: str):
 
 
 @router.get("/audio/{job_id}")
-async def serve_audio(job_id: str):
+async def serve_audio(
+    job_id: str,
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
+    db=Depends(get_mongodb),
+):
     """Stream the analysed audio file by job id.
 
     Looks for any file in ``audio_upload_dir`` whose name starts with the
@@ -974,7 +1040,13 @@ async def serve_audio(job_id: str):
     and yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by
     ``ingest_node``). Falls back to a 404 envelope if nothing matches —
     better than serving an arbitrary file.
+
+    Security (Phase 6 G2): owned audio is gated to its owner; anonymous audio
+    stays public so the ``/share`` player (which embeds ``/audio/{job_id}``
+    token-less) keeps working.
     """
+    _reject_job_id_traversal(job_id)
+    await _enforce_owned_read(job_id, principal, db)
     settings = get_settings()
     candidates = sorted(settings.audio_upload_dir.glob(f"{job_id}*"))
     if not candidates:
@@ -1033,7 +1105,12 @@ async def _await_if_needed(value):
 
 
 @router.get("/jobs/{job_id}/progress")
-async def get_analysis_progress(job_id: str, request: Request):
+async def get_analysis_progress(
+    job_id: str,
+    request: Request,
+    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
+    db=Depends(get_mongodb),
+):
     """Server-Sent Events stream of analysis progress.
 
     Protocol (Plan 2 D6 — tagged events):
@@ -1045,7 +1122,12 @@ async def get_analysis_progress(job_id: str, request: Request):
     crash ends with ``error``. The generator also exits promptly once the
     HTTP client disconnects (``await request.is_disconnected()``) so a
     closed browser tab doesn't keep us polling Redis for the full lifetime.
+
+    Security (Phase 6 G2): an authenticated caller can't stream another user's
+    OWNED job's progress. ``allow_missing=True`` keeps in-flight jobs (whose
+    final analysis doc isn't written yet) streamable to their owner.
     """
+    await _enforce_owned_read(job_id, principal, db, allow_missing=True)
     job_store = get_job_store()
 
     def _sse_event(event: str, data: dict | str) -> ServerSentEvent:
