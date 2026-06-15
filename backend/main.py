@@ -574,7 +574,9 @@ async def analyze(
 
 
 @router.get("/analyze/{job_id}", response_model=AnalyzeResponse)
+@limiter.limit(lambda: get_settings().read_rate_limit)
 async def get_analysis(
+    request: Request,
     job_id: str,
     instrument: str | None = None,
     principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
@@ -656,7 +658,8 @@ async def get_analysis(
 
 
 @router.post("/auth/signup", response_model=AuthResponse)
-async def signup(req: SignUpRequest, db=Depends(get_mongodb)) -> AuthResponse:
+@limiter.limit(lambda: get_settings().auth_rate_limit)
+async def signup(request: Request, req: SignUpRequest, db=Depends(get_mongodb)) -> AuthResponse:
     """Create a user with a hashed password and return a JWT (Plan 3 A9).
 
     Idempotency: returns 409 if the username is already taken. Note that
@@ -694,7 +697,8 @@ async def signup(req: SignUpRequest, db=Depends(get_mongodb)) -> AuthResponse:
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-async def login(req: LoginRequest, db=Depends(get_mongodb)) -> AuthResponse:
+@limiter.limit(lambda: get_settings().auth_rate_limit)
+async def login(request: Request, req: LoginRequest, db=Depends(get_mongodb)) -> AuthResponse:
     """Verify password and return a JWT (Plan 3 A9)."""
     from backend.auth import issue_token, verify_password
 
@@ -942,7 +946,9 @@ def _reject_job_id_traversal(job_id: str) -> None:
 
 
 @router.get("/midi/{job_id}/{stem}")
+@limiter.limit(lambda: get_settings().media_rate_limit)
 async def export_midi(
+    request: Request,
     job_id: str,
     stem: str,
     principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
@@ -995,7 +1001,9 @@ async def export_midi(
 
 
 @router.get("/stems/{job_id}/{stem}")
+@limiter.limit(lambda: get_settings().media_rate_limit)
 async def serve_stem(
+    request: Request,
     job_id: str,
     stem: str,
     principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
@@ -1028,7 +1036,9 @@ async def serve_stem(
 
 
 @router.get("/audio/{job_id}")
+@limiter.limit(lambda: get_settings().media_rate_limit)
 async def serve_audio(
+    request: Request,
     job_id: str,
     principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
     db=Depends(get_mongodb),
@@ -1259,7 +1269,9 @@ async def get_analysis_progress(
 
 
 @router.post("/user")
+@limiter.limit(lambda: get_settings().user_rate_limit)
 async def create_or_update_user(
+    request: Request,
     req: UserRequest,
     principal: UserPrincipal = Depends(require_user),
     db=Depends(get_mongodb),
@@ -1297,7 +1309,9 @@ async def create_or_update_user(
 
 
 @router.get("/user/{user_id}/preferences")
+@limiter.limit(lambda: get_settings().user_rate_limit)
 async def get_user_preferences(
+    request: Request,
     user_id: str,
     principal: UserPrincipal = Depends(require_user),
     db=Depends(get_mongodb),
@@ -1321,7 +1335,9 @@ async def get_user_preferences(
 
 
 @router.put("/user/{user_id}/preferences", response_model=UserPreferences)
+@limiter.limit(lambda: get_settings().user_rate_limit)
 async def update_user_preferences(
+    request: Request,
     user_id: str,
     prefs: UserPreferences,
     principal: UserPrincipal = Depends(require_user),
@@ -1361,7 +1377,9 @@ async def update_user_preferences(
 
 
 @router.get("/user/{user_id}")
+@limiter.limit(lambda: get_settings().user_rate_limit)
 async def get_user_profile(
+    request: Request,
     user_id: str,
     principal: UserPrincipal = Depends(require_user),
     db=Depends(get_mongodb),

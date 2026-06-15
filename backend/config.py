@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     # the old 600/minute value was accidentally left from a pre-auth draft.
     analyze_rate_limit: str = "1000/day"
     chat_rate_limit: str = "30/minute"
+    # Phase 6 G4 — per-IP limits on previously-unprotected surfaces.
+    auth_rate_limit: str = "20/minute"  # signup/login brute-force + enumeration
+    media_rate_limit: str = "30/minute"  # /audio /stems /midi bandwidth/IO DoS
+    user_rate_limit: str = "30/minute"  # /user writes + preference reads/writes
+    read_rate_limit: str = "120/minute"  # GET /analyze polling + progress init
     enable_stems: bool = True
     log_level: str = "INFO"
 
