@@ -249,9 +249,7 @@ async def run_analysis_pipeline(
                 # on a local model can take a minute+. Announce it BEFORE the
                 # wait so the bar advances and the message explains the pause —
                 # otherwise progress sits at 65% looking stuck.
-                await _milestone(
-                    "llm_start", 70, "Writing theory & instrument guide (local model)…"
-                )
+                await _milestone("llm_start", 70, "Writing theory & instrument guide…")
             elif state.get("chords") is not None:
                 await _milestone("features", 55, "Detected chords, key & tempo…")
             elif state.get("audio_path"):
