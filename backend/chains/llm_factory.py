@@ -404,10 +404,19 @@ def build_structured_llm(schema: Any, temperature: float = 0.2) -> Runnable:
     chains hit when a fallback provider is configured: ``RunnableWithFallbacks``
     has no ``with_structured_output``, so the binding must happen on the bare
     models first.
+
+    ``method="function_calling"`` is used instead of the default
+    (``json_schema``/``response_format``) because the default mode breaks on
+    several providers: Groq returns 400 "does not support response_format",
+    and some OpenRouter free models return a body with no ``choices`` (the
+    OpenAI parse path then throws ``NoneType is not iterable``). Tool/function
+    calling is supported by every provider we target (Gemini, Groq, OpenRouter,
+    OpenAI), so it's the portable choice and keeps the verified Gemini path
+    working too.
     """
     build_primary, build_fallback = _provider_builders(temperature)
 
     def _transform(model: BaseChatModel) -> Runnable:
-        return model.with_structured_output(schema)
+        return model.with_structured_output(schema, method="function_calling")
 
     return _bind_before_fallback(build_primary, build_fallback, transform=_transform)

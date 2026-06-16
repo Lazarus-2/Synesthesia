@@ -71,8 +71,17 @@ class TestLLMFactory:
             return m
 
         monkeypatch.setattr(llm_factory, "_build_provider_llm", _fake_build_provider_llm)
+        # Isolate from ambient .env: with a fallback provider configured,
+        # build_chat_llm would wrap the mock in .with_fallbacks() and fail
+        # Runnable validation. This test only cares about the primary provider.
+        monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "")
+        from backend.config import get_settings as _gs
+        _gs.cache_clear()
 
-        llm_factory.build_chat_llm(temperature=0.7, provider="anthropic", model="claude-x")
+        try:
+            llm_factory.build_chat_llm(temperature=0.7, provider="anthropic", model="claude-x")
+        finally:
+            _gs.cache_clear()
         assert captured.get("provider") == "anthropic", (
             f"Expected provider='anthropic', got {captured.get('provider')!r}"
         )
@@ -89,6 +98,9 @@ class TestLLMFactory:
 
         # Force the global provider to a known value via env var.
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
+        # Isolate from ambient .env's fallback (else the mock primary gets
+        # wrapped in .with_fallbacks() and fails Runnable validation).
+        monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "")
         # Clear the settings cache so our env var takes effect.
         from backend.config import get_settings as _gs
         _gs.cache_clear()
@@ -357,7 +369,7 @@ class TestPublicBinders:
             # A stand-in bare model: only the binding methods chains use.
             m = MagicMock(name=tag)
 
-            def _wso(schema):
+            def _wso(schema, method=None):  # method= mirrors the real signature
                 structured_calls.append(schema)
                 return RunnableLambda(lambda _x: _Schema(answer=tag))
 
