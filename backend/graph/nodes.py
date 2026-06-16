@@ -104,7 +104,11 @@ def ingest_node(state: AnalysisState) -> dict:
         # ``audio_source`` field tells downstream nodes whether they
         # have real audio to analyze or whether the frontend will play
         # via Spotify's iframe embed.
-        from backend.ingestion.url_resolver import classify_url, normalize_to_www_youtube
+        from backend.ingestion.url_resolver import (
+            classify_url,
+            normalize_to_www_youtube,
+            youtube_search_query,
+        )
 
         platform = classify_url(youtube_url)
 
@@ -232,8 +236,20 @@ def ingest_node(state: AnalysisState) -> dict:
             if ffmpeg_location:
                 ydl_opts["ffmpeg_location"] = ffmpeg_location
 
+            # A youtube.com/results?search_query=… page isn't downloadable;
+            # turn it into a yt-dlp search that grabs the top video.
+            search_q = youtube_search_query(youtube_url)
+            download_target = f"ytsearch1:{search_q}" if search_q else youtube_url
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=True)
+                info = ydl.extract_info(download_target, download=True)
+                # ytsearch returns a playlist dict — unwrap to the single entry
+                # so the id/title/uploader handling below works for both paths.
+                if info and info.get("entries"):
+                    entries = [e for e in info["entries"] if e]
+                    if not entries:
+                        raise ValueError("YouTube search returned no results")
+                    info = entries[0]
                 # Guard: yt-dlp should always return an info dict with an id,
                 # but be explicit so we surface an actionable error rather than
                 # an obscure KeyError if the response is malformed.

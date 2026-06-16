@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any
 
@@ -78,6 +79,39 @@ async def search_deezer(q: str, limit: int = 10) -> list[dict[str, Any]]:
     return out
 
 
+_YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
+# Lucene metacharacters that break a bare MB query if the user types them.
+_LUCENE_SPECIAL_RE = re.compile(r'[":\\/(){}\[\]^~*?!]')
+
+
+def build_mb_query(q: str) -> str:
+    """Build a MusicBrainz Lucene query matching the terms against BOTH the
+    recording title and the artist name (Phase: live-fix B).
+
+    The old bare ``query=radiohead`` matched only recording *titles*, so
+    searching an artist returned obscure songs literally titled with the
+    artist's name. Searching ``artist:(…)`` as well makes "radiohead" return
+    Radiohead's recordings. A trailing 4-digit year (e.g. "creep 1992") is
+    pulled out and applied as a first-release-date filter so users can narrow
+    by year.
+    """
+    terms = q.strip()
+    year_m = _YEAR_RE.search(terms)
+    year = year_m.group(1) if year_m else None
+    if year:
+        terms = (terms[: year_m.start()] + terms[year_m.end() :]).strip()
+    safe = _LUCENE_SPECIAL_RE.sub(" ", terms).strip()
+    if not safe:
+        # Year-only (or all-special) query — fall back to the raw text.
+        safe = terms or q.strip()
+    query = f"(recording:({safe}) OR artist:({safe}))"
+    if year:
+        # MB recording search uses ``date`` (release date) for the year — the
+        # ``firstreleasedate`` field returns 0 hits here and would break search.
+        query += f" AND date:{year}"
+    return query
+
+
 async def search_musicbrainz(q: str, limit: int = 10) -> list[dict[str, Any]]:
     """Search MusicBrainz for recordings. 1 req/sec rate limit honoured."""
     await _mb_throttle()
@@ -87,7 +121,7 @@ async def search_musicbrainz(q: str, limit: int = 10) -> list[dict[str, Any]]:
         ) as client:
             r = await client.get(
                 f"{_MB_BASE}/recording",
-                params={"query": q, "limit": limit, "fmt": "json"},
+                params={"query": build_mb_query(q), "limit": limit, "fmt": "json"},
             )
         r.raise_for_status()
         data = r.json()
@@ -148,4 +182,13 @@ async def merged_search(q: str, limit: int = 10) -> list[dict[str, Any]]:
             existing["sources"] = sorted(
                 {existing.get("source", ""), item.get("source", "")} - {""}
             )
-    return list(by_key.values())[:limit]
+    # Sort by relevance so the best matches surface first instead of raw
+    # source-insertion order. Deezer ``rank`` (~0..1e6, popularity) and MB
+    # ``score`` (0..100, match quality) are each normalized to [0,1].
+    def _relevance(item: dict[str, Any]) -> float:
+        rank = item.get("rank")
+        if rank:
+            return min(1.0, rank / 1_000_000)
+        return (item.get("score") or 0) / 100.0
+
+    return sorted(by_key.values(), key=_relevance, reverse=True)[:limit]

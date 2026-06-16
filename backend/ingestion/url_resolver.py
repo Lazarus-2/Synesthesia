@@ -12,7 +12,7 @@ upstream by the SSRF + host allowlist guard.
 from __future__ import annotations
 
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 Platform = Literal["youtube", "youtube_music", "spotify", "unknown"]
 
@@ -61,3 +61,21 @@ def normalize_to_www_youtube(url: str) -> str:
     if (parsed.hostname or "").lower() == "music.youtube.com":
         return parsed._replace(netloc="www.youtube.com").geturl()
     return url
+
+
+def youtube_search_query(url: str) -> str | None:
+    """Return the search terms from a ``youtube.com/results?search_query=...`` URL.
+
+    The search-songs flow (and the "search YouTube" paste path) sends a
+    results-page URL, which yt-dlp cannot download (it's a non-downloadable
+    tab/playlist → "This playlist type is unviewable"). ``ingest_node``
+    converts the extracted query into a ``ytsearch1:<query>`` target so
+    yt-dlp searches YouTube and grabs the top video. Returns ``None`` for a
+    normal watch/share URL (left untouched).
+    """
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host not in _YOUTUBE_HOSTS or parsed.path.rstrip("/") != "/results":
+        return None
+    query = parse_qs(parsed.query).get("search_query", [""])[0].strip()
+    return query or None
