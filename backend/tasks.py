@@ -277,8 +277,11 @@ async def run_analysis_pipeline(
         )
 
         analysis = SongAnalysis(
-            title=_clean_audio_title(audio_path, youtube_url),
-            artist="Local Engine" if audio_path else "YouTube Stream",
+            # Prefer the real title/artist the ingest node pulled from yt-dlp /
+            # AcoustID / Spotify (threaded through state); fall back to the
+            # filename-derived name only when enrichment found nothing.
+            title=result.get("title") or _clean_audio_title(audio_path, youtube_url),
+            artist=result.get("artist") or ("Local Engine" if audio_path else "YouTube Stream"),
             duration=float(chords[-1].end) if chords else 180.0,
             key=result.get("key", "C major"),
             key_confidence=result.get("key_confidence"),

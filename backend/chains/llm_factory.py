@@ -399,6 +399,32 @@ def build_chat_llm(
     return _bind_before_fallback(build_primary, build_fallback, transform=_transform)
 
 
+def build_agent_model(
+    temperature: float = 0.7,
+    provider: str | None = None,
+    model: str | None = None,
+) -> BaseChatModel:
+    """Return the bare primary chat model for ``langchain.agents.create_agent``.
+
+    ``create_agent`` requires a real ``BaseChatModel``: it introspects
+    ``model.profile``/``model_name`` and calls ``model.bind_tools(tools, ...)``
+    itself. A pre-composed ``RunnableWithFallbacks`` (what ``build_chat_llm``
+    returns) cannot be passed — it exposes no ``bind_tools``, so the agent
+    factory raises ``'RunnableLambda' object has no attribute 'bind_tools'``;
+    and even if it proxied the call through, the bound result would silently
+    drop the fallback. So the agent uses the *bare primary* model here and lets
+    ``create_agent`` bind the tools.
+
+    Provider fallback for the chat path is preserved one layer up: when the
+    agent run fails, ``stream_aura``/``run_aura`` degrade to ``chat_chain``,
+    which goes through ``build_chat_llm`` and carries the full fallback chain.
+    """
+    build_primary, _build_fallback = _provider_builders(
+        temperature, provider=provider, model=model
+    )
+    return build_primary()
+
+
 def build_structured_llm(schema: Any, temperature: float = 0.2) -> Runnable:
     """Structured-output LLM with provider fallback.
 

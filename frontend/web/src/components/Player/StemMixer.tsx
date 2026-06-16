@@ -128,7 +128,7 @@ export const StemMixer: React.FC = () => {
       </div>
       <p className="text-sm text-on-surface-variant -mt-2">
         {availableStems.length === 0
-          ? "Stem separation hasn't run for this analysis yet — enable it in settings, then re-run."
+          ? "No isolated stems for this track. Stem separation runs the Demucs model on the backend — it isn't installed in this deployment, so vocals/drums/bass/other couldn't be split out."
           : "Adjust individual instrument levels. Stems are streamed independently from the backend."}
       </p>
 

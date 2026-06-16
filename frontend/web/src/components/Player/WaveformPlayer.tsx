@@ -129,7 +129,21 @@ export const WaveformPlayer: React.FC = () => {
 
         <button
           className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-[0_4px_20px_rgba(255,181,71,0.3)] hover:scale-105 active:scale-95 transition-transform"
-          onClick={() => setIsPlaying(!isPlaying)}
+          onClick={async () => {
+            // AudioEngine reroutes playback through Tone's Web Audio graph
+            // (createMediaElementSource disconnects the element's default
+            // speaker output). Browsers start that context suspended, so
+            // ws.play() would run silently — resume it on this user gesture.
+            if (!isPlaying) {
+              try {
+                const tone = await import("tone");
+                await tone.start();
+              } catch {
+                /* no pitch bridge this session — element's default route plays */
+              }
+            }
+            setIsPlaying(!isPlaying);
+          }}
         >
           <span
             className="material-symbols-outlined text-on-primary-container text-3xl"

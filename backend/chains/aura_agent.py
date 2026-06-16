@@ -23,7 +23,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from sse_starlette.sse import ServerSentEvent
 
 from backend.chains import chat_chain
-from backend.chains.llm_factory import build_chat_llm
+from backend.chains.llm_factory import build_agent_model
 from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -267,11 +267,16 @@ def build_aura_agent(tools: list | None = None, tutor_mode: bool = False):  # no
     """Construct the AURA react agent (spec §4).
 
     Uses ``langchain.agents.create_agent`` (the non-deprecated successor to
-    ``langgraph.prebuilt.create_react_agent``).  The model is built with tools
-    bound *before* the provider fallback composition
-    (``build_chat_llm(..., tools=tools)``) so the fallback model is tool-aware
-    too.  ``checkpointer=None`` because history is injected explicitly from
-    Mongo ``chat_sessions`` (spec §6), not persisted in-graph.
+    ``langgraph.prebuilt.create_react_agent``).  ``create_agent`` requires a
+    bare ``BaseChatModel`` and binds the tools itself, so we pass
+    ``build_agent_model(...)`` (the bare primary model) rather than the
+    fallback-composed runnable from ``build_chat_llm`` — passing the latter
+    raised ``'RunnableLambda' object has no attribute 'bind_tools'`` because
+    ``RunnableWithFallbacks`` exposes no ``bind_tools``. Provider fallback is
+    preserved by the ``stream_aura``/``run_aura`` degrade path (``chat_chain``
+    carries the full fallback chain).  ``checkpointer=None`` because history is
+    injected explicitly from Mongo ``chat_sessions`` (spec §6), not persisted
+    in-graph.
 
     I-1 fix: NO static prompt is passed here — the full grounded system prompt
     (persona + rules + FACTS) is injected per-call as messages[0] via
@@ -288,9 +293,9 @@ def build_aura_agent(tools: list | None = None, tutor_mode: bool = False):  # no
 
     temperature = float(getattr(get_settings(), "creative_temperature", 0.7) or 0.7)
     s = get_settings()
-    model = build_chat_llm(
+    # Bare primary model — create_agent binds ``tools`` itself (see docstring).
+    model = build_agent_model(
         temperature,
-        tools=tools,
         provider=s.effective_chat_provider,
         model=s.effective_chat_model,
     )

@@ -1433,12 +1433,14 @@ async def get_user_profile(
 async def chat(
     request: Request,
     payload: ChatRequest,
-    principal: UserPrincipal = Depends(require_user),
+    principal: UserPrincipal | None = Depends(current_user),
     db=Depends(get_mongodb),
 ) -> ChatResponse:
-    """Grounded AURA chat (non-stream). Identity from the JWT; session +
-    history are server-owned; over-budget turns refuse before the model."""
-    user_id = principal.user_id
+    """Grounded AURA chat (non-stream). Identity from the JWT when present;
+    in anonymous mode (require_auth=False) chat works without login under a
+    shared "anonymous" identity. session + history are server-owned;
+    over-budget turns refuse before the model."""
+    user_id = principal.user_id if principal is not None else "anonymous"
     settings = get_settings()
 
     # 1. Resolve a server-owned session id (generate if absent; ownership-check
@@ -1517,13 +1519,13 @@ async def chat(
 async def chat_stream(
     request: Request,
     payload: ChatRequest,
-    principal: UserPrincipal = Depends(require_user),
+    principal: UserPrincipal | None = Depends(current_user),
     db=Depends(get_mongodb),
 ):
-    """Grounded AURA chat (SSE). Same resolution as /chat; streams
-    context/tool/chunk/done/error frames from stream_aura via
-    EventSourceResponse (client-disconnect + keepalive for free)."""
-    user_id = principal.user_id
+    """Grounded AURA chat (SSE). Same resolution as /chat (anonymous-allowed
+    when require_auth=False); streams context/tool/chunk/done/error frames
+    from stream_aura via EventSourceResponse (client-disconnect + keepalive)."""
+    user_id = principal.user_id if principal is not None else "anonymous"
     settings = get_settings()
 
     history: list[dict] = []

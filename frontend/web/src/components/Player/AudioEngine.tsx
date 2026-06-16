@@ -104,18 +104,59 @@ export const AudioEngine: React.FC = () => {
         console.warn("AudioEngine: SoundTouch worklet unavailable:", err);
       }
 
-      // Wire the graph. We always pipe through PitchShift so the transpose
-      // stepper takes effect; SoundTouchNode is inserted between source +
-      // PitchShift when present.
+      // Wire the output graph. ``createMediaElementSource`` has already
+      // detached the <audio> element from the speakers, so the source MUST end
+      // up connected to a destination or playback is silent. We try richer
+      // graphs first and fall back: standardized-audio-context (Tone 15) refuses
+      // to connect nodes created outside its graph — notably a *native*
+      // ``AudioWorkletNode`` — throwing "a value with the given key could not be
+      // found". That used to abort wiring entirely and leave the source dangling
+      // (the "play does nothing" bug). Each strategy below is attempted in order;
+      // the first that connects without throwing wins.
+      const pitchShiftNode = pitchShift as unknown as AudioNode;
+      const strategies: Array<[string, () => void]> = [];
       if (soundTouchNode) {
-        src.connect(soundTouchNode);
-        const pitchShiftNode = pitchShift as unknown as AudioNode;
-        soundTouchNode.connect(pitchShiftNode);
-      } else {
-        const pitchShiftNode = pitchShift as unknown as AudioNode;
-        src.connect(pitchShiftNode);
+        // Full chain: source → SoundTouch (pitch-lock) → PitchShift → out.
+        strategies.push(["soundtouch+pitch", () => {
+          src.connect(soundTouchNode!);
+          soundTouchNode!.connect(pitchShiftNode);
+          pitchShift.toDestination();
+        }]);
       }
-      pitchShift.toDestination();
+      // Pitch only: source → PitchShift → out (transpose stepper still works).
+      // Tone nodes are NOT raw AudioNodes, so ``src.connect(pitchShift)`` throws
+      // inside standardized-audio-context ("value with the given key could not
+      // be found"). ``Tone.connect`` bridges a standardized/native source into a
+      // Tone node correctly.
+      strategies.push(["pitch", () => {
+        tone.connect(src, pitchShift);
+        pitchShift.toDestination();
+      }]);
+      // Last resort: source → destination (plain playback, no FX) so audio is
+      // always audible even if the Tone graph is unusable in this browser.
+      strategies.push(["direct", () => {
+        src.connect(ctx.destination);
+      }]);
+
+      let wired = "";
+      for (const [name, wire] of strategies) {
+        try {
+          wire();
+          wired = name;
+          break;
+        } catch (err) {
+          console.warn(`AudioEngine: '${name}' wiring failed, trying next:`, err);
+          try { src.disconnect(); } catch { /* */ }
+          try { soundTouchNode?.disconnect(); } catch { /* */ }
+          try { pitchShift.disconnect(); } catch { /* */ }
+        }
+      }
+      // The worklet is only in the graph if the full chain wired; otherwise drop
+      // the reference so the pitch-lock toggle doesn't try to use a dead node.
+      if (wired !== "soundtouch+pitch") soundTouchNode = null;
+      if (!wired) {
+        console.error("AudioEngine: all wiring strategies failed; playback may be silent");
+      }
 
       graphRef.current = {
         ctx,

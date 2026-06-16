@@ -126,15 +126,16 @@ class TestLLMFactory:
             f"Expected provider='ollama' (global default), got {captured.get('provider')!r}"
         )
 
-    def test_build_aura_agent_passes_effective_chat_provider_to_build_chat_llm(self, monkeypatch):
+    def test_build_aura_agent_passes_effective_chat_provider_to_build_agent_model(self, monkeypatch):
         """Bug-2 fix: build_aura_agent must forward effective_chat_provider /
-        effective_chat_model to build_chat_llm, so CHAT_PROVIDER/CHAT_MODEL env
-        vars actually affect the chat path."""
+        effective_chat_model to build_agent_model, so CHAT_PROVIDER/CHAT_MODEL
+        env vars actually affect the chat path. (build_agent_model returns the
+        bare primary model; create_agent binds the tools itself.)"""
         from backend.chains import aura_agent
 
         captured: dict = {}
 
-        def _fake_build_chat_llm(temperature=0.7, tools=None, provider=None, model=None):
+        def _fake_build_agent_model(temperature=0.7, provider=None, model=None):
             captured["provider"] = provider
             captured["model"] = model
             from unittest.mock import MagicMock
@@ -148,7 +149,7 @@ class TestLLMFactory:
             "chat_tools_enabled": True,
         })()
 
-        monkeypatch.setattr(aura_agent, "build_chat_llm", _fake_build_chat_llm)
+        monkeypatch.setattr(aura_agent, "build_agent_model", _fake_build_agent_model)
         monkeypatch.setattr(aura_agent, "get_settings", lambda: fake_settings)
 
         try:
