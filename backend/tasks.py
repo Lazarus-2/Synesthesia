@@ -221,11 +221,35 @@ async def run_analysis_pipeline(
     await _progress(0, "Queued for analysis", "queued")
 
     try:
-        await _progress(5, "Loading audio file...")
-        result = await graph.ainvoke(
+        await _progress(5, "Loading audio…" if audio_path else "Fetching audio…")
+        # Stream the graph step-by-step (stream_mode="values" yields the full
+        # cumulative state after each node) so the UI advances through real
+        # milestones instead of sitting at 5% until the whole pipeline returns.
+        # The last yielded value is the final state (== ainvoke's return).
+        result: dict = initial_state
+        emitted: set[str] = set()
+
+        async def _milestone(flag: str, pct: int, msg: str) -> None:
+            if flag not in emitted:
+                emitted.add(flag)
+                await _progress(pct, msg)
+
+        async for state in graph.astream(
             initial_state,
             config={"configurable": {"thread_id": job_id}},
-        )
+            stream_mode="values",
+        ):
+            result = state
+            # Order matters: check the latest-completed stage first.
+            if state.get("instrument_guide") is not None or state.get("theory") is not None:
+                await _milestone("llm", 75, "Writing theory & instrument guide…")
+            elif state.get("roman") is not None:
+                await _milestone("roman", 65, "Mapping Roman numerals…")
+            elif state.get("chords") is not None:
+                await _milestone("features", 55, "Detected chords, key & tempo…")
+            elif state.get("audio_path"):
+                await _milestone("ingested", 30, "Audio ready — extracting features…")
+
         await _progress(80, "Building analysis results...")
 
         from backend.graph.status import derive_status

@@ -145,9 +145,25 @@ export const AnalyzingView: React.FC = () => {
               <h2 className="font-headline text-2xl font-medium text-on-surface mb-2">
                 {jobMessage || "Processing..."}
               </h2>
-              <p className="text-on-surface-variant flex items-center justify-center gap-2">
+              {/* Visible progress bar — determinate fill (jobProgress%) with a
+                  shimmer sweep so it reads as "working" even while the backend
+                  percentage is static (e.g. during a long YouTube download). */}
+              <div
+                className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden mt-4 mb-3"
+                role="progressbar"
+                aria-valuenow={Math.round(jobProgress)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Analysis progress"
+              >
+                <div
+                  className="progress-fill progress-shimmer relative h-full rounded-full bg-gradient-to-r from-primary to-tertiary-container"
+                  style={{ width: `${Math.max(4, Math.min(100, jobProgress))}%` }}
+                />
+              </div>
+              <p className="text-on-surface-variant flex items-center justify-center gap-2 tabular-nums">
                 <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
-                {jobProgress > 0 ? `${jobProgress}% complete` : "Starting analysis..."}
+                {jobProgress > 0 ? `${Math.round(jobProgress)}% complete` : "Starting analysis…"}
               </p>
             </>
           )}
