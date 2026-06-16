@@ -78,7 +78,10 @@ export const UploadModal: React.FC = () => {
     setSubmitError(null);
     try {
       const data = await apiPostForm<AnalyzeResponse>("/analyze", form);
-      if (audioUrl) setAudioFileUrl(audioUrl);
+      // Uploads pass a local blob URL (instant playback); URL/search analyses
+      // pass none — reset to null so the store fills it from the backend
+      // /audio/{jobId} on done instead of reusing a previous song's audio.
+      setAudioFileUrl(audioUrl ?? null);
       if (data.status === "done" && data.analysis) {
         useAnalysisStore.getState().setAnalysis(data.analysis);
       } else if (data.job_id) {

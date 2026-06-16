@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { SongAnalysis, InstrumentGuide } from '../types';
-import { openProgressStream } from '../lib/apiClient';
+import { openProgressStream, API_V1 } from '../lib/apiClient';
 import { useToastStore } from './useToastStore';
+import { usePlayerStore } from './usePlayerStore';
 
 export type JobStatus = 'idle' | 'queued' | 'processing' | 'done' | 'error';
 
@@ -70,6 +71,14 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           analysis: d.analysis ?? null,
           instrumentGuide: d.instrument_guide ?? null,
         });
+        // Wire the player to the backend-served audio so YouTube/search
+        // analyses actually play (the file lives at /audio/{jobId}). Uploads
+        // already set a local blob URL in submitAnalyze — don't clobber it.
+        const player = usePlayerStore.getState();
+        const jid = get().jobId;
+        if (!player.audioFileUrl && jid) {
+          player.setAudioFileUrl(`${API_V1}/audio/${jid}`);
+        }
         get().stopProgressStream();
       },
       onError: (data) => {
