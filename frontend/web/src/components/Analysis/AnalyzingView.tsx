@@ -160,7 +160,14 @@ export const AnalyzingView: React.FC = () => {
           {isError ? (
             <>
               <h2 className="font-headline text-2xl font-medium text-error mb-2">Analysis Failed</h2>
-              <p className="text-on-surface-variant">{jobMessage}</p>
+              <p className="text-on-surface-variant mb-6">{jobMessage}</p>
+              <button
+                type="button"
+                onClick={() => useAnalysisStore.getState().setJobStatus("idle")}
+                className="px-6 py-3 primary-gradient text-on-primary rounded-full font-semibold text-sm tracking-wider uppercase hover:opacity-90 transition-opacity"
+              >
+                Try another song
+              </button>
             </>
           ) : (
             <>

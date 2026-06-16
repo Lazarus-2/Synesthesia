@@ -60,11 +60,12 @@ export default function HomeClient() {
     );
   }
 
-  // Analyzing overlay
+  // Analyzing overlay. Render ONLY AnalyzingView — UploadModal is an opaque
+  // fixed z-50 layer and (since `analysis` is still null while processing) it
+  // would render ON TOP of the z-40 AnalyzingView, hiding the progress bar.
   if (isProcessing) {
     return (
       <>
-        <UploadModal />
         <AnalyzingView />
         <ToastContainer />
       </>
