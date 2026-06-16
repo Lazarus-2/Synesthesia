@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 
 const STEPS = [
@@ -31,6 +31,28 @@ function getActiveStep(progress: number): number {
 
 export const AnalyzingView: React.FC = () => {
   const { jobStatus, jobProgress, jobMessage } = useAnalysisStore();
+
+  // Trickle: backend milestones are coarse and some stages (the local-model
+  // LLM) take a minute+, so the raw % can sit still. A timer eases a
+  // *displayed* value toward the next milestone (capped at 95) so the bar
+  // keeps visibly moving and never looks frozen. All updates happen inside
+  // the interval callback (no synchronous setState in an effect body): it
+  // snaps up to a real milestone, trickles between them, and resets when a
+  // new job starts (progress jumps back down).
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    if (jobStatus !== "queued" && jobStatus !== "processing") return;
+    const id = setInterval(() => {
+      setShown((s) => {
+        if (jobProgress < s - 5) return jobProgress; // new job → reset
+        if (jobProgress > s) return jobProgress; // real milestone → snap up
+        const ceiling = Math.min(jobProgress + 12, 95);
+        return s >= ceiling ? s : Math.min(ceiling, s + 0.4);
+      });
+    }, 350);
+    return () => clearInterval(id);
+  }, [jobStatus, jobProgress]);
 
   // Only show when actively processing
   if (jobStatus === "idle" || jobStatus === "done") return null;
@@ -151,19 +173,19 @@ export const AnalyzingView: React.FC = () => {
               <div
                 className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden mt-4 mb-3"
                 role="progressbar"
-                aria-valuenow={Math.round(jobProgress)}
+                aria-valuenow={Math.round(shown)}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label="Analysis progress"
               >
                 <div
                   className="progress-fill progress-shimmer relative h-full rounded-full bg-gradient-to-r from-primary to-tertiary-container"
-                  style={{ width: `${Math.max(4, Math.min(100, jobProgress))}%` }}
+                  style={{ width: `${Math.max(4, Math.min(100, shown))}%` }}
                 />
               </div>
               <p className="text-on-surface-variant flex items-center justify-center gap-2 tabular-nums">
                 <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
-                {jobProgress > 0 ? `${Math.round(jobProgress)}% complete` : "Starting analysis…"}
+                {shown > 0 ? `${Math.round(shown)}% complete` : "Starting analysis…"}
               </p>
             </>
           )}
