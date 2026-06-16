@@ -140,9 +140,12 @@ def _bind_before_fallback(
 _PROVIDER_DEFAULTS: dict[str, str] = {
     "openai": "gpt-5.3-instant",
     "anthropic": "claude-sonnet-4-20250514",
-    "gemini": "gemini-3.1-flash",
+    # gemini-2.5-flash is the available flash model; gemini-3.1-flash 404s.
+    "gemini": "gemini-2.5-flash",
     "groq": "llama-3.3-70b-versatile",
-    "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
+    # gpt-oss-20b:free reliably supports structured output; the llama 70B
+    # free pool 429s frequently.
+    "openrouter": "openai/gpt-oss-20b:free",
     "ollama": "qwen3:8b",
 }
 
