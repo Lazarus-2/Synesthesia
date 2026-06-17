@@ -1013,8 +1013,10 @@ async def export_midi(
         if result is None or not out_midi.exists():
             raise HTTPException(
                 status_code=503,
-                detail="MIDI transcription failed (basic-pitch missing or errored). "
-                "Install with `pip install '.[audio-heavy]'`.",
+                detail="MIDI transcription is unavailable. It needs Spotify's "
+                "basic-pitch, which can't be installed on Python 3.12 "
+                "(it pins tensorflow<2.15.1). Run the worker on Python 3.11 "
+                "with `pip install -e '.[midi]'` to enable it.",
             )
     return FileResponse(
         out_midi,

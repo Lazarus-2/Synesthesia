@@ -26,12 +26,12 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
         logger.info(f"Stems already exist in {out_dir}")
         return stem_paths
 
-    # Demucs is now lazy-loaded via the registry — first call in this
-    # process builds the Separator (one-time cost), subsequent calls reuse it.
+    # Demucs is lazy-loaded via the registry — first call in this process
+    # builds + downloads the model (one-time cost), subsequent calls reuse it.
     try:
         from backend.ml import registry as ml_registry
 
-        sep = ml_registry.get("demucs")
+        model = ml_registry.get("demucs")
     except (ImportError, ModuleNotFoundError):
         logger.warning("demucs not installed, skipping stem separation")
         return {}
@@ -42,18 +42,42 @@ def separate_stems(audio_path: str | Path, out_dir: str | Path) -> dict[str, Pat
     logger.info(f"Running demucs on {audio_path}")
 
     try:
-        # separate_audio_file returns (origin, dict_of_sources)
-        _, sources = sep.separate_audio_file(audio_path)
+        import librosa
+        import numpy as np
+        import soundfile as sf
+        import torch
+        from demucs.apply import apply_model
 
-        import torchaudio
+        # IMPORTANT: load/save WITHOUT demucs.audio — its AudioFile shells out
+        # to ``ffprobe``, which isn't installed here (imageio-ffmpeg ships
+        # ffmpeg but not ffprobe). librosa reads the staged WAV via soundfile,
+        # resamples to the model rate, and we write stems with soundfile too.
+        y, _sr = librosa.load(str(audio_path), sr=model.samplerate, mono=False)
+        arr = np.asarray(y, dtype="float32")
+        if arr.ndim == 1:
+            arr = np.stack([arr, arr])  # mono -> stereo
+        wav = torch.from_numpy(arr)
+        if wav.shape[0] == 1:
+            wav = wav.repeat(model.audio_channels, 1)
+        elif wav.shape[0] > model.audio_channels:
+            wav = wav[: model.audio_channels]
 
-        for stem_name, tensor in sources.items():
-            if stem_name in stem_paths:
-                # tensor shape is [channels, samples]
-                torchaudio.save(str(stem_paths[stem_name]), tensor, sep.samplerate)
+        # demucs's standard per-mix normalisation (subtract mean / divide by std).
+        ref = wav.mean(0)
+        wav = (wav - ref.mean()) / (ref.std() + 1e-8)
 
-        return stem_paths
+        with torch.no_grad():
+            est = apply_model(model, wav[None], device="cpu", progress=False)[0]
+        est = est * ref.std() + ref.mean()
+
+        # ``model.sources`` is the channel order, e.g. ['drums','bass','other','vocals'].
+        for name, source in zip(model.sources, est):
+            if name in stem_paths:
+                # [channels, samples] -> [samples, channels] for soundfile.
+                sf.write(str(stem_paths[name]), source.cpu().numpy().T, model.samplerate)
+
+        return {k: v for k, v in stem_paths.items() if v.exists()}
     except Exception as e:
-        logger.error(f"Demucs failed: {e}")
+        logger.error(f"Demucs failed: {e}", exc_info=True)
         # Return whatever we generated or empty dict if nothing
         return {k: v for k, v in stem_paths.items() if v.exists()}

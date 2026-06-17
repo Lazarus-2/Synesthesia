@@ -48,7 +48,21 @@ export const WaveformPlayer: React.FC = () => {
         setDuration(ws.getDuration());
         setWavesurfer(ws);
       });
-      ws.on("audioprocess", () => setCurrentTime(ws.getCurrentTime()));
+      // ``audioprocess`` fires ~60×/sec. Pushing every tick into the store
+      // re-renders every currentTime subscriber (section ribbon, chord strip,
+      // chord diagram, labels) at 60fps — the jank the user reported. The
+      // waveform cursor is drawn natively by WaveSurfer (already smooth), so
+      // React only needs the time for labels + chord highlighting; ~10/sec is
+      // plenty. Throttle to one store write per 100ms.
+      let lastTick = 0;
+      ws.on("audioprocess", () => {
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        if (now - lastTick >= 100) {
+          lastTick = now;
+          setCurrentTime(ws.getCurrentTime());
+        }
+      });
+      // Seeks are discrete + need an immediate label update.
       ws.on("seeking", () => setCurrentTime(ws.getCurrentTime()));
       ws.on("finish", () => setIsPlaying(false));
       wsRef.current = ws;

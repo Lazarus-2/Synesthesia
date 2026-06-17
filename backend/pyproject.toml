@@ -104,11 +104,22 @@ providers = [
     "langchain-google-genai>=4.0.0",
 ]
 
-# Heavy audio ML (demucs for stems, basic-pitch for MIDI). These pull
-# torch + tensorflow respectively; gate behind an extra so the CI lint
-# job doesn't drag them in.
+# Heavy audio ML. ``demucs`` (stem separation) pulls torch — install CPU
+# torch first to avoid the multi-GB CUDA wheels:
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio
+#   pip install -e ".[audio-heavy]"
+# Stem separation loads/saves audio via librosa+soundfile (NOT demucs.audio,
+# which needs an ffprobe binary that isn't bundled).
 audio-heavy = [
     "demucs>=4.0.1",
+]
+
+# MIDI transcription (Spotify basic-pitch). NOTE: basic-pitch 0.4.0 hard-pins
+# ``tensorflow<2.15.1`` and an old numpy, neither of which has a Python 3.12
+# wheel — so it CANNOT be installed on 3.12. Run the worker on Python 3.11 to
+# enable MIDI, or leave it out (the /midi endpoint degrades to a 503). Kept as
+# a separate extra so ``audio-heavy`` stays installable on 3.12.
+midi = [
     "basic-pitch>=0.4.0",
 ]
 

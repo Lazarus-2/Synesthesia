@@ -8,30 +8,38 @@ import { ChordDiagram } from "../../types";
 import { transposeChord } from "../../lib/music";
 import { CapoWhisperer } from "./CapoWhisperer";
 import { MIDIDownloadMenu } from "./MIDIDownloadMenu";
+import { PianoDiagram } from "./PianoDiagram";
 
 const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
   // Guard: backend may set no_voicing=true when no playable shape exists.
   // Also guard missing diagram or missing frets array.
   if (!diagram || diagram.no_voicing || !diagram.frets) {
     return (
-      <div className="w-full aspect-[3/4] bg-surface-container-highest rounded-lg border border-white/10 p-4 flex items-center justify-center text-on-surface-variant text-sm">
+      <div className="w-full aspect-[3/4] bg-surface-container-highest rounded-xl border border-white/10 p-4 flex items-center justify-center text-on-surface-variant text-sm text-center">
         {diagram?.no_voicing ? "No voicing available for this chord" : "No diagram available"}
       </div>
     );
   }
 
   const { frets, fingers } = diagram;
-  
+
+  // String count is derived from the data: guitar=6, ukulele/bass=4. The old
+  // layout hardcoded 6 strings + ``/5`` spacing, so ukulele/bass rendered with
+  // the wrong number of strings and misplaced dots.
+  const stringCount = frets.length;
+  const denom = Math.max(1, stringCount - 1);
+  const leftPct = (i: number) => `calc(12.5% + (75% * ${i / denom}))`;
+
   // Find the minimum fret to determine if we need to show a specific fret range
-  const playedFrets = frets.filter(f => f > 0);
+  const playedFrets = frets.filter((f) => f > 0);
   const minFret = playedFrets.length > 0 ? Math.min(...playedFrets) : 1;
 
   // Determine if we show the nut (if minFret is 1 or 0)
   const showNut = minFret <= 1;
   const startFret = showNut ? 1 : minFret;
-  
+
   return (
-    <div className="w-full aspect-[3/4] bg-surface-container-highest rounded-lg border border-white/10 p-4 relative flex justify-center overflow-hidden">
+    <div className="w-full aspect-[3/4] bg-surface-container-highest rounded-xl border border-white/10 p-4 relative flex justify-center overflow-hidden">
       {/* Fret Marker if not starting at 1 */}
       {!showNut && (
         <div className="absolute top-2 left-2 text-xs font-bold text-on-surface-variant">
@@ -44,9 +52,9 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
         <div className="absolute top-4 w-3/4 h-2 bg-surface-bright rounded-sm z-10" />
       )}
 
-      {/* Strings (6 for guitar) */}
+      {/* Strings (count derived from the voicing) */}
       <div className="absolute top-6 bottom-4 w-3/4 flex justify-between z-0">
-        {[0, 1, 2, 3, 4, 5].map((s) => (
+        {Array.from({ length: stringCount }).map((_, s) => (
           <div key={s} className="w-px bg-white/20 h-full" />
         ))}
       </div>
@@ -60,27 +68,27 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
 
       {/* X/O markers and finger dots */}
       {frets.map((fret, stringIdx) => {
-        
+
         // Muted string (X)
         if (fret === -1) {
           return (
-            <div 
-              key={`mute-${stringIdx}`} 
-              className="absolute top-1 text-label-sm text-error font-bold z-20"
-              style={{ left: `calc(12.5% + (75% * ${stringIdx / 5}))`, transform: "translateX(-50%)" }}
+            <div
+              key={`mute-${stringIdx}`}
+              className="absolute top-1 text-xs text-error font-bold z-20"
+              style={{ left: leftPct(stringIdx), transform: "translateX(-50%)" }}
             >
               X
             </div>
           );
         }
-        
+
         // Open string (O)
         if (fret === 0) {
           return (
-            <div 
-              key={`open-${stringIdx}`} 
-              className="absolute top-1 text-label-sm text-primary-container font-bold z-20"
-              style={{ left: `calc(12.5% + (75% * ${stringIdx / 5}))`, transform: "translateX(-50%)" }}
+            <div
+              key={`open-${stringIdx}`}
+              className="absolute top-1 text-xs text-primary-container font-bold z-20"
+              style={{ left: leftPct(stringIdx), transform: "translateX(-50%)" }}
             >
               O
             </div>
@@ -92,17 +100,14 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
         // Map to vertical percentage (roughly middle of the fret spaces)
         // 4 frets total, each is 25% height. Middle is at 12.5%, 37.5%, 62.5%, 87.5%
         const topPct = 6 + (relativeFret - 0.5) * ((100 - 10) / 4);
-        
+
         const finger = fingers ? fingers[stringIdx] : null;
 
         return (
-          <div 
+          <div
             key={`dot-${stringIdx}`}
-            className="absolute w-5 h-5 rounded-full bg-secondary-container shadow-[0_0_8px_#571bc1] z-20 flex items-center justify-center text-[10px] font-bold text-white transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2"
-            style={{ 
-              top: `${topPct}%`, 
-              left: `calc(12.5% + (75% * ${stringIdx / 5}))` 
-            }}
+            className="absolute w-5 h-5 rounded-full bg-secondary-container shadow-[0_0_8px_#571bc1] z-20 flex items-center justify-center text-[10px] font-bold text-white transition-all duration-300 -translate-x-1/2 -translate-y-1/2"
+            style={{ top: `${topPct}%`, left: leftPct(stringIdx) }}
           >
             {finger && finger > 0 ? finger : ""}
           </div>
@@ -110,6 +115,12 @@ const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
       })}
     </div>
   );
+};
+
+/** Pick the right diagram renderer for the active instrument. */
+const ChordVisual: React.FC<{ diagram?: ChordDiagram; instrument: string }> = ({ diagram, instrument }) => {
+  if (instrument === "piano") return <PianoDiagram diagram={diagram} />;
+  return <FretboardVisual diagram={diagram} />;
 };
 
 export const PlayPanel: React.FC = () => {
@@ -138,8 +149,13 @@ export const PlayPanel: React.FC = () => {
   // the played shape stays the same; we just display the capo-relative
   // label above it so the user knows what they're sounding.
   const diagram = instrumentGuide?.chord_diagrams?.find((d: ChordDiagram) => d.chord === rawChordName);
-  
-  // Parse strum pattern
+
+  // Active instrument drives which diagram renderer we use. Prefer the matched
+  // diagram's instrument, fall back to the guide's, then guitar.
+  const instrument = diagram?.instrument || instrumentGuide?.instrument || "guitar";
+  const isFretted = instrument === "guitar" || instrument === "ukulele";
+
+  // Parse strum pattern (only meaningful for strummed instruments)
   const strumPattern = instrumentGuide?.strum_pattern || "D . D U . U D U";
   const strums = strumPattern.split(" ");
 
@@ -159,11 +175,12 @@ export const PlayPanel: React.FC = () => {
         </div>
       </div>
 
-      <FretboardVisual diagram={diagram} />
+      <ChordVisual diagram={diagram} instrument={instrument} />
 
-      <CapoWhisperer />
+      {isFretted && <CapoWhisperer />}
 
-      {/* Strumming Pattern */}
+      {/* Strumming Pattern — only for strummed instruments */}
+      {isFretted && (
       <div className="bg-surface-variant/30 rounded-lg p-4 border border-white/5 w-full mt-2">
         <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest mb-4">
           Strum Pattern
@@ -190,6 +207,7 @@ export const PlayPanel: React.FC = () => {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 };

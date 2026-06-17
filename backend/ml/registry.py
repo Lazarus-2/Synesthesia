@@ -65,9 +65,20 @@ def reset_for_tests() -> None:
 
 # ---- Default builders -------------------------------------------------------
 def _build_demucs():
-    from demucs.api import Separator
+    # demucs 4.x: the high-level ``demucs.api.Separator`` is absent from some
+    # published wheels (e.g. the 4.0.1 wheel installed here ships no api.py),
+    # so we use the stable lower-level path — ``pretrained.get_model`` +
+    # ``apply.apply_model`` (see stem_separation.separate_stems).
+    #
+    # "htdemucs" (single transformer model, ~80MB) instead of "htdemucs_ft"
+    # (a 4-model bag, ~1GB and ~4x slower): on CPU the _ft variant is far too
+    # slow for an interactive request. Quality of the single model is still
+    # excellent for the vocals/drums/bass/other split we surface.
+    from demucs.pretrained import get_model
 
-    return Separator(model="htdemucs_ft")
+    model = get_model("htdemucs")
+    model.eval()
+    return model
 
 
 def _build_basic_pitch_path():
