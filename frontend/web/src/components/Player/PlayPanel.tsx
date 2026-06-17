@@ -123,8 +123,50 @@ const ChordVisual: React.FC<{ diagram?: ChordDiagram; instrument: string }> = ({
   return <FretboardVisual diagram={diagram} />;
 };
 
+const INSTRUMENTS: { id: string; icon: string; label: string }[] = [
+  { id: "guitar", icon: "music_note", label: "Guitar" },
+  { id: "piano", icon: "piano", label: "Piano" },
+  { id: "ukulele", icon: "graphic_eq", label: "Ukulele" },
+  { id: "bass", icon: "speaker", label: "Bass" },
+];
+
+/** In-player instrument switcher — re-fetches just the guide for the cached
+ *  song, so the user can flip guitar/piano/uke/bass without re-analysing. */
+const InstrumentSwitcher: React.FC = () => {
+  const instrument = useAnalysisStore((s) => s.instrument);
+  const loading = useAnalysisStore((s) => s.instrumentLoading);
+  const switchInstrument = useAnalysisStore((s) => s.switchInstrument);
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10">
+      {INSTRUMENTS.map((inst) => {
+        const active = inst.id === instrument;
+        return (
+          <button
+            key={inst.id}
+            type="button"
+            disabled={loading}
+            onClick={() => switchInstrument(inst.id)}
+            title={inst.label}
+            aria-label={`Show ${inst.label} voicings`}
+            aria-pressed={active}
+            className={`flex items-center justify-center w-8 h-8 rounded-full transition-all disabled:opacity-50 ${
+              active
+                ? "bg-primary-container text-on-primary-container shadow-[0_0_12px_rgba(255,181,71,0.35)]"
+                : "text-on-surface-variant hover:bg-white/10"
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg" style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}>
+              {inst.icon}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 export const PlayPanel: React.FC = () => {
-  const { analysis, instrumentGuide } = useAnalysisStore();
+  const { analysis, instrumentGuide, instrument } = useAnalysisStore();
   const { currentTime } = usePlayerStore();
   const transpose = usePracticeStore((s) => s.transpose);
 
@@ -150,9 +192,8 @@ export const PlayPanel: React.FC = () => {
   // label above it so the user knows what they're sounding.
   const diagram = instrumentGuide?.chord_diagrams?.find((d: ChordDiagram) => d.chord === rawChordName);
 
-  // Active instrument drives which diagram renderer we use. Prefer the matched
-  // diagram's instrument, fall back to the guide's, then guitar.
-  const instrument = diagram?.instrument || instrumentGuide?.instrument || "guitar";
+  // ``instrument`` is the store's active instrument (source of truth, updated
+  // by the switcher). It drives which diagram renderer we use.
   const isFretted = instrument === "guitar" || instrument === "ukulele";
 
   // Parse strum pattern (only meaningful for strummed instruments)
@@ -174,6 +215,8 @@ export const PlayPanel: React.FC = () => {
           <MIDIDownloadMenu />
         </div>
       </div>
+
+      <InstrumentSwitcher />
 
       <ChordVisual diagram={diagram} instrument={instrument} />
 

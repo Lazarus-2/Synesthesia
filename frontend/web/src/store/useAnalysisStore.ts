@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { SongAnalysis, InstrumentGuide } from '../types';
-import { openProgressStream, API_V1 } from '../lib/apiClient';
+import { SongAnalysis, InstrumentGuide, AnalyzeResponse } from '../types';
+import { apiGet, openProgressStream, API_V1 } from '../lib/apiClient';
 import { useToastStore } from './useToastStore';
 import { usePlayerStore } from './usePlayerStore';
 
@@ -18,6 +18,13 @@ interface AnalysisState {
   analysis: SongAnalysis | null;
   instrumentGuide: InstrumentGuide | null;
   setAnalysis: (analysis: SongAnalysis | null) => void;
+
+  // Active instrument (guitar | piano | ukulele | bass). Lets the user switch
+  // instruments in the player without re-running the whole analysis — the
+  // backend recomputes just the instrument guide for the cached song.
+  instrument: string;
+  instrumentLoading: boolean;
+  switchInstrument: (instrument: string) => Promise<void>;
 
   // Open and close the SSE progress stream
   startProgressStream: (jobId: string) => void;
@@ -41,6 +48,33 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   analysis: null,
   instrumentGuide: null,
   setAnalysis: (analysis) => set({ analysis }),
+
+  instrument: 'guitar',
+  instrumentLoading: false,
+  switchInstrument: async (instrument) => {
+    const jid = get().jobId;
+    if (!jid || instrument === get().instrument) {
+      set({ instrument });
+      return;
+    }
+    set({ instrument, instrumentLoading: true }); // optimistic switch
+    try {
+      const resp = await apiGet<AnalyzeResponse>(
+        `/analyze/${encodeURIComponent(jid)}?instrument=${encodeURIComponent(instrument)}`
+      );
+      set({
+        instrumentGuide: resp.instrument_guide ?? null,
+        instrument: resp.instrument_guide?.instrument || instrument,
+        instrumentLoading: false,
+      });
+    } catch (e) {
+      set({ instrumentLoading: false });
+      useToastStore.getState().error(
+        'Could not load instrument',
+        e instanceof Error ? e.message : 'Please try again.'
+      );
+    }
+  },
 
   startProgressStream: (jobId) => {
     get().stopProgressStream();
@@ -70,6 +104,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           jobMessage: 'Analysis Complete!',
           analysis: d.analysis ?? null,
           instrumentGuide: d.instrument_guide ?? null,
+          instrument: d.instrument_guide?.instrument || 'guitar',
         });
         // Wire the player to the backend-served audio so YouTube/search
         // analyses actually play (the file lives at /audio/{jobId}). Uploads

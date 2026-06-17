@@ -31,6 +31,9 @@ export const StemMixer: React.FC = () => {
     vocals: 80, drums: 100, bass: 70, other: 90,
   });
   const [muted, setMuted] = useState<Record<string, boolean>>({});
+  // Solo: when any stem is soloed, only soloed stems are audible (mute is
+  // ignored while soloing). The classic mixer behaviour.
+  const [soloed, setSoloed] = useState<Record<string, boolean>>({});
 
   // Lazy WebAudio routing — one HTMLAudioElement + GainNode per stem so
   // the user can blend without re-fetching. Created the first time a stem
@@ -44,13 +47,16 @@ export const StemMixer: React.FC = () => {
     [stems],
   );
 
-  // Sync gain to slider values + mute state.
+  // Sync gain to slider values + mute/solo state.
   useEffect(() => {
+    const anySolo = Object.values(soloed).some(Boolean);
     for (const s of availableStems) {
       const gain = gainNodesRef.current[s.id];
-      if (gain) gain.gain.value = muted[s.id] ? 0 : volumes[s.id] / 100;
+      if (!gain) continue;
+      const audible = anySolo ? Boolean(soloed[s.id]) : !muted[s.id];
+      gain.gain.value = audible ? volumes[s.id] / 100 : 0;
     }
-  }, [volumes, muted, availableStems]);
+  }, [volumes, muted, soloed, availableStems]);
 
   // Build the audio graph when stems first arrive.
   useEffect(() => {
@@ -95,6 +101,8 @@ export const StemMixer: React.FC = () => {
     setVolumes((prev) => ({ ...prev, [id]: vol }));
   const toggleMute = (id: string) =>
     setMuted((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleSolo = (id: string) =>
+    setSoloed((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const allPlay = () => {
     for (const el of Object.values(audioElementsRef.current)) {
@@ -135,13 +143,15 @@ export const StemMixer: React.FC = () => {
       <div className="flex flex-col gap-4">
         {STEMS.map((stem) => {
           const isAvailable = Boolean(stems[stem.id]);
-          const vol = muted[stem.id] ? 0 : volumes[stem.id];
+          const anySolo = Object.values(soloed).some(Boolean);
+          const silencedBySolo = anySolo && !soloed[stem.id];
+          const vol = muted[stem.id] || silencedBySolo ? 0 : volumes[stem.id];
           return (
             <div
               key={stem.id}
               className={`glass-panel rounded-xl p-4 flex items-center gap-4 ${
                 isAvailable ? "" : "opacity-40"
-              }`}
+              } ${silencedBySolo ? "opacity-50" : ""}`}
             >
               <button
                 className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-all ${
@@ -174,6 +184,21 @@ export const StemMixer: React.FC = () => {
                   disabled={muted[stem.id] || !isAvailable}
                 />
               </div>
+
+              {/* Solo toggle */}
+              <button
+                onClick={() => isAvailable && toggleSolo(stem.id)}
+                disabled={!isAvailable}
+                aria-pressed={Boolean(soloed[stem.id])}
+                title={soloed[stem.id] ? "Unsolo" : "Solo"}
+                className={`w-9 h-9 rounded-lg text-xs font-bold shrink-0 transition-all ${
+                  soloed[stem.id]
+                    ? "bg-primary-container text-on-primary-container shadow-[0_0_10px_rgba(255,181,71,0.35)]"
+                    : "bg-white/5 text-on-surface-variant hover:bg-white/10"
+                } disabled:opacity-40`}
+              >
+                S
+              </button>
             </div>
           );
         })}
