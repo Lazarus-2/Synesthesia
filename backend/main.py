@@ -654,6 +654,23 @@ async def get_analysis(
     if instrument and song_analysis.instrument_guides:
         guide_obj = song_analysis.instrument_guides.get(instrument)
 
+    # On-demand fallback: the analysis only pre-computes the guide for the
+    # instrument chosen at submit time, so switching instruments in the player
+    # would otherwise get an empty guide. The chord *diagrams* are fully
+    # deterministic (tools/voicings), so build them on the fly for the requested
+    # instrument — fast, no LLM. (Per-instrument LLM practice tips are only
+    # generated in the pipeline; the switcher just needs the voicings.)
+    if guide_obj is None and instrument and song_analysis.chords:
+        from backend.schemas import InstrumentGuide
+        from backend.tools.voicings import get_chord_diagrams
+
+        chord_symbols = [c.chord for c in song_analysis.chords]
+        guide_obj = InstrumentGuide(
+            instrument=instrument,  # type: ignore[arg-type]
+            difficulty="beginner",
+            chord_diagrams=get_chord_diagrams(chord_symbols, instrument),  # type: ignore[arg-type]
+        )
+
     response = AnalyzeResponse(
         job_id=job_id,
         status="done",
