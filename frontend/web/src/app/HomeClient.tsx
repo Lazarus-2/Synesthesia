@@ -83,7 +83,7 @@ export default function HomeClient() {
 
       <div className="flex-grow overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
         {/* Left Panel — Waveform, Chord Timeline (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col gap-0 p-6 lg:pr-3 overflow-y-auto hide-scrollbar">
+        <div className="lg:col-span-8 flex flex-col gap-0 p-6 lg:pr-3 overflow-y-auto hide-scrollbar reveal-up">
           <WaveformPlayer />
           <div className="mt-4">
             <ChordTimeline />
@@ -91,7 +91,10 @@ export default function HomeClient() {
         </div>
 
         {/* Right Panel — Tabbed (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col glass-panel border-l border-white/5 border-t-0 border-r-0 border-b-0">
+        <div
+          className="lg:col-span-4 flex flex-col glass-panel border-l border-white/5 border-t-0 border-r-0 border-b-0 reveal-up"
+          style={{ animationDelay: "0.12s" }}
+        >
           {/* Tab Header */}
           <div className="flex border-b border-white/10 shrink-0">
             {RIGHT_TABS.map((tab) => (
@@ -136,8 +139,8 @@ export default function HomeClient() {
             </button>
           </div>
 
-          {/* Tab Content */}
-          <div className="flex-grow overflow-hidden flex flex-col">
+          {/* Tab Content — keyed by tab so each panel fades in on switch */}
+          <div key={activeTab} className="flex-grow overflow-hidden flex flex-col fade-in">
             {activeTab === "play" && <PlayPanel />}
             {activeTab === "theory" && <TheoryPanel />}
             {activeTab === "stems" && <StemMixer />}

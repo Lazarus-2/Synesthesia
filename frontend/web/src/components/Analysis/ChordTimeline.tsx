@@ -5,7 +5,7 @@ import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 import { useReharmStore } from "../../store/useReharmStore";
-import { transposeChord } from "../../lib/music";
+import { transposeChord, getChordColor } from "../../lib/music";
 import type { RomanEntry, RomanModulation } from "../../types";
 
 function formatTime(seconds: number): string {
@@ -163,11 +163,21 @@ export const ChordTimeline: React.FC = () => {
                 ref={isActive ? activeRef : undefined}
                 className={`flex-shrink-0 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${
                   isActive
-                    ? "w-32 bg-surface-container-high border-2 border-primary-container inner-glow-focus transform scale-105 z-10"
+                    ? "w-32 bg-surface-container-high border-2 transform scale-105 z-10"
                     : "w-24 bg-surface-container-high border border-white/5"
                 } ${isPast ? "opacity-50 hover:opacity-100" : ""} ${
                   isFuture ? "opacity-70 hover:opacity-100" : ""
                 } p-2 gap-1`}
+                // Synesthetic accent: the active chord glows + is bordered in its
+                // own Scriabin colour (the whole point of "Synesthesia").
+                style={
+                  isActive
+                    ? {
+                        borderColor: getChordColor(chord.chord),
+                        boxShadow: `0 0 26px ${getChordColor(chord.chord)}59, inset 0 0 14px ${getChordColor(chord.chord)}26`,
+                      }
+                    : undefined
+                }
                 onClick={(e) => handleChordClick(chord.start, i, e)}
                 title="Click to seek · Shift-click to reharm"
               >
