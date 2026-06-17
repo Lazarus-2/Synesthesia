@@ -6,7 +6,7 @@ import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 
 export const BottomBar: React.FC = () => {
-  const { isPlaying, setIsPlaying, wavesurfer, currentTime } = usePlayerStore();
+  const { isPlaying, setIsPlaying, wavesurfer } = usePlayerStore();
   const { analysis } = useAnalysisStore();
   const {
     practiceMode, togglePracticeMode,
@@ -17,25 +17,40 @@ export const BottomBar: React.FC = () => {
     metronomeOn, toggleMetronome, tapTempoBPM, recordTap,
   } = usePracticeStore();
 
-  // Loop enforcement (Plan 3 A3/B1): when both markers are set and we cross
-  // ``loopEnd`` during playback, seek back to ``loopStart``.
+  // Accurate A/B loop enforcement. Subscribe to WaveSurfer's OWN audioprocess
+  // (fires ~60/sec, unthrottled) rather than the store's currentTime, which is
+  // throttled to ~10/sec and would overshoot loopEnd by up to 100ms before
+  // seeking back — an audible stutter past the loop point.
   useEffect(() => {
-    if (!practiceMode || loopStart === null || loopEnd === null) return;
-    if (!wavesurfer) return;
-    if (currentTime >= loopEnd) {
-      const duration = wavesurfer.getDuration();
-      if (duration > 0) wavesurfer.seekTo(loopStart / duration);
+    if (!wavesurfer || !practiceMode || loopStart === null || loopEnd === null || loopEnd <= loopStart) {
+      return;
     }
-  }, [practiceMode, loopStart, loopEnd, wavesurfer, currentTime]);
+    const ws = wavesurfer;
+    const onProcess = () => {
+      if (ws.getCurrentTime() >= loopEnd) {
+        const duration = ws.getDuration();
+        if (duration > 0) ws.seekTo(loopStart / duration);
+      }
+    };
+    // WaveSurfer v7 .on() returns an unsubscribe function.
+    const unsub = ws.on("audioprocess", onProcess);
+    return () => {
+      try {
+        (unsub as unknown as () => void)?.();
+      } catch {
+        /* older builds: no-op */
+      }
+    };
+  }, [wavesurfer, practiceMode, loopStart, loopEnd]);
 
-  // Metronome (Plan 3 B6): tick at the song's BPM (or detected tap tempo)
-  // whenever ``metronomeOn`` is true. Uses Web Audio so no Tone.js
-  // dependency for this minimal version.
+  // Metronome — a Web Audio lookahead scheduler (the canonical "two clocks"
+  // pattern: a coarse setInterval wakes up and schedules any clicks due within
+  // a short lookahead window at sample-accurate ctx.currentTime). This avoids
+  // the drift/jitter of scheduling each click straight off setInterval. The
+  // downbeat (first beat of each bar, from the time signature) is accented.
   const audioCtxRef = useRef<AudioContext | null>(null);
   useEffect(() => {
     if (!metronomeOn) return;
-    const bpm = tapTempoBPM ?? Math.round(analysis?.tempo ?? 120);
-    const intervalMs = (60_000 / bpm) / playbackRate;
     if (!audioCtxRef.current) {
       const w = window as unknown as {
         AudioContext?: typeof AudioContext;
@@ -46,19 +61,39 @@ export const BottomBar: React.FC = () => {
     }
     const ctx = audioCtxRef.current;
     if (!ctx) return;
-    const id = window.setInterval(() => {
-      const t = ctx.currentTime;
+    void ctx.resume(); // toggle is a user gesture — resume if suspended
+
+    const bpm = tapTempoBPM ?? Math.round(analysis?.tempo ?? 120);
+    // Slower playback => clicks further apart, so the metronome tracks the
+    // (slowed) audio the user is practising to.
+    const secondsPerBeat = 60 / bpm / playbackRate;
+    const beatsPerBar = parseInt((analysis?.time_signature || "4/4").split("/")[0], 10) || 4;
+    const lookahead = 0.1; // schedule clicks up to 100ms ahead
+
+    let nextNoteTime = ctx.currentTime + 0.08;
+    let beatInBar = 0;
+
+    const click = (time: number, accent: boolean) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.frequency.value = 1000;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.001);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      osc.frequency.value = accent ? 1600 : 1000;
+      gain.gain.setValueAtTime(0.0001, time);
+      gain.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, time + 0.001);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(t); osc.stop(t + 0.06);
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [metronomeOn, tapTempoBPM, analysis?.tempo, playbackRate]);
+      osc.start(time);
+      osc.stop(time + 0.06);
+    };
+
+    const timer = window.setInterval(() => {
+      while (nextNoteTime < ctx.currentTime + lookahead) {
+        click(nextNoteTime, beatInBar === 0);
+        nextNoteTime += secondsPerBeat;
+        beatInBar = (beatInBar + 1) % beatsPerBar;
+      }
+    }, 25);
+    return () => window.clearInterval(timer);
+  }, [metronomeOn, tapTempoBPM, analysis?.tempo, analysis?.time_signature, playbackRate]);
 
   if (!analysis) return null;
 
