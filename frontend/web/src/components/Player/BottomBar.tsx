@@ -1,9 +1,24 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
+
+/** Schedule a single metronome click at ``time`` (ctx clock). Accented clicks
+ *  (downbeats / count-in start) are higher + louder. Shared by the metronome
+ *  scheduler and the count-in. */
+function scheduleClick(ctx: AudioContext, time: number, accent: boolean): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = accent ? 1600 : 1000;
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, time + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.06);
+}
 
 export const BottomBar: React.FC = () => {
   const { isPlaying, setIsPlaying, wavesurfer } = usePlayerStore();
@@ -49,8 +64,7 @@ export const BottomBar: React.FC = () => {
   // the drift/jitter of scheduling each click straight off setInterval. The
   // downbeat (first beat of each bar, from the time signature) is accented.
   const audioCtxRef = useRef<AudioContext | null>(null);
-  useEffect(() => {
-    if (!metronomeOn) return;
+  const ensureMetronomeCtx = useCallback((): AudioContext | null => {
     if (!audioCtxRef.current) {
       const w = window as unknown as {
         AudioContext?: typeof AudioContext;
@@ -59,7 +73,12 @@ export const BottomBar: React.FC = () => {
       const Ctor = w.AudioContext ?? w.webkitAudioContext;
       if (Ctor) audioCtxRef.current = new Ctor();
     }
-    const ctx = audioCtxRef.current;
+    return audioCtxRef.current;
+  }, []);
+
+  useEffect(() => {
+    if (!metronomeOn) return;
+    const ctx = ensureMetronomeCtx();
     if (!ctx) return;
     void ctx.resume(); // toggle is a user gesture — resume if suspended
 
@@ -73,27 +92,35 @@ export const BottomBar: React.FC = () => {
     let nextNoteTime = ctx.currentTime + 0.08;
     let beatInBar = 0;
 
-    const click = (time: number, accent: boolean) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = accent ? 1600 : 1000;
-      gain.gain.setValueAtTime(0.0001, time);
-      gain.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, time + 0.001);
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(time);
-      osc.stop(time + 0.06);
-    };
-
     const timer = window.setInterval(() => {
       while (nextNoteTime < ctx.currentTime + lookahead) {
-        click(nextNoteTime, beatInBar === 0);
+        scheduleClick(ctx, nextNoteTime, beatInBar === 0);
         nextNoteTime += secondsPerBeat;
         beatInBar = (beatInBar + 1) % beatsPerBar;
       }
     }, 25);
     return () => window.clearInterval(timer);
-  }, [metronomeOn, tapTempoBPM, analysis?.tempo, analysis?.time_signature, playbackRate]);
+  }, [metronomeOn, tapTempoBPM, analysis?.tempo, analysis?.time_signature, playbackRate, ensureMetronomeCtx]);
+
+  // Count-in: schedule one bar of clicks, then start playback in sync with the
+  // first downbeat after the count. Uses the shared metronome context/scheduler.
+  const countInAndPlay = useCallback(() => {
+    const ctx = ensureMetronomeCtx();
+    if (!ctx || !analysis) {
+      setIsPlaying(true);
+      return;
+    }
+    void ctx.resume();
+    const bpm = tapTempoBPM ?? Math.round(analysis.tempo ?? 120);
+    const secondsPerBeat = 60 / bpm / playbackRate;
+    const beatsPerBar = parseInt((analysis.time_signature || "4/4").split("/")[0], 10) || 4;
+    let t = ctx.currentTime + 0.06;
+    for (let i = 0; i < beatsPerBar; i++) {
+      scheduleClick(ctx, t, i === 0);
+      t += secondsPerBeat;
+    }
+    window.setTimeout(() => setIsPlaying(true), Math.round(beatsPerBar * secondsPerBeat * 1000));
+  }, [ensureMetronomeCtx, analysis, tapTempoBPM, playbackRate, setIsPlaying]);
 
   if (!analysis) return null;
 
@@ -144,6 +171,7 @@ export const BottomBar: React.FC = () => {
       }
       if (e.key === "ArrowLeft") { handleSkipBack(); return; }
       if (e.key === "ArrowRight") { handleSkipForward(); return; }
+      if (e.key.toLowerCase() === "c") { e.preventDefault(); countInAndPlay(); return; }
       if (practiceMode && e.key === "[") { setMarkerA(); return; }
       if (practiceMode && e.key === "]") { setMarkerB(); return; }
       if (e.key === "+" || e.key === "=") { bumpTranspose(1); return; }
@@ -166,7 +194,7 @@ export const BottomBar: React.FC = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, practiceMode, playbackRate, pitchLock, wavesurfer, transpose]);
+  }, [isPlaying, practiceMode, playbackRate, pitchLock, wavesurfer, transpose, countInAndPlay]);
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-container-lowest border-t border-white/10 backdrop-blur-xl flex items-center justify-between px-6 lg:px-16">
@@ -302,6 +330,14 @@ export const BottomBar: React.FC = () => {
           title="Tap tempo — tap 2+ times to detect BPM"
         >
           Tap
+        </button>
+        <button
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full glass-panel text-xs text-on-surface-variant hover:text-primary hover:border-primary/30"
+          onClick={countInAndPlay}
+          title="Count in one bar, then play (shortcut: C)"
+        >
+          <span className="material-symbols-outlined text-lg">av_timer</span>
+          Count-in
         </button>
 
         <button
