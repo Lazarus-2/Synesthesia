@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
@@ -72,6 +72,23 @@ export const ChordTimeline: React.FC = () => {
   const transpose = usePracticeStore((s) => s.transpose);
   const openReharm = useReharmStore((s) => s.openFor);
 
+  // Hooks must run before any early return. Compute the active chord index up
+  // front (safe on an empty list), and auto-scroll it into view so the chords
+  // follow the music (Chordify-style) instead of drifting off-screen.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLDivElement | null>(null);
+  const activeIdx = (analysis?.chords ?? []).findIndex(
+    (c) => currentTime >= c.start && currentTime < c.end
+  );
+  useEffect(() => {
+    const c = containerRef.current;
+    const a = activeRef.current;
+    if (!c || !a) return;
+    // Centre the active card horizontally; scroll only the strip (not the page).
+    const target = a.offsetLeft - c.clientWidth / 2 + a.clientWidth / 2;
+    c.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+  }, [activeIdx]);
+
   if (!analysis?.chords || analysis.chords.length === 0) {
     return (
       <section className="glass-panel rounded-xl p-4">
@@ -81,10 +98,6 @@ export const ChordTimeline: React.FC = () => {
       </section>
     );
   }
-
-  const activeIdx = analysis.chords.findIndex(
-    (c) => currentTime >= c.start && currentTime < c.end
-  );
 
   const entries: RomanEntry[] = analysis.roman?.entries ?? [];
   const modulations: RomanModulation[] = analysis.roman?.modulations ?? [];
@@ -132,7 +145,7 @@ export const ChordTimeline: React.FC = () => {
 
   return (
     <section className="glass-panel rounded-xl p-4">
-      <div className="flex items-end gap-4 overflow-x-auto hide-scrollbar pb-2">
+      <div ref={containerRef} className="flex items-end gap-4 overflow-x-auto hide-scrollbar pb-2 scroll-smooth">
         {analysis.chords.map((chord, i) => {
           const isActive = i === activeIdx;
           const isPast = i < activeIdx;
@@ -147,6 +160,7 @@ export const ChordTimeline: React.FC = () => {
               {modBefore && <ModulationChip mod={modBefore} />}
 
               <div
+                ref={isActive ? activeRef : undefined}
                 className={`flex-shrink-0 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${
                   isActive
                     ? "w-32 bg-surface-container-high border-2 border-primary-container inner-glow-focus transform scale-105 z-10"
