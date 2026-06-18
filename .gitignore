@@ -58,3 +58,4 @@ AGENTS.md
 
 # Internal docs (architecture notes, research, screenshots — kept local, not pushed)
 docs/
+backend/.venv311/
