@@ -210,9 +210,9 @@ export const BottomBar: React.FC = () => {
   }, [isPlaying, practiceMode, playbackRate, pitchLock, wavesurfer, transpose, countInAndPlay]);
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-container-lowest border-t border-white/10 backdrop-blur-xl flex items-center justify-between px-6 lg:px-16">
+    <footer className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-container-lowest border-t border-white/10 backdrop-blur-xl flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-16">
       {/* Left Controls */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-1.5 sm:gap-3 lg:gap-6">
         <button
           className="flex items-center gap-2 hover:text-primary transition-colors"
           onClick={handleSpeed}
@@ -236,7 +236,7 @@ export const BottomBar: React.FC = () => {
           title={pitchLock ? "Pitch lock ON — rate change preserves pitch" : "Pitch lock OFF — rate change shifts pitch"}
         >
           <span className="material-symbols-outlined text-[16px]">{pitchLock ? "lock" : "lock_open"}</span>
-          PITCH
+          <span className="hidden sm:inline">PITCH</span>
         </button>
 
         {/* Transpose ± stepper — uses @tonaljs/tonal for chord labels (ChordTimeline reads
@@ -268,9 +268,10 @@ export const BottomBar: React.FC = () => {
           </button>
         </div>
 
-        {/* Practice-mode loop markers */}
+        {/* Practice-mode loop markers — hidden on phones (tap a section in the
+            ribbon to loop it there); manual A/B available from sm+ up. */}
         {practiceMode && (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-container/10 border border-primary-container/30">
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-container/10 border border-primary-container/30">
             <button
               onClick={setMarkerA}
               className="text-xs font-semibold text-primary hover:text-on-surface"
@@ -323,46 +324,51 @@ export const BottomBar: React.FC = () => {
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-1.5 sm:gap-3 lg:gap-4">
         {/* Metronome + tap tempo */}
         <button
-          className={`flex items-center gap-2 px-3 py-2 rounded-full border transition-all text-sm font-medium ${
+          className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-full border transition-all text-xs sm:text-sm font-medium ${
             metronomeOn
               ? "border-secondary-container bg-secondary-container/10 text-on-secondary-container"
               : "border-white/10 text-on-surface-variant hover:text-primary"
           }`}
           onClick={toggleMetronome}
-          title={metronomeOn ? "Stop metronome" : "Start metronome"}
+          title={metronomeOn ? "Stop metronome (M)" : "Start metronome (M)"}
+          aria-pressed={metronomeOn}
         >
           <span className="material-symbols-outlined text-lg">straighten</span>
-          {tapTempoBPM ?? Math.round(analysis.tempo)} BPM
+          <span className="tabular-nums">{tapTempoBPM ?? Math.round(analysis.tempo)}</span>
+          <span className="hidden sm:inline"> BPM</span>
         </button>
         <button
-          className="px-2 py-2 rounded-full glass-panel text-xs hover:border-primary/30"
+          className="hidden sm:block px-2 py-2 rounded-full glass-panel text-xs hover:border-primary/30"
           onClick={recordTap}
           title="Tap tempo — tap 2+ times to detect BPM"
         >
           Tap
         </button>
         <button
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full glass-panel text-xs text-on-surface-variant hover:text-primary hover:border-primary/30"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-full glass-panel text-xs text-on-surface-variant hover:text-primary hover:border-primary/30"
           onClick={countInAndPlay}
           title="Count in one bar, then play (shortcut: C)"
+          aria-label="Count in one bar then play"
         >
           <span className="material-symbols-outlined text-lg">av_timer</span>
-          Count-in
+          <span className="hidden sm:inline">Count-in</span>
         </button>
 
         <button
-          className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-sm font-medium ${
+          className={`flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-full border transition-all text-xs sm:text-sm font-medium ${
             practiceMode
               ? "border-primary-container bg-primary-container/10 text-primary"
               : "border-white/10 text-on-surface-variant hover:text-primary"
           }`}
           onClick={togglePracticeMode}
+          title="Toggle practice mode (L)"
+          aria-pressed={practiceMode}
         >
           <span className="material-symbols-outlined text-lg">loop</span>
-          Practice Mode
+          <span className="hidden md:inline">Practice Mode</span>
         </button>
       </div>
     </footer>

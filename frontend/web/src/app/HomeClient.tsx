@@ -81,18 +81,22 @@ export default function HomeClient() {
       <div className="relative z-10 flex flex-col h-full">
       <Header />
 
-      <div className="flex-grow overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
+      {/* On mobile the two panels STACK and the whole area scrolls (with bottom
+          padding so content clears the fixed transport bar); on lg+ it's a
+          fixed-height 12-col split where each panel scrolls independently. */}
+      <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0">
         {/* Left Panel — Waveform, Chord Timeline (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col gap-0 p-6 lg:pr-3 overflow-y-auto hide-scrollbar reveal-up">
+        <div className="lg:col-span-8 flex flex-col gap-0 p-4 lg:p-6 lg:pr-3 lg:overflow-y-auto hide-scrollbar reveal-up">
           <WaveformPlayer />
           <div className="mt-4">
             <ChordTimeline />
           </div>
         </div>
 
-        {/* Right Panel — Tabbed (4 cols) */}
+        {/* Right Panel — Tabbed (4 cols). Mobile: a tall, self-contained panel
+            below the waveform; lg+: fills the column height. */}
         <div
-          className="lg:col-span-4 flex flex-col glass-panel border-l border-white/5 border-t-0 border-r-0 border-b-0 reveal-up"
+          className="lg:col-span-4 flex flex-col glass-panel border-t border-l-0 lg:border-l lg:border-t-0 border-white/5 border-r-0 border-b-0 min-h-[70vh] lg:min-h-0 reveal-up"
           style={{ animationDelay: "0.12s" }}
         >
           {/* Tab Header */}
