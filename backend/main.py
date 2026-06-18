@@ -776,16 +776,18 @@ class LibraryResponse(BaseModel):
 
 @router.get("/library", response_model=LibraryResponse)
 async def list_library(
-    user_id: str | None = None,
     limit: int = 24,
     offset: int = 0,
+    principal: UserPrincipal | None = Depends(current_user),
     db=Depends(get_mongodb),
 ) -> LibraryResponse:
-    """List previously-analyzed songs (Plan 3 A7).
+    """List previously-analyzed songs (Plan 3 A7), newest first.
 
-    Sorted by ``created_at`` descending. When ``user_id`` is provided we
-    will (in the auth-on world) filter to that user — for now we surface
-    the whole collection since ownership isn't enforced.
+    Identity comes from the JWT, never the query string (a client-supplied
+    ``user_id`` could otherwise enumerate another user's library — BOLA). When
+    a user is authenticated we filter to analyses they own; in anonymous mode
+    (no principal, ``require_auth=False``) we surface the shared collection,
+    matching single-tenant local use.
     """
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
@@ -800,8 +802,10 @@ async def list_library(
         "vibe_palette": 1,
     }
     query: dict = {}
-    if user_id:
-        query["user_id"] = user_id
+    if principal is not None:
+        # Authenticated: only this user's analyses. (Anonymous mode leaves the
+        # query open so a local single-tenant deployment still lists everything.)
+        query["user_id"] = principal.user_id
     total = await db.song_analyses.count_documents(query)
     cursor = (
         db.song_analyses.find(query, projection).sort("created_at", -1).skip(offset).limit(limit)
@@ -1030,10 +1034,9 @@ async def export_midi(
         if result is None or not out_midi.exists():
             raise HTTPException(
                 status_code=503,
-                detail="MIDI transcription is unavailable. It needs Spotify's "
-                "basic-pitch, which can't be installed on Python 3.12 "
-                "(it pins tensorflow<2.15.1). Run the worker on Python 3.11 "
-                "with `pip install -e '.[midi]'` to enable it.",
+                detail="MIDI transcription failed. basic-pitch runs via a Python "
+                "3.11 interpreter (backend/.venv311, or set $MIDI_PYTHON) because "
+                "it pins tensorflow<2.15.1 (no 3.12 wheel). Check the worker logs.",
             )
     return FileResponse(
         out_midi,
