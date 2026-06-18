@@ -100,11 +100,14 @@ export default function HomeClient() {
           style={{ animationDelay: "0.12s" }}
         >
           {/* Tab Header */}
-          <div className="flex border-b border-white/10 shrink-0">
+          <div role="tablist" aria-label="Analysis panels" className="flex border-b border-white/10 shrink-0">
             {RIGHT_TABS.map((tab) => (
               <button
                 key={tab.id}
-                className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative ${
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls="analysis-tabpanel"
+                className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
                   activeTab === tab.id
                     ? "text-on-surface"
                     : "text-on-surface-variant hover:text-on-surface"
@@ -119,7 +122,10 @@ export default function HomeClient() {
             ))}
             {/* Extra tabs outside the "Play/Theory/Stems" group */}
             <button
-              className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative ${
+              role="tab"
+              aria-selected={activeTab === "chat"}
+              aria-controls="analysis-tabpanel"
+              className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
                 activeTab === "chat"
                   ? "text-on-surface"
                   : "text-on-surface-variant hover:text-on-surface"
@@ -132,7 +138,11 @@ export default function HomeClient() {
               )}
             </button>
             <button
-              className={`px-4 py-4 text-center transition-colors ${
+              role="tab"
+              aria-selected={activeTab === "settings"}
+              aria-controls="analysis-tabpanel"
+              aria-label="Settings"
+              className={`px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
                 activeTab === "settings"
                   ? "text-on-surface"
                   : "text-on-surface-variant hover:text-on-surface"
@@ -144,7 +154,7 @@ export default function HomeClient() {
           </div>
 
           {/* Tab Content — keyed by tab so each panel fades in on switch */}
-          <div key={activeTab} className="flex-grow overflow-hidden flex flex-col fade-in">
+          <div id="analysis-tabpanel" role="tabpanel" key={activeTab} className="flex-grow overflow-hidden flex flex-col fade-in">
             {activeTab === "play" && <PlayPanel />}
             {activeTab === "theory" && <TheoryPanel />}
             {activeTab === "stems" && <StemMixer />}

@@ -164,7 +164,8 @@ export const WaveformPlayer: React.FC = () => {
         </span>
 
         <button
-          className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-[0_4px_20px_rgba(255,181,71,0.3)] hover:scale-105 active:scale-95 transition-transform"
+          aria-label={isPlaying ? "Pause" : "Play"}
+          className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-[0_4px_20px_rgba(255,181,71,0.3)] hover:scale-105 active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           onClick={async () => {
             // AudioEngine reroutes playback through Tone's Web Audio graph
             // (createMediaElementSource disconnects the element's default

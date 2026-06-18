@@ -302,12 +302,13 @@ export const BottomBar: React.FC = () => {
 
       {/* Center Controls */}
       <div className="flex items-center gap-4">
-        <button className="hover:text-primary transition-colors" onClick={handleSkipBack}>
+        <button className="hover:text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full" onClick={handleSkipBack} aria-label="Skip back 5 seconds">
           <span className="material-symbols-outlined text-2xl text-on-surface-variant">fast_rewind</span>
         </button>
 
         <button
-          className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-[0_2px_12px_rgba(255,181,71,0.3)] hover:scale-105 active:scale-95 transition-transform"
+          aria-label={isPlaying ? "Pause" : "Play"}
+          className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-[0_2px_12px_rgba(255,181,71,0.3)] hover:scale-105 active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
           onClick={() => setIsPlaying(!isPlaying)}
         >
           <span
@@ -318,7 +319,7 @@ export const BottomBar: React.FC = () => {
           </span>
         </button>
 
-        <button className="hover:text-primary transition-colors" onClick={handleSkipForward}>
+        <button className="hover:text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full" onClick={handleSkipForward} aria-label="Skip forward 5 seconds">
           <span className="material-symbols-outlined text-2xl text-on-surface-variant">fast_forward</span>
         </button>
       </div>

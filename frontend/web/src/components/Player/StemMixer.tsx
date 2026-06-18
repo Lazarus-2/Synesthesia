@@ -180,8 +180,10 @@ export const StemMixer: React.FC = () => {
                   max={100}
                   value={vol}
                   onChange={(e) => setVolume(stem.id, Number(e.target.value))}
-                  className="stem-slider w-full"
+                  className="stem-slider w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
                   disabled={muted[stem.id] || !isAvailable}
+                  aria-label={`${stem.label} volume`}
+                  aria-valuetext={`${vol}%`}
                 />
               </div>
 
