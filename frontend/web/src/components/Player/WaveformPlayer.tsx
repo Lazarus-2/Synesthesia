@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import type WaveSurfer from "wavesurfer.js";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
+import { usePracticeStore } from "../../store/usePracticeStore";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -15,6 +16,7 @@ export const WaveformPlayer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isPlaying, setIsPlaying, currentTime, duration, setCurrentTime, setDuration, audioFileUrl, setWavesurfer } = usePlayerStore();
   const { analysis } = useAnalysisStore();
+  const { practiceMode, loopStart, loopEnd, setLoopStart, setLoopEnd } = usePracticeStore();
   const wsRef = useRef<WaveSurfer | null>(null);
 
   useEffect(() => {
@@ -91,17 +93,23 @@ export const WaveformPlayer: React.FC = () => {
               if (ws && duration > 0) {
                 ws.seekTo(Math.min(0.999, Math.max(0, sec.start / duration)));
                 setCurrentTime(sec.start);
+                // In practice mode, one tap loops the whole section (Moises-style).
+                if (practiceMode) {
+                  setLoopStart(sec.start);
+                  setLoopEnd(sec.end);
+                }
               }
             };
             const confLabel =
               sec.confidence != null ? ` · ${Math.round(conf * 100)}% confident` : "";
+            const action = practiceMode ? `Loop ${sec.name}` : `Jump to ${sec.name}`;
             return (
               <button
                 key={i}
                 type="button"
                 onClick={seekTo}
-                title={`${sec.name} · ${formatTime(sec.start)}${confLabel}`}
-                aria-label={`Jump to ${sec.name} at ${formatTime(sec.start)}${confLabel}`}
+                title={`${action} · ${formatTime(sec.start)}${confLabel}`}
+                aria-label={`${action} at ${formatTime(sec.start)}${confLabel}`}
                 className={`relative flex min-w-0 items-center justify-center border-r border-white/5 last:border-r-0 cursor-pointer transition-colors hover:brightness-125 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
                   isChorus
                     ? "bg-secondary-container/20 text-on-secondary-container"
@@ -128,6 +136,20 @@ export const WaveformPlayer: React.FC = () => {
       {/* Waveform Display */}
       <div className="relative w-full min-h-[160px]">
         <div ref={containerRef} className="w-full" />
+        {/* A/B loop region overlay — shows the span being looped. */}
+        {loopStart !== null && loopEnd !== null && loopEnd > loopStart && duration > 0 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 bottom-0 bg-primary/15 border-x-2 border-primary/70"
+            style={{
+              left: `${(loopStart / duration) * 100}%`,
+              width: `${((loopEnd - loopStart) / duration) * 100}%`,
+            }}
+          >
+            <span className="absolute -top-0.5 left-0 -translate-x-1/2 text-[9px] font-bold text-primary">A</span>
+            <span className="absolute -top-0.5 right-0 translate-x-1/2 text-[9px] font-bold text-primary">B</span>
+          </div>
+        )}
         {!audioFileUrl && (
           <div className="absolute inset-0 flex items-center justify-center text-on-surface-variant text-sm">
             No audio loaded

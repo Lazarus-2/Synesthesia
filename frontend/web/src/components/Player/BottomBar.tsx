@@ -158,6 +158,16 @@ export const BottomBar: React.FC = () => {
   const setMarkerA = () => setLoopStart(wavesurfer?.getCurrentTime() ?? null);
   const setMarkerB = () => setLoopEnd(wavesurfer?.getCurrentTime() ?? null);
 
+  // Jump to the next section (wraps to the first). Reads ws time live.
+  const jumpToNextSection = () => {
+    if (!wavesurfer || !analysis?.sections?.length) return;
+    const dur = wavesurfer.getDuration();
+    if (dur <= 0) return;
+    const t = wavesurfer.getCurrentTime();
+    const next = analysis.sections.find((s) => s.start > t + 0.25) ?? analysis.sections[0];
+    wavesurfer.seekTo(Math.min(0.999, Math.max(0, next.start / dur)));
+  };
+
   // Keyboard shortcuts: space=play/pause, arrows=seek, [/]=loop markers,
   // +/-=transpose, ,/. = playback rate. Skipped when focus is in an input.
   useEffect(() => {
@@ -172,6 +182,9 @@ export const BottomBar: React.FC = () => {
       if (e.key === "ArrowLeft") { handleSkipBack(); return; }
       if (e.key === "ArrowRight") { handleSkipForward(); return; }
       if (e.key.toLowerCase() === "c") { e.preventDefault(); countInAndPlay(); return; }
+      if (e.key.toLowerCase() === "m") { toggleMetronome(); return; }
+      if (e.key.toLowerCase() === "l") { togglePracticeMode(); return; }
+      if (e.key.toLowerCase() === "s") { jumpToNextSection(); return; }
       if (practiceMode && e.key === "[") { setMarkerA(); return; }
       if (practiceMode && e.key === "]") { setMarkerB(); return; }
       if (e.key === "+" || e.key === "=") { bumpTranspose(1); return; }
