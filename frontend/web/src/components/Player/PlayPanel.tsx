@@ -8,6 +8,7 @@ import { ChordDiagram } from "../../types";
 import { transposeChord } from "../../lib/music";
 import { CapoWhisperer } from "./CapoWhisperer";
 import { MIDIDownloadMenu } from "./MIDIDownloadMenu";
+import { ChordSheetButton } from "./ChordSheetButton";
 import { PianoDiagram } from "./PianoDiagram";
 
 const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
@@ -212,6 +213,7 @@ export const PlayPanel: React.FC = () => {
               Capo {instrumentGuide.capo}
             </div>
           )}
+          <ChordSheetButton />
           <MIDIDownloadMenu />
         </div>
       </div>
