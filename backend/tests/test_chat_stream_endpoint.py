@@ -41,19 +41,21 @@ def as_user(mock_mongo):
     _dbmod._db = object()
     from fastapi.testclient import TestClient
 
-    from backend.auth import require_user
+    from backend.auth import current_user, require_user
     from backend.database import get_mongodb
     from backend.main import app
 
+    principal = UserPrincipal(user_id="user-1", username="alice")
     app.dependency_overrides[get_mongodb] = lambda: mock_mongo
-    app.dependency_overrides[require_user] = lambda: UserPrincipal(
-        user_id="user-1", username="alice"
-    )
+    app.dependency_overrides[require_user] = lambda: principal
+    # /chat/stream uses current_user (anonymous-allowed); override it too.
+    app.dependency_overrides[current_user] = lambda: principal
     try:
         yield TestClient(app, raise_server_exceptions=False)
     finally:
         app.dependency_overrides.pop(get_mongodb, None)
         app.dependency_overrides.pop(require_user, None)
+        app.dependency_overrides.pop(current_user, None)
 
 
 def test_stream_emits_context_chunk_done(as_user, monkeypatch):
@@ -171,9 +173,15 @@ def test_stream_mid_error_persists_user_and_partial_assistant(as_user, monkeypat
     assert "Part" in assistant_content
 
 
-def test_stream_unauthenticated_is_401(api_client):
+def test_stream_unauthenticated_allowed_in_anonymous_mode(api_client, monkeypatch):
+    # /chat/stream uses current_user: in anonymous mode (REQUIRE_AUTH unset) an
+    # unauthenticated caller is allowed and streams under "anonymous", not 401.
+    async def _fake_stream(**kwargs):
+        yield ServerSentEvent(event="done", data='{"text": "anon"}')
+
+    monkeypatch.setattr("backend.main.stream_aura", _fake_stream)
     r = api_client.post("/api/v1/chat/stream", json={"message": "hi"})
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_stream_foreign_session_is_403(as_user, mock_mongo, monkeypatch):

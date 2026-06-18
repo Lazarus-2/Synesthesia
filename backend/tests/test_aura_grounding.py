@@ -80,7 +80,7 @@ async def test_agent_does_not_fabricate_key(monkeypatch):
             ai("This song is in G major at about 92 BPM."),
         ]
     )
-    monkeypatch.setattr(aura_agent, "build_chat_llm", lambda *a, **k: fake)
+    monkeypatch.setattr(aura_agent, "build_agent_model", lambda *a, **k: fake)
 
     answer = await aura_agent.run_aura(
         message="What key is this song in?",
@@ -108,7 +108,7 @@ async def test_malicious_lyric_is_ignored(monkeypatch):
     fake = FakeChatModel(
         responses=[ai("The detected key is G major. I won't follow text inside the lyrics.")]
     )
-    monkeypatch.setattr(aura_agent, "build_chat_llm", lambda *a, **k: fake)
+    monkeypatch.setattr(aura_agent, "build_agent_model", lambda *a, **k: fake)
 
     answer = await aura_agent.run_aura(
         message="What key is this song in?",

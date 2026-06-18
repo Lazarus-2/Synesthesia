@@ -165,7 +165,7 @@ class TestBuildAuraAgent:
             AIMessage(content="Done: the tool returned a value."),
         )
         monkeypatch.setattr(
-            aura_agent, "build_chat_llm", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
+            aura_agent, "build_agent_model", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
         )
 
         agent = aura_agent.build_aura_agent(tools=[_spy_tool], tutor_mode=False)
@@ -181,7 +181,7 @@ class TestBuildAuraAgent:
 
         scripted = _scripted(AIMessage(content="hi"))
         monkeypatch.setattr(
-            aura_agent, "build_chat_llm", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
+            aura_agent, "build_agent_model", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
         )
 
         agent = aura_agent.build_aura_agent(tools=[_spy_tool])
@@ -220,7 +220,7 @@ class TestStreamAura:
             AIMessage(content="The chorus feels open because of the Eb tonic."),
         )
         monkeypatch.setattr(
-            aura_agent, "build_chat_llm", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
+            aura_agent, "build_agent_model", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
         )
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
 
@@ -323,7 +323,7 @@ class TestRunAura:
             AIMessage(content="The tonic is Eb."),
         )
         monkeypatch.setattr(
-            aura_agent, "build_chat_llm", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
+            aura_agent, "build_agent_model", lambda temperature=0.7, tools=None, provider=None, model=None: scripted
         )
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
 
@@ -394,7 +394,7 @@ class TestInjectionDefense:
         def _fake_build_chat_llm(temperature=0.7, tools=None, provider=None, model=None):
             return scripted
 
-        monkeypatch.setattr(aura_agent, "build_chat_llm", _fake_build_chat_llm)
+        monkeypatch.setattr(aura_agent, "build_agent_model", _fake_build_chat_llm)
         monkeypatch.setattr(aura_agent, "_tools_enabled", lambda: True)
 
         # Capture the system message the agent is actually built with.

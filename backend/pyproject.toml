@@ -160,7 +160,17 @@ exclude = ["backend.tests*", "backend.scripts*", "frontend*", "storage*"]
 # green and CI can select / deselect heavy suites.
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--strict-markers --tb=short"
+# ``tests/e2e_browser`` is a SEPARATE live browser suite driven by
+# ``tests/e2e_browser/run_e2e.sh`` (needs a running frontend :3001, backend,
+# worker, and Chromium). It must NOT be collected by the default unit-test run:
+# its session-scoped ``sync_playwright()`` fixture keeps a Playwright asyncio
+# event loop running in a background thread for the whole session. With
+# ``asyncio_mode = auto``, pytest-asyncio then can't drive its own per-test
+# ``asyncio.Runner`` ("RuntimeError: Cannot run the event loop while another
+# loop is running"), so every async test that runs after the first browser
+# launch fails with "coroutine ... was never awaited". Ignoring the dir keeps
+# the unit suite hermetic; run the browser suite explicitly via run_e2e.sh.
+addopts = "--strict-markers --tb=short --ignore-glob=*/e2e_browser/*"
 markers = [
     "integration: needs live Mongo replica set / Redis",
     "ml: needs heavy audio-ML deps (demucs / basic-pitch / madmom)",

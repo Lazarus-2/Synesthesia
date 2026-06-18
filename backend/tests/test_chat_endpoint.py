@@ -39,26 +39,35 @@ def as_user(mock_mongo):
     _dbmod._db = object()
     from fastapi.testclient import TestClient
 
-    from backend.auth import require_user
+    from backend.auth import current_user, require_user
     from backend.database import get_mongodb
     from backend.main import app
 
+    principal = UserPrincipal(user_id="user-1", username="alice")
     app.dependency_overrides[get_mongodb] = lambda: mock_mongo
-    app.dependency_overrides[require_user] = lambda: UserPrincipal(
-        user_id="user-1", username="alice"
-    )
+    app.dependency_overrides[require_user] = lambda: principal
+    # /chat + /chat/stream use current_user (anonymous-allowed); override it too
+    # so authenticated-path tests get a real principal.
+    app.dependency_overrides[current_user] = lambda: principal
     try:
         yield TestClient(app, raise_server_exceptions=False)
     finally:
         app.dependency_overrides.pop(get_mongodb, None)
         app.dependency_overrides.pop(require_user, None)
+        app.dependency_overrides.pop(current_user, None)
 
 
-def test_unauthenticated_is_401(api_client):
-    # api_client does NOT override require_user; with REQUIRE_AUTH unset the
-    # dependency still 401s on /chat because the endpoint uses require_user.
+def test_unauthenticated_allowed_in_anonymous_mode(api_client, monkeypatch):
+    # /chat uses current_user (not require_user): with REQUIRE_AUTH unset
+    # (anonymous mode, the default), an unauthenticated caller is allowed and
+    # chats under a shared "anonymous" identity rather than being rejected.
+    async def _fake_run_aura(**kwargs):
+        return "anon reply"
+
+    monkeypatch.setattr("backend.main.run_aura", _fake_run_aura)
     r = api_client.post("/api/v1/chat", json={"message": "hi"})
-    assert r.status_code == 401
+    assert r.status_code == 200
+    assert r.json()["reply"] == "anon reply"
 
 
 def test_session_ownership_mismatch_is_403(as_user, mock_mongo, monkeypatch):
