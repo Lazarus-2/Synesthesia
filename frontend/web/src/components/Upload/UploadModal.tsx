@@ -187,8 +187,7 @@ export const UploadModal: React.FC = () => {
           </span>
         </div>
         <div className="hidden md:flex items-center gap-8">
-          <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">Library</a>
-          <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">Pricing</a>
+          <a href="/library" className="text-on-surface-variant hover:text-primary transition-colors">Library</a>
         </div>
       </nav>
 
@@ -390,20 +389,23 @@ export const UploadModal: React.FC = () => {
 
       {/* Footer */}
       <footer className="bg-surface-container-lowest w-full py-12 border-t border-white/5 mt-auto shrink-0">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-5 md:px-16 max-w-[1280px] mx-auto">
-          <div className="flex flex-col mb-8 md:mb-0">
-            <span className="font-headline text-2xl font-medium text-on-surface mb-4">Synesthesia</span>
-            <span className="text-xs text-on-surface-variant font-medium">© 2024 Synesthesia AI. Studio-Grade Analysis.</span>
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 px-5 md:px-16 max-w-[1280px] mx-auto">
+          <div className="flex flex-col">
+            <span className="font-headline text-2xl font-medium text-on-surface mb-2">Synesthesia</span>
+            <span className="text-xs text-on-surface-variant font-medium">
+              © 2024 Synesthesia AI · ML-powered chords, key, stems &amp; theory.
+            </span>
           </div>
-          <div className="flex flex-col gap-3">
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Terms of Service</a>
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Privacy Policy</a>
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Documentation</a>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Support</a>
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">API</a>
-            <a href="#" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Community</a>
+          <div className="flex items-center gap-6">
+            <a href="/library" className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium">Library</a>
+            <a
+              href="https://github.com/spotify/basic-pitch"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-on-surface-variant hover:text-primary-container transition-colors font-medium"
+            >
+              Built on open-source ML
+            </a>
           </div>
         </div>
       </footer>
