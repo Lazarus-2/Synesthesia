@@ -9,6 +9,7 @@ import { transposeChord } from "../../lib/music";
 import { CapoWhisperer } from "./CapoWhisperer";
 import { MIDIDownloadMenu } from "./MIDIDownloadMenu";
 import { ChordSheetButton } from "./ChordSheetButton";
+import { TransposePresets } from "./TransposePresets";
 import { PianoDiagram } from "./PianoDiagram";
 
 const FretboardVisual: React.FC<{ diagram?: ChordDiagram }> = ({ diagram }) => {
@@ -207,12 +208,13 @@ export const PlayPanel: React.FC = () => {
         <h2 className="font-headline text-3xl font-medium text-white tracking-wide">
           {chordName}
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {instrumentGuide?.capo !== undefined && (
             <div className="px-3 py-1 rounded-full bg-white/10 text-xs font-semibold tracking-wider text-on-surface border border-white/20">
               Capo {instrumentGuide.capo}
             </div>
           )}
+          <TransposePresets />
           <ChordSheetButton />
           <MIDIDownloadMenu />
         </div>
