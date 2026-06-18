@@ -39,6 +39,22 @@ RUN pip install --upgrade pip setuptools wheel \
 
 
 ############################
+# Stage 1b — MIDI sidecar (Python 3.11)
+############################
+# basic-pitch pins ``tensorflow<2.15.1`` which has no Python 3.12 wheel, so it
+# cannot live in the 3.12 venv above. The /midi endpoint shells out to this
+# 3.11 interpreter (backend/ml/midi_transcription.py). ``setuptools<81`` keeps
+# ``pkg_resources`` available for resampy. This stage is only pulled into the
+# API image, and only when ENABLE_MIDI=true (see runtime-api).
+FROM python:3.11-slim AS midi-builder
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN python -m venv /opt/venv311
+ENV PATH="/opt/venv311/bin:$PATH"
+RUN pip install --upgrade pip "setuptools<81" wheel \
+ && pip install "basic-pitch>=0.4.0" "setuptools<81"
+
+
+############################
 # Stage 2a — runtime-api
 ############################
 FROM python:3.12-slim AS runtime-api
@@ -60,6 +76,12 @@ RUN groupadd --system app \
  && useradd --system --gid app --create-home --shell /usr/sbin/nologin app
 
 COPY --from=builder /opt/venv /opt/venv
+
+# MIDI transcription sidecar (Python 3.11 + basic-pitch). The /midi endpoint
+# shells out to MIDI_PYTHON. This adds ~1GB (TensorFlow); if you don't need
+# MIDI export, delete this COPY + ENV and the midi-builder stage.
+COPY --from=midi-builder /opt/venv311 /opt/venv311
+ENV MIDI_PYTHON=/opt/venv311/bin/python
 
 WORKDIR /app
 COPY --chown=app:app . .
