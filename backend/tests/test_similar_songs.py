@@ -4,11 +4,10 @@ All network calls mocked — never hits the real API.
 """
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 
 import backend.services.similar_songs as _ss_module  # import once; patch on it directly
-
 
 # ---------------------------------------------------------------------------
 # G4.1 — Last.fm happy-path parse

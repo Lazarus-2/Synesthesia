@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestTheoryPromptV2:
     def test_v2_template_loads(self):

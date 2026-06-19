@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import tomllib
-import yaml  # m1: import at module level (not inside test body)
 from pathlib import Path
+
+import yaml  # m1: import at module level (not inside test body)
 
 _BACKEND = Path(__file__).resolve().parents[1]
 
@@ -215,7 +216,6 @@ async def test_progress_frames_not_suppressed_by_queued_result(monkeypatch):
     terminal 'done' frame. The intermediate progress frames must NOT be skipped.
     """
     import json
-    import itertools
 
     from sse_starlette.sse import ServerSentEvent
 

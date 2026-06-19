@@ -8,7 +8,6 @@ handling) deterministically, then fulfil it with a scripted SSE body.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from playwright.sync_api import Page, expect

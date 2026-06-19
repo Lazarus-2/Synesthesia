@@ -92,7 +92,6 @@ class TestLLMFactory:
         LLM_PROVIDER / MODEL_NAME settings are used (unchanged behavior).
         We call _resolve_primary_and_fallback directly (no network) and assert
         the resolved provider matches the global setting."""
-        import os
 
         from backend.chains import llm_factory
 
@@ -106,7 +105,6 @@ class TestLLMFactory:
         _gs.cache_clear()
 
         captured: dict = {}
-        original_build_provider = llm_factory._build_provider_llm
 
         def _fake_build_provider_llm(provider, model, temperature, api_key=""):
             captured["provider"] = provider

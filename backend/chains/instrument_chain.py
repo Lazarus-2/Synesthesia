@@ -20,7 +20,6 @@ from backend.tools.capo import suggest_capo
 from backend.tools.transpose import transpose_chord
 from backend.tools.voicings import get_chord_diagrams
 
-
 # ---------------------------------------------------------------------------
 # G3.5: single deterministic capo source
 # ---------------------------------------------------------------------------

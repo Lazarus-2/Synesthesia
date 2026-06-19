@@ -14,13 +14,14 @@ from contextvars import ContextVar
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from backend.database import get_mongodb
+from backend.repositories.analysis_repo import AnalysisRepo
+from backend.schemas import Instrument
+
 # similarity_chain removed in G4.4; find_similar_songs @tool rewired in G4.5.
 # Import fetch_similar_songs now so the module attribute exists for patching;
 # the tool body is fully wired in G4.5.
 from backend.services.similar_songs import fetch_similar_songs
-from backend.database import get_mongodb
-from backend.repositories.analysis_repo import AnalysisRepo
-from backend.schemas import Instrument
 from backend.tools.capo import suggest_capo
 from backend.tools.chords import parse_chord
 from backend.tools.synesthesia_colors import get_chord_color as _get_chord_color

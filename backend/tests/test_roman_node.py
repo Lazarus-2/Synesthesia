@@ -1,6 +1,6 @@
 """G1.11: roman_analysis_node delegates to analyze_roman; no placeholder strings."""
-from backend.schemas import ChordEvent, RomanAnalysis
 from backend.graph.nodes import roman_analysis_node
+from backend.schemas import ChordEvent, RomanAnalysis
 
 
 def _make_state(chords, key="C major"):

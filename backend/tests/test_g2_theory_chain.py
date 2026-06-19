@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 
 class TestTheoryChainReturnsStructured:
     def test_chain_invoke_returns_theory_explanation_object(self):
@@ -50,7 +48,7 @@ class TestTheoryChainReturnsStructured:
         from langchain_core.runnables import RunnableLambda
 
         from backend.chains import theory_chain
-        from backend.schemas import ChordEvent, SongAnalysis, TheoryExplanation
+        from backend.schemas import SongAnalysis, TheoryExplanation
 
         te = TheoryExplanation(
             key_summary="A minor.",

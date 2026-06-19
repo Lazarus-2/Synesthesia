@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 
 def _make_state(key="C major", tempo=120.0, chords=None, roman=None):
     from backend.schemas import RomanAnalysis
@@ -91,7 +89,6 @@ class TestTheoryNodeStructuredOutput:
         """AnalysisState TypedDict must declare a 'theory' field of type
         TheoryExplanation | None."""
         from backend.graph.state import AnalysisState
-        from backend.schemas import TheoryExplanation
 
         hints = AnalysisState.__annotations__
         assert "theory" in hints, (

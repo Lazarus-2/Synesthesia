@@ -31,6 +31,7 @@ def test_graph_builds_without_similarity_node(monkeypatch):
     node is removed — validates wiring is consistent."""
     # Use InMemorySaver so the test never touches MongoDB.
     from langgraph.checkpoint.memory import MemorySaver
+
     from backend.graph.graph import build_graph
 
     checkpointer = MemorySaver()

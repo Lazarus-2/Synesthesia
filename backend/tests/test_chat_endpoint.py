@@ -179,7 +179,6 @@ def test_foreign_analysis_job_not_loaded(as_user, mock_mongo, monkeypatch):
     monkeypatch.setattr("backend.main.run_aura", _fake_run_aura)
 
     # get_owned returns None (caller doesn't own this job).
-    from backend.repositories import AnalysisRepo
     monkeypatch.setattr(
         "backend.repositories.AnalysisRepo.get_owned",
         AsyncMock(return_value=None),

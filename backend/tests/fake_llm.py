@@ -57,7 +57,7 @@ class FakeChatModel(BaseChatModel):
     def _llm_type(self) -> str:
         return "fake-chat-model"
 
-    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> "FakeChatModel":
+    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> FakeChatModel:
         names: list[str] = []
         for t in tools:
             name = getattr(t, "name", None) or getattr(t, "__name__", None)

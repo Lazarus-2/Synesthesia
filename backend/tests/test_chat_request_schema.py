@@ -8,8 +8,6 @@ the field set so a future edit can't quietly re-introduce client-trust.
 
 from __future__ import annotations
 
-import pytest
-
 from backend.schemas import ChatRequest, ChatResponse
 
 

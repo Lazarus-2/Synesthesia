@@ -279,11 +279,11 @@ class TestChatHistoryRefactor:
         """GET /chat/history now requires JWT (D.7). An authenticated owner gets
         their messages; the legacy unauthenticated path is gone."""
         import os
-
-        import backend.database as _dbmod
         from unittest.mock import AsyncMock
+
         from fastapi.testclient import TestClient
 
+        import backend.database as _dbmod
         from backend.auth import UserPrincipal, require_user
         from backend.database import get_mongodb
         from backend.main import app

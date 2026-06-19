@@ -3,8 +3,9 @@ of similar_songs.  All external calls are mocked."""
 from __future__ import annotations
 
 import pytest
-from backend.schemas import SongAnalysis
+
 from backend.models import SongAnalysisModel
+from backend.schemas import SongAnalysis
 
 
 def test_song_analysis_schema_has_similar_songs_field():
@@ -73,9 +74,9 @@ async def test_tasks_calls_fetch_similar_and_persists(monkeypatch):
     # This test confirms fetch_similar_songs is importable in tasks context
     # and that the schema fields are correct (the full pipeline test would
     # require a live Mongo+Taskiq; schema tests above provide the gating check).
-    from backend.services.similar_songs import fetch_similar_songs as fss
     import backend.services.similar_songs as ss_mod
     from backend.config import Settings
+    from backend.services.similar_songs import fetch_similar_songs as fss
 
     # Patch get_settings and cache so no network call is made
     monkeypatch.setattr(ss_mod, "get_settings",

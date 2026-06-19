@@ -335,8 +335,8 @@ class TestCapoUnified:
 
     def test_instrument_guide_capo_matches_suggest_capo(self):
         """The capo on an InstrumentGuide must equal suggest_capo's answer."""
-        from backend.tools.capo import suggest_capo
         from backend.chains.instrument_chain import _deterministic_capo
+        from backend.tools.capo import suggest_capo
 
         chords = ["F", "Bb", "Dm", "Gm"]
         expected = suggest_capo.invoke({"chords": chords})["capo"]
@@ -355,8 +355,8 @@ class TestCapoUnified:
 
     def test_diagrams_use_transposed_chords_when_capo_set(self):
         """With capo=5, Bb diagrams should be stored as F (the pressed shape)."""
-        from backend.tools.voicings import get_chord_diagrams
         from backend.tools.transpose import transpose_chord
+        from backend.tools.voicings import get_chord_diagrams
 
         capo = 5
         chords = ["Bb"]
@@ -641,8 +641,9 @@ class TestG3ReviewFixes:
     # I1: Piano notes must be in strictly ascending pitch order.
     def test_gmaj7_piano_notes_ascending(self):
         """Gmaj7 triggers octave-cap on F# — notes must still be ascending."""
-        from backend.tools.voicings import _piano_chord_voicing
         import re
+
+        from backend.tools.voicings import _piano_chord_voicing
         v = _piano_chord_voicing("G", "maj7")
         assert v is not None
         note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -657,8 +658,9 @@ class TestG3ReviewFixes:
 
     def test_a7_piano_notes_ascending(self):
         """A7 also triggers octave-cap — notes must be ascending."""
-        from backend.tools.voicings import _piano_chord_voicing
         import re
+
+        from backend.tools.voicings import _piano_chord_voicing
         v = _piano_chord_voicing("A", "dom7")
         assert v is not None
         note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -673,8 +675,9 @@ class TestG3ReviewFixes:
 
     def test_bmaj_piano_notes_ascending(self):
         """Bmaj (F# capped down) must return ascending notes."""
-        from backend.tools.voicings import _piano_chord_voicing
         import re
+
+        from backend.tools.voicings import _piano_chord_voicing
         v = _piano_chord_voicing("B", "maj")
         assert v is not None
         note_order = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]

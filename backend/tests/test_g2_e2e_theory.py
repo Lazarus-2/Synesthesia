@@ -13,9 +13,6 @@ Asserts:
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
 
@@ -59,14 +56,13 @@ class TestTheoryEndToEnd:
     def test_theory_persisted_as_dict_in_mongo(self, fake_graph_result):
         """The SongAnalysisModel written to Mongo must include 'theory' as a nested
         dict, not a flat string."""
-        from backend.schemas import TheoryExplanation
 
         # Replicate the assembly logic from tasks.py (not calling the task
         # directly to avoid broker/taskiq plumbing in unit tests).
+        from backend.models import SongAnalysisModel
         from backend.schemas import SongAnalysis
         from backend.tasks import _clean_audio_title
         from backend.tools.synesthesia_colors import get_vibe_palette
-        from backend.models import SongAnalysisModel
 
         result = fake_graph_result
         chords = result.get("chords", [])
@@ -123,8 +119,7 @@ class TestTheoryEndToEnd:
         preserve the structured theory object."""
         import json
 
-        from backend.schemas import AnalyzeResponse, SongAnalysis, TheoryExplanation
-        from backend.tasks import _clean_audio_title
+        from backend.schemas import AnalyzeResponse, SongAnalysis
         from backend.tools.synesthesia_colors import get_vibe_palette
 
         result = fake_graph_result

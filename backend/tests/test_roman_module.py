@@ -40,8 +40,9 @@ def test_to_m21_handles_no_chord_markers():
 # ---------------------------------------------------------------------------
 
 def test_smart_analyze_diatonic_triads_c_major():
-    from backend.theory.roman import smart_analyze
     from music21 import key as m21key
+
+    from backend.theory.roman import smart_analyze
     k = m21key.Key("C", "major")
     cases = [
         ("C",    "I"),
@@ -60,8 +61,9 @@ def test_smart_analyze_diatonic_triads_c_major():
 
 
 def test_smart_analyze_seventh_chords():
-    from backend.theory.roman import smart_analyze
     from music21 import key as m21key
+
+    from backend.theory.roman import smart_analyze
     k = m21key.Key("C", "major")
     assert smart_analyze("G7", k).figure == "V7"
     assert smart_analyze("Fmaj7", k).figure == "IV7"
@@ -69,8 +71,9 @@ def test_smart_analyze_seventh_chords():
 
 
 def test_smart_analyze_inversions():
-    from backend.theory.roman import smart_analyze
     from music21 import key as m21key
+
+    from backend.theory.roman import smart_analyze
     k = m21key.Key("C", "major")
     rn_c_e = smart_analyze("C/E", k)
     assert rn_c_e.figure == "I6"
@@ -82,8 +85,9 @@ def test_smart_analyze_inversions():
 
 
 def test_smart_analyze_no_chord_returns_none():
-    from backend.theory.roman import smart_analyze
     from music21 import key as m21key
+
+    from backend.theory.roman import smart_analyze
     k = m21key.Key("C", "major")
     assert smart_analyze("N.C.", k) is None
     assert smart_analyze("", k) is None
@@ -94,8 +98,9 @@ def test_smart_analyze_no_chord_returns_none():
 # ---------------------------------------------------------------------------
 
 def test_secondary_dominant_d7_in_c():
-    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
     from music21 import key as m21key
+
+    from backend.theory.roman import is_borrowed, is_secondary, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("D7", k)
     assert rn.figure == "V7/V"
@@ -104,8 +109,9 @@ def test_secondary_dominant_d7_in_c():
 
 
 def test_secondary_dominant_a7_in_c():
-    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
     from music21 import key as m21key
+
+    from backend.theory.roman import is_borrowed, is_secondary, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("A7", k)
     assert rn.figure == "V7/ii"
@@ -114,8 +120,9 @@ def test_secondary_dominant_a7_in_c():
 
 
 def test_secondary_dominant_e7_in_c():
-    from backend.theory.roman import smart_analyze, is_secondary
     from music21 import key as m21key
+
+    from backend.theory.roman import is_secondary, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("E7", k)
     assert rn.figure == "V7/vi"
@@ -123,8 +130,9 @@ def test_secondary_dominant_e7_in_c():
 
 
 def test_borrowed_chord_bb_in_c():
-    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
     from music21 import key as m21key
+
+    from backend.theory.roman import is_borrowed, is_secondary, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("Bb", k)
     assert rn.figure == "bVII"
@@ -133,16 +141,18 @@ def test_borrowed_chord_bb_in_c():
 
 
 def test_borrowed_chord_ab_in_c():
-    from backend.theory.roman import smart_analyze, is_borrowed
     from music21 import key as m21key
+
+    from backend.theory.roman import is_borrowed, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("Ab", k)
     assert is_borrowed(rn) is True
 
 
 def test_diatonic_chords_not_borrowed_not_secondary():
-    from backend.theory.roman import smart_analyze, is_secondary, is_borrowed
     from music21 import key as m21key
+
+    from backend.theory.roman import is_borrowed, is_secondary, smart_analyze
     k = m21key.Key("C", "major")
     for sym in ("C", "Am", "G", "G7", "F", "Fmaj7", "C/E"):
         rn = smart_analyze(sym, k)
@@ -155,8 +165,9 @@ def test_diatonic_chords_not_borrowed_not_secondary():
 # ---------------------------------------------------------------------------
 
 def test_function_classifier_major():
-    from backend.theory.roman import smart_analyze, harmonic_function
     from music21 import key as m21key
+
+    from backend.theory.roman import harmonic_function, smart_analyze
     k = m21key.Key("C", "major")
     cases = [
         ("C",    "tonic"),
@@ -180,8 +191,9 @@ def test_function_classifier_major():
 
 
 def test_function_classifier_minor():
-    from backend.theory.roman import smart_analyze, harmonic_function
     from music21 import key as m21key
+
+    from backend.theory.roman import harmonic_function, smart_analyze
     k = m21key.Key("a", "minor")
     cases = [
         ("Am",   "tonic"),
@@ -205,8 +217,9 @@ def test_function_classifier_minor():
 # ---------------------------------------------------------------------------
 
 def test_cadence_pac():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # Perfect authentic: V -> I, both root position
     assert detect_cadence(smart_analyze("G", k), smart_analyze("C", k)) == "PAC"
@@ -214,16 +227,18 @@ def test_cadence_pac():
 
 
 def test_cadence_iac():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # Imperfect authentic: V -> I but I is inverted OR V is inverted
     assert detect_cadence(smart_analyze("G/B", k), smart_analyze("C", k)) == "IAC"
 
 
 def test_cadence_deceptive():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # Deceptive: V -> vi
     assert detect_cadence(smart_analyze("G7", k), smart_analyze("Am", k)) == "deceptive"
@@ -231,8 +246,9 @@ def test_cadence_deceptive():
 
 
 def test_cadence_half():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # Half cadence: any -> V (root position)
     assert detect_cadence(smart_analyze("F", k), smart_analyze("G", k)) == "half"
@@ -240,16 +256,18 @@ def test_cadence_half():
 
 
 def test_cadence_plagal():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # Plagal: IV -> I
     assert detect_cadence(smart_analyze("F", k), smart_analyze("C", k)) == "plagal"
 
 
 def test_cadence_none_for_non_cadential():
-    from backend.theory.roman import smart_analyze, detect_cadence
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_cadence, smart_analyze
     k = m21key.Key("C", "major")
     # I -> IV, I -> ii, etc. are not cadences
     assert detect_cadence(smart_analyze("C", k), smart_analyze("F", k)) is None
@@ -312,8 +330,9 @@ def test_roman_analysis_summary_progression_optional():
 # ---------------------------------------------------------------------------
 
 def test_detect_modulations_no_modulation():
-    from backend.theory.roman import detect_modulations
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_modulations
     k = m21key.Key("C", "major")
     # Classic I-V-vi-IV loop — no modulation
     symbols = ["C", "G", "Am", "F", "C", "G", "Am", "F"]
@@ -322,8 +341,9 @@ def test_detect_modulations_no_modulation():
 
 
 def test_detect_modulations_finds_relative_shift():
-    from backend.theory.roman import detect_modulations
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_modulations
     k = m21key.Key("C", "major")
     # First 4 chords in C, then sustained shift to a different tonal centre.
     # D A Bm G is I-V-vi-IV in D major, so music21 correctly detects D major.
@@ -337,8 +357,9 @@ def test_detect_modulations_finds_relative_shift():
 
 
 def test_detect_modulations_returns_at_index():
-    from backend.theory.roman import detect_modulations
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_modulations
     k = m21key.Key("C", "major")
     symbols = ["C", "G", "Am", "F", "D", "A", "Bm", "G", "D", "A", "Bm", "G"]
     mods = detect_modulations(symbols, k)
@@ -353,8 +374,8 @@ def test_detect_modulations_returns_at_index():
 # ---------------------------------------------------------------------------
 
 def test_analyze_roman_returns_roman_analysis():
+    from backend.schemas import ChordEvent, RomanAnalysis
     from backend.theory.roman import analyze_roman
-    from backend.schemas import RomanAnalysis, ChordEvent
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -374,8 +395,8 @@ def test_analyze_roman_returns_roman_analysis():
 
 
 def test_analyze_roman_entries_are_time_aligned():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=1.5, chord="C"),
@@ -389,8 +410,8 @@ def test_analyze_roman_entries_are_time_aligned():
 
 
 def test_analyze_roman_populates_legacy_fields():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -408,8 +429,8 @@ def test_analyze_roman_populates_legacy_fields():
 
 
 def test_analyze_roman_cadences_pac_detected():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="F"),
@@ -423,8 +444,8 @@ def test_analyze_roman_cadences_pac_detected():
 
 
 def test_analyze_roman_secondary_dominant_flagged():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -438,8 +459,8 @@ def test_analyze_roman_secondary_dominant_flagged():
 
 
 def test_analyze_roman_borrowed_chord_flagged():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -454,8 +475,8 @@ def test_analyze_roman_borrowed_chord_flagged():
 
 
 def test_analyze_roman_no_chord_tokens_skipped():
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -513,8 +534,8 @@ def test_fallback_produces_basic_diatonic_numerals(monkeypatch):
 # C1 — garbage chord does NOT abort the whole analysis
 def test_garbage_chord_skipped_keeps_good_chords():
     """A single unparseable symbol ('Bbb', whitespace) is skipped; good chords survive."""
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -531,8 +552,9 @@ def test_garbage_chord_skipped_keeps_good_chords():
 
 def test_whitespace_chord_skipped():
     """smart_analyze returns None for whitespace-only chord symbols."""
-    from backend.theory.roman import smart_analyze
     from music21 import key as m21key
+
+    from backend.theory.roman import smart_analyze
     k = m21key.Key("C", "major")
     assert smart_analyze("   ", k) is None
     assert smart_analyze("\t", k) is None
@@ -541,8 +563,9 @@ def test_whitespace_chord_skipped():
 # I1 — bVII/bVI/bIII in minor NOT relabelled as secondary dominants
 def test_bvii_in_minor_not_secondary():
     """G in A minor should be bVII, not V/III."""
-    from backend.theory.roman import smart_analyze, is_secondary
     from music21 import key as m21key
+
+    from backend.theory.roman import is_secondary, smart_analyze
     k = m21key.Key("a", "minor")
     rn = smart_analyze("G", k)
     assert rn is not None
@@ -552,8 +575,9 @@ def test_bvii_in_minor_not_secondary():
 
 def test_bvi_in_minor_not_secondary():
     """F in A minor should be bVI, not a secondary dominant."""
-    from backend.theory.roman import smart_analyze, is_secondary
     from music21 import key as m21key
+
+    from backend.theory.roman import is_secondary, smart_analyze
     k = m21key.Key("a", "minor")
     rn = smart_analyze("F", k)
     assert rn is not None
@@ -563,8 +587,8 @@ def test_bvi_in_minor_not_secondary():
 
 def test_am_f_g_am_labels_bvii():
     """Am-F-G-Am progression: G is labelled bVII in A minor context."""
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="Am"),
@@ -581,8 +605,8 @@ def test_am_f_g_am_labels_bvii():
 # I2 — cadence pass reuses retained RN objects (observable via correctness)
 def test_cadence_still_detected_after_i2_refactor():
     """PAC cadence is still detected correctly after the I2 rn_objects refactor."""
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="F"),
@@ -597,9 +621,11 @@ def test_cadence_still_detected_after_i2_refactor():
 # I3 — detect_modulations capped at max_modulations
 def test_detect_modulations_capped():
     """A noisy/random-ish long progression yields ≤ 8 modulations."""
-    from backend.theory.roman import detect_modulations
-    from music21 import key as m21key
     import random
+
+    from music21 import key as m21key
+
+    from backend.theory.roman import detect_modulations
     random.seed(0)
     key_c = m21key.Key("C", "major")
     all_chords = ["C", "G", "Am", "F", "D", "A", "Bm", "E", "B", "F#m",
@@ -611,8 +637,9 @@ def test_detect_modulations_capped():
 
 def test_detect_modulations_genuine_modulation_still_found():
     """A genuine modulation (C → D major) is still detected even with the cap."""
-    from backend.theory.roman import detect_modulations
     from music21 import key as m21key
+
+    from backend.theory.roman import detect_modulations
     k = m21key.Key("C", "major")
     # First 4 chords in C; then a sustained D-major run
     symbols = ["C", "G", "Am", "F", "D", "A", "Bm", "G", "D", "A", "Bm", "G"]
@@ -624,8 +651,9 @@ def test_detect_modulations_genuine_modulation_still_found():
 # Modal mixture (should-fix): Fm in C major
 def test_fm_in_c_major_is_borrowed():
     """Fm in C major should be is_borrowed=True, function='chromatic'."""
-    from backend.theory.roman import smart_analyze, is_borrowed, harmonic_function
     from music21 import key as m21key
+
+    from backend.theory.roman import harmonic_function, is_borrowed, smart_analyze
     k = m21key.Key("C", "major")
     rn = smart_analyze("Fm", k)
     assert rn is not None
@@ -637,8 +665,8 @@ def test_fm_in_c_major_is_borrowed():
 
 def test_fm_in_c_major_flagged_in_analyze_roman():
     """analyze_roman flags Fm (iv) in C major as is_borrowed=True."""
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="C"),
@@ -654,8 +682,8 @@ def test_fm_in_c_major_flagged_in_analyze_roman():
 # E7 in minor figure normalisation (should-fix)
 def test_e7_in_minor_normalized():
     """E7 in A minor should produce numeral 'V7', not 'V75#3'."""
-    from backend.theory.roman import analyze_roman
     from backend.schemas import ChordEvent
+    from backend.theory.roman import analyze_roman
 
     chords = [
         ChordEvent(start=0.0, end=2.0, chord="Am"),

@@ -104,8 +104,9 @@ def test_main_no_longer_defines_write_dlq_or_clean_title():
 # Bug B regression: user_id must be persisted on the SongAnalysisModel doc
 # ---------------------------------------------------------------------------
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.mark.asyncio
@@ -120,7 +121,6 @@ async def test_run_analysis_pipeline_persists_user_id():
     This test mocks the graph, DB, and JobStore so only the tasks.py code path
     runs, then asserts the captured SongAnalysisModel carries the user_id.
     """
-    import json
 
     from backend.models import SongAnalysisModel
 
@@ -144,7 +144,7 @@ async def test_run_analysis_pipeline_persists_user_id():
 
     # --- Mock graph result -------------------------------------------------------
     # A minimal graph result that satisfies all the tasks.py assertions.
-    from backend.schemas import ChordEvent, BeatEvent
+    from backend.schemas import ChordEvent
 
     fake_chord = ChordEvent(chord="C", start=0.0, end=2.0, confidence=0.9)
     graph_result = {

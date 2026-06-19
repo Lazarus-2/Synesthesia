@@ -87,7 +87,7 @@ def test_eval_catches_faithfulness_errors():
 
     import backend.chains.aura_agent as aura_agent
     import backend.chains.aura_tools as aura_tools
-    from backend.tests.eval_chat import _build_script, _tools_called
+    from backend.tests.eval_chat import _build_script
     from backend.tests.fake_llm import FakeChatModel
 
     bad_item = {

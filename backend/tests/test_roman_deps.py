@@ -1,6 +1,6 @@
 """G1.1: music21 is declared in project deps (not just installed ad-hoc)."""
-import re
 import pathlib
+import re
 
 REQ_FILE = pathlib.Path("backend/requirements.txt")
 PYPROJECT_FILE = pathlib.Path("backend/pyproject.toml")

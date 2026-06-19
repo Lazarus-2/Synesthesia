@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestTheoryExplanationInSchemas:
     def test_import_from_schemas(self):

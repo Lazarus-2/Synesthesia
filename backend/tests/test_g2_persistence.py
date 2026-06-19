@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestSongAnalysisModelTheoryField:
     def test_model_accepts_theory_dict(self):
