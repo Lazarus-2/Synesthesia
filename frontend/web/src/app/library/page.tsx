@@ -126,7 +126,9 @@ export default function LibraryPage() {
     return () => { cancelled = true; };
   }, [page]);
 
-  const rawItems = data?.items ?? [];
+  // Stable ref unless data changes, so the filter memo below doesn't recompute
+  // on every render (a fresh `[]` literal would invalidate it each time).
+  const rawItems = useMemo(() => data?.items ?? [], [data]);
   const total = data?.total ?? 0;
   const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
 

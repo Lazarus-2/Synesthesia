@@ -66,10 +66,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   updateLastMessage: (contentChunk) =>
     set((state) => {
+      if (state.messages.length === 0) return state;
       const newMessages = [...state.messages];
-      if (newMessages.length > 0) {
-        newMessages[newMessages.length - 1].content += contentChunk;
-      }
+      const last = newMessages[newMessages.length - 1];
+      // Replace with a NEW object (don't mutate in place) so the message's
+      // identity changes each token — otherwise memoized rows (React Compiler)
+      // can skip re-rendering and streamed text won't appear until the next
+      // unrelated state change.
+      newMessages[newMessages.length - 1] = { ...last, content: last.content + contentChunk };
       return { messages: newMessages };
     }),
 

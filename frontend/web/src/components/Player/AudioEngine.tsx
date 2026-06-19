@@ -34,6 +34,14 @@ export const AudioEngine: React.FC = () => {
   const pitchLock = usePracticeStore((s) => s.pitchLock);
   const playbackRate = usePracticeStore((s) => s.playbackRate);
 
+  // Latest transpose, read by the async graph-build effect to seed the worklet
+  // without making transpose a build dep (which would rebuild the worklet on
+  // every transpose change). Live changes are handled by the effect below.
+  const transposeRef = useRef(transpose);
+  useEffect(() => {
+    transposeRef.current = transpose;
+  }, [transpose]);
+
   const graphRef = useRef<{
     src: MediaElementAudioSourceNode;
     soundTouchNode: AudioWorkletNode | null;
@@ -109,10 +117,10 @@ export const AudioEngine: React.FC = () => {
         }
       }
 
-      // Seed the transpose param at its current value.
+      // Seed the transpose param at its current value (via ref — not a dep).
       if (soundTouchNode) {
         const ps = soundTouchNode.parameters.get("pitchSemitones");
-        if (ps) ps.value = transpose;
+        if (ps) ps.value = transposeRef.current;
       }
 
       graphRef.current = {

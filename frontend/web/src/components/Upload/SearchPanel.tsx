@@ -34,14 +34,20 @@ export const SearchPanel: React.FC<{
   useEffect(() => {
     const trimmed = q.trim();
     if (trimmed.length < 2) {
-      setResults([]);
-      setErr(null);
+      // Bail-out updaters: return the SAME reference when already empty so React
+      // skips the re-render (no cascade) on every keystroke under the threshold.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset of this fetch effect's own state; bail-out updaters prevent cascades
+      setResults((r) => (r.length ? [] : r));
+      setErr((e) => (e === null ? e : null));
+      setLoading((l) => (l ? false : l));
       return;
     }
-    setLoading(true);
-    setErr(null);
     const ctl = new AbortController();
     const t = setTimeout(() => {
+      // setState moved off the synchronous effect body into the debounced
+      // callback so a fetch only starts (and toggles loading) once per pause.
+      setLoading(true);
+      setErr(null);
       fetch(`${API_V1}/search?q=${encodeURIComponent(trimmed)}&limit=12`, {
         signal: ctl.signal,
       })
@@ -82,6 +88,7 @@ export const SearchPanel: React.FC<{
             <li key={(r.mbid || r.deezer_id || idx).toString()}>
               <button
                 role="option"
+                aria-selected={false}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-container-high text-left transition-colors group"
                 onClick={() => onPick(`${r.title} ${r.artist}`)}
               >

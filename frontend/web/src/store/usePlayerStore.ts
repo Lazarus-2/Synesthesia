@@ -30,7 +30,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsPlaying: (playing) => {
     const ws = get().wavesurfer;
     if (ws) {
-      if (playing) ws.play(); else ws.pause();
+      // ws.play() returns a Promise that REJECTS if pause() interrupts it
+      // (common with rapid space-bar / play-button toggles). Swallow that
+      // specific rejection so it doesn't surface as an uncaught error.
+      if (playing) void Promise.resolve(ws.play()).catch(() => {});
+      else ws.pause();
     }
     set({ isPlaying: playing });
   },

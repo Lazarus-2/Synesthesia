@@ -122,8 +122,6 @@ export const BottomBar: React.FC = () => {
     window.setTimeout(() => setIsPlaying(true), Math.round(beatsPerBar * secondsPerBeat * 1000));
   }, [ensureMetronomeCtx, analysis, tapTempoBPM, playbackRate, setIsPlaying]);
 
-  if (!analysis) return null;
-
   const handleSpeed = () => {
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5];
     const idx = speeds.indexOf(playbackRate);
@@ -208,6 +206,11 @@ export const BottomBar: React.FC = () => {
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, practiceMode, playbackRate, pitchLock, wavesurfer, transpose, countInAndPlay]);
+
+  // Guard AFTER all hooks (handlers above are null-safe via wavesurfer?/analysis?
+  // guards) so hook order is identical whether or not an analysis is loaded —
+  // the Header "back" button can flip analysis→null while this stays mounted.
+  if (!analysis) return null;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-container-lowest border-t border-white/10 backdrop-blur-xl flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-16">

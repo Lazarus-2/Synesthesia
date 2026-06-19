@@ -84,13 +84,29 @@ export const StemMixer: React.FC = () => {
       audioElementsRef.current[s.id] = el;
       gainNodesRef.current[s.id] = gain;
     }
-    // Snapshot the ref before cleanup runs — the original ref object may
+    // Snapshot the refs before cleanup runs — the original ref objects may
     // mutate between effect setup and teardown (lint: exhaustive-deps).
     const elementsSnapshot = audioElementsRef.current;
+    const gainsSnapshot = gainNodesRef.current;
+    const ctxToClose = ctxRef.current;
     return () => {
+      // Full teardown: this component unmounts on every tab switch (tab content
+      // is keyed by activeTab), so pausing alone would leak an AudioContext +
+      // MediaElementSource/Gain nodes each time. Release them and clear the refs
+      // so a remount rebuilds a fresh graph.
       for (const id of Object.keys(elementsSnapshot)) {
-        elementsSnapshot[id]?.pause();
+        const el = elementsSnapshot[id];
+        if (el) {
+          try { el.pause(); el.src = ""; el.load(); } catch { /* */ }
+        }
       }
+      for (const id of Object.keys(gainsSnapshot)) {
+        try { gainsSnapshot[id]?.disconnect(); } catch { /* */ }
+      }
+      try { void ctxToClose?.close(); } catch { /* */ }
+      ctxRef.current = null;
+      audioElementsRef.current = {};
+      gainNodesRef.current = {};
     };
     // We intentionally exclude volumes/muted from deps — the first effect
     // syncs them on every change without rebuilding the graph.

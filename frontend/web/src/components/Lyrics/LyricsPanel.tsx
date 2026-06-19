@@ -44,6 +44,7 @@ export const LyricsPanel: React.FC = () => {
   // Fetch lyrics whenever the analyzed track changes.
   useEffect(() => {
     if (!trackName || !artistName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset of this fetch effect's own state when no track is loaded
       setStatus("idle");
       setSyncedLines([]);
       setPlainLyrics("");
@@ -87,11 +88,20 @@ export const LyricsPanel: React.FC = () => {
     return best;
   }, [syncedLines, currentTime]);
 
-  // Auto-scroll the active line into the centre.
+  // Auto-scroll the active line to the centre — scoped to the lyrics scroller
+  // only (scrollIntoView walks every scrollable ancestor and hijacks the whole
+  // page on mobile, where the page itself scrolls).
   useEffect(() => {
     if (activeIdx < 0) return;
+    const scroller = scrollerRef.current;
     const node = lineRefs.current[activeIdx];
-    if (node) node.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!scroller || !node) return;
+    const target =
+      scroller.scrollTop +
+      (node.getBoundingClientRect().top - scroller.getBoundingClientRect().top) -
+      scroller.clientHeight / 2 +
+      node.clientHeight / 2;
+    scroller.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [activeIdx]);
 
   if (status === "idle") {

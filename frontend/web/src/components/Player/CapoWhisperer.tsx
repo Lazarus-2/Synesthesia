@@ -17,9 +17,12 @@ export const CapoWhisperer: React.FC = () => {
   const transpose = usePracticeStore((s) => s.transpose);
   const setTranspose = usePracticeStore((s) => s.setTranspose);
 
+  // Bind to a local so the memo's inferred dep matches the source dep array
+  // exactly (React Compiler skips the component otherwise).
+  const chords = analysis?.chords;
   const recommendation = useMemo(() => {
-    if (!analysis?.chords?.length) return null;
-    const roots = Array.from(new Set(analysis.chords.map((c) => c.chord)));
+    if (!chords?.length) return null;
+    const roots = Array.from(new Set(chords.map((c) => c.chord)));
     let bestFret = 0;
     let bestScore = -1;
     let bestShapes: string[] = roots;
@@ -33,9 +36,9 @@ export const CapoWhisperer: React.FC = () => {
       }
     }
     return { fret: bestFret, shapes: bestShapes, openCount: bestScore, total: roots.length };
-  }, [analysis?.chords]);
+  }, [chords]);
 
-  if (!recommendation || !analysis?.chords?.length) return null;
+  if (!recommendation || !chords?.length) return null;
   if (recommendation.fret === 0) {
     return (
       <div className="px-4 py-3 rounded-xl glass-panel border border-white/5 text-sm text-on-surface-variant">
@@ -44,7 +47,7 @@ export const CapoWhisperer: React.FC = () => {
     );
   }
 
-  const originalRoots = Array.from(new Set(analysis.chords.map((c) => c.chord))).slice(0, 6);
+  const originalRoots = Array.from(new Set(chords.map((c) => c.chord))).slice(0, 6);
   const capoShapes = recommendation.shapes.slice(0, 6);
 
   return (

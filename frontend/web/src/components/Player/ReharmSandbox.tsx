@@ -39,6 +39,17 @@ export const ReharmSandbox: React.FC = () => {
     return () => { cancelled = true; };
   }, [open, openChord]);
 
+  // Dispose the Tone synth on final unmount (it's reused across opens, so it's
+  // only torn down when the component itself goes away).
+  useEffect(() => {
+    return () => {
+      try {
+        (synthRef.current as { dispose?: () => void } | null)?.dispose?.();
+        synthRef.current = null;
+      } catch { /* */ }
+    };
+  }, []);
+
   const swaps = useMemo(() => {
     if (!openChord) return [];
     return computeSwaps(openChord);
