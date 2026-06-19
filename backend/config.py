@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # --- Tracing ---
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
-    langchain_project: str = "soundbreak"
+    langchain_project: str = "synesthesia"
 
     # --- Data Stores ---
     redis_url: str = "redis://localhost:6379/0"

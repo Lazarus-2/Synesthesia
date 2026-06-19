@@ -6,7 +6,8 @@ import type { ChordEvent } from '../types';
  *
  * Holds only intent (which chord chip is the user exploring?), not the
  * suggestion list itself — those are derived on the fly inside the modal
- * from `@tonaljs/tonal` so we don't duplicate music-theory truth.
+ * from the shared helpers in `lib/music` so we don't duplicate music-theory
+ * truth.
  */
 interface ReharmState {
   open: boolean;

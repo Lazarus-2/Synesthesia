@@ -275,15 +275,6 @@ def _chat_rate_limit_key(request: Request) -> str:
     return get_remote_address(request)
 
 
-async def _session_exists(db, session_id: str) -> bool:
-    """True if a chat_sessions doc with this id exists (any owner).
-
-    Kept for backwards-compat with tests that monkeypatch it.  The production
-    code now uses the single-query path in :func:`_resolve_session`.
-    """
-    return await db.chat_sessions.find_one({"_id": session_id}, {"_id": 1}) is not None
-
-
 async def _resolve_session(
     repo: ChatSessionRepo, db, session_id: str | None, user_id: str
 ) -> tuple[str, list[dict], bool]:

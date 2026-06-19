@@ -47,11 +47,8 @@ dependencies = [
     "langgraph-checkpoint-mongodb>=0.4.0",
 
     # Vector ops
-    "faiss-cpu>=1.9.0",
 
     # Audio processing (always-on baseline)
-    "ffmpeg-python>=0.2.0",
-    "pydub>=0.25.1",
     "librosa>=0.10.2",
     "soundfile>=0.12.1",
     # 2026 yt-dlp requires the EJS challenge solver against a JS runtime
@@ -64,7 +61,6 @@ dependencies = [
     # + iframe embed playback; Deezer (no auth) + MusicBrainz for search;
     # LRCLIB for synced lyrics; AcoustID for upload fingerprint enrichment).
     "spotipy>=2.24.0",
-    "musicbrainzngs>=0.7.1",
     "pyacoustid>=1.3.1",  # needs fpcalc binary on PATH; degrades gracefully if absent
     "httpx>=0.27.0",      # Deezer + LRCLIB raw GETs
     "imageio-ffmpeg>=0.5.1",  # bundled static ffmpeg; lets the worker run on machines without `apt install ffmpeg`
@@ -73,7 +69,6 @@ dependencies = [
     "music21>=10.3.0",
 
     # Tokenization
-    "tiktoken>=0.8.0",
 
     # Async + queue + cache
     "redis>=5.2.0",

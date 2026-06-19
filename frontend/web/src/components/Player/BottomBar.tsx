@@ -242,9 +242,10 @@ export const BottomBar: React.FC = () => {
           <span className="hidden sm:inline">PITCH</span>
         </button>
 
-        {/* Transpose ± stepper — uses @tonaljs/tonal for chord labels (ChordTimeline reads
-            ``transpose`` from the store and shifts each label) and (next commit) Tone.PitchShift
-            for the audio. */}
+        {/* Transpose ± stepper — drives chord labels (ChordTimeline reads
+            ``transpose`` from the store and shifts each label via lib/music's
+            transposeChord) and the audio pitch-shift (AudioEngine SoundTouch
+            pitchSemitones). */}
         <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-md glass-panel">
           <button
             className="px-1.5 py-0.5 text-on-surface-variant hover:text-primary text-sm font-semibold"

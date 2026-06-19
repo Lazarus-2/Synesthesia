@@ -25,11 +25,8 @@ langgraph>=0.2.0
 langgraph-checkpoint-mongodb>=0.4.0
 
 # === Vector Store (pick one) ===
-faiss-cpu>=1.9.0
 
 # === Audio Processing ===
-ffmpeg-python>=0.2.0
-pydub>=0.25.1
 librosa>=0.10.2
 soundfile>=0.12.1
 # 2026 yt-dlp requires the EJS challenge solver + a JS runtime (Deno or Node).
@@ -43,7 +40,6 @@ yt-dlp>=2026.03.13
 # Deezer (no auth) + MusicBrainz handle search; LRCLIB handles synced lyrics;
 # AcoustID enriches uploads with MBID (degrades gracefully if `fpcalc` missing).
 spotipy>=2.24.0
-musicbrainzngs>=0.7.1
 pyacoustid>=1.3.1
 # Bundled static ffmpeg wheel — lets the worker run on machines without
 # system ffmpeg (CI containers, fresh dev boxes). We still prefer
@@ -62,7 +58,6 @@ music21>=10.3.0
 # autochord>=0.1.2  # optional simpler alternative to madmom
 
 # === Token counting ===
-tiktoken>=0.8.0
 
 # === Async & Caching ===
 redis>=5.2.0
