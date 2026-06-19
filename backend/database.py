@@ -40,6 +40,12 @@ async def _create_indexes(db) -> None:
     #   have no owner). See ID-01.
     # - created_at TTL so abandoned analyses age out after 90 days.
     await db.song_analyses.create_index("file_hash", sparse=True)
+    # Compound index matching the upload-dedup query shape
+    # ({file_hash, analyzer_version}) so it doesn't degrade to a partial scan as
+    # multiple analyzer versions accumulate per hash.
+    await db.song_analyses.create_index(
+        [("file_hash", 1), ("analyzer_version", 1)], sparse=True
+    )
     await db.song_analyses.create_index("user_id", sparse=True)
     await db.song_analyses.create_index(
         "created_at",

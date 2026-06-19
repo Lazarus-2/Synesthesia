@@ -27,21 +27,27 @@ def test_lookup_mbid_returns_none_without_api_key(monkeypatch):
 
 def test_lookup_mbid_returns_none_when_no_results(monkeypatch):
     monkeypatch.setenv("ACOUSTID_API_KEY", "fake-key")
-    with patch("acoustid.match", return_value=iter([])):
+    with patch("acoustid.lookup", return_value={}), patch(
+        "acoustid.parse_lookup_result", return_value=iter([])
+    ):
         assert acoustid_enrich.lookup_mbid(180, "abc") is None
 
 
 def test_lookup_mbid_filters_low_confidence_matches(monkeypatch):
     monkeypatch.setenv("ACOUSTID_API_KEY", "fake-key")
     low_score = iter([(0.4, "mbid-1", "Maybe Song", "Maybe Artist")])
-    with patch("acoustid.match", return_value=low_score):
+    with patch("acoustid.lookup", return_value={}), patch(
+        "acoustid.parse_lookup_result", return_value=low_score
+    ):
         assert acoustid_enrich.lookup_mbid(180, "abc") is None
 
 
 def test_lookup_mbid_happy_path(monkeypatch):
     monkeypatch.setenv("ACOUSTID_API_KEY", "fake-key")
     good_match = iter([(0.95, "mbid-42", "Blackbird", "The Beatles")])
-    with patch("acoustid.match", return_value=good_match):
+    with patch("acoustid.lookup", return_value={}), patch(
+        "acoustid.parse_lookup_result", return_value=good_match
+    ):
         got = acoustid_enrich.lookup_mbid(138, "abc")
     assert got == {
         "mbid": "mbid-42",
@@ -61,7 +67,9 @@ def test_enrich_upload_returns_metadata_on_match(monkeypatch):
     monkeypatch.setattr(acoustid_enrich, "_fpcalc_available", lambda: True)
     monkeypatch.setattr(acoustid_enrich, "fingerprint_file", lambda _p: (138, "abc"))
     good_match = iter([(0.95, "mbid-42", "Blackbird", "The Beatles")])
-    with patch("acoustid.match", return_value=good_match):
+    with patch("acoustid.lookup", return_value={}), patch(
+        "acoustid.parse_lookup_result", return_value=good_match
+    ):
         got = acoustid_enrich.enrich_upload("anything.wav")
     assert got == {
         "title": "Blackbird",

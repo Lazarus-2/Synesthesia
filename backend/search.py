@@ -98,7 +98,7 @@ def build_mb_query(q: str) -> str:
     terms = q.strip()
     year_m = _YEAR_RE.search(terms)
     year = year_m.group(1) if year_m else None
-    if year:
+    if year_m:
         terms = (terms[: year_m.start()] + terms[year_m.end() :]).strip()
     safe = _LUCENE_SPECIAL_RE.sub(" ", terms).strip()
     if not safe:

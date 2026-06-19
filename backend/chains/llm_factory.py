@@ -150,6 +150,13 @@ _PROVIDER_DEFAULTS: dict[str, str] = {
 }
 
 
+# Bound every LLM call so a hung/slow provider can't wedge the worker's event
+# loop indefinitely (a single blocking call stalls the whole pipeline). On
+# timeout the primary raises and the configured fallback provider takes over.
+_LLM_TIMEOUT_S = 60.0
+_LLM_MAX_RETRIES = 2
+
+
 def _build_provider_llm(
     provider: str,
     model: str,
@@ -162,6 +169,9 @@ def _build_provider_llm(
     to get full feature support (native structured output, prompt caching,
     streaming tool use). Uses ChatOpenAI OpenAI-compat shim for Groq,
     OpenRouter, and Ollama.
+
+    Every model is built with a request timeout + bounded retries so a stuck
+    provider connection fails fast into the fallback rather than hanging.
     """
     resolved_model = model or _PROVIDER_DEFAULTS.get(provider, "qwen3:8b")
 
@@ -176,6 +186,8 @@ def _build_provider_llm(
             model=resolved_model,
             temperature=temperature,
             api_key=api_key,
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     elif provider == "anthropic":
@@ -190,6 +202,8 @@ def _build_provider_llm(
             model=resolved_model,
             temperature=temperature,
             api_key=api_key,
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     elif provider == "gemini":
@@ -203,6 +217,8 @@ def _build_provider_llm(
             model=resolved_model,
             temperature=temperature,
             google_api_key=api_key,
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     elif provider == "groq":
@@ -217,6 +233,8 @@ def _build_provider_llm(
             temperature=temperature,
             api_key=api_key,
             base_url="https://api.groq.com/openai/v1",
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     elif provider == "openrouter":
@@ -232,6 +250,8 @@ def _build_provider_llm(
             temperature=temperature,
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     elif provider == "ollama":
@@ -242,6 +262,8 @@ def _build_provider_llm(
             temperature=temperature,
             api_key="not-needed",  # placeholder; Ollama doesn't auth
             base_url="http://localhost:11434/v1",
+            timeout=_LLM_TIMEOUT_S,
+            max_retries=_LLM_MAX_RETRIES,
         )
 
     else:

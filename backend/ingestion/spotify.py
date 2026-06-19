@@ -82,11 +82,13 @@ def fetch_spotify_metadata(track_id: str) -> dict[str, Any] | None:
     return {
         "spotify_id": track_id,
         "title": track.get("name") or "",
-        "artist": ", ".join(a["name"] for a in track.get("artists") or []),
+        "artist": ", ".join(
+            a.get("name", "") for a in (track.get("artists") or []) if a.get("name")
+        ),
         "album": (track.get("album") or {}).get("name") or "",
         "year": ((track.get("album") or {}).get("release_date") or "")[:4],
         "isrc": ((track.get("external_ids") or {}).get("isrc")) or "",
-        "album_art_url": images[0]["url"] if images else "",
+        "album_art_url": (images[0].get("url") or "") if images else "",
     }
 
 

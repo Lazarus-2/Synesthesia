@@ -76,9 +76,14 @@ def lookup_mbid(duration: int, fingerprint: str) -> dict[str, Any] | None:
     except ImportError:
         return None
     try:
-        results = list(
-            acoustid.match(api_key, fingerprint=fingerprint, duration=duration, meta="recordings")
-        )
+        # ``match`` fingerprints a PATH; we already have the fingerprint+duration,
+        # so use ``lookup`` (+ parse) — and bound it with a timeout so a slow
+        # AcoustID endpoint can't hang the ingest worker. (The previous
+        # ``match(fingerprint=…, duration=…)`` call was a latent TypeError —
+        # ``match`` accepts neither kwarg — never hit because AcoustID is rarely
+        # configured.)
+        data = acoustid.lookup(api_key, fingerprint, duration, meta="recordings", timeout=8.0)
+        results = list(acoustid.parse_lookup_result(data))
     except acoustid.WebServiceError as e:
         logger.warning("acoustid_enrich: API call failed: %s", e)
         return None

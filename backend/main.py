@@ -300,7 +300,10 @@ async def _resolve_session(
     if not session_id:
         return str(uuid.uuid4()), [], True
 
-    doc = await db.chat_sessions.find_one({"_id": session_id})
+    # Project only user_id — history is fetched separately via recent_turns
+    # ($slice); without this we'd transfer the entire ever-growing messages array
+    # on every turn just to read the owner.
+    doc = await db.chat_sessions.find_one({"_id": session_id}, {"user_id": 1})
     if doc is None:
         # Never-seen id — adopt it as a fresh server-owned session.
         return session_id, [], True
@@ -1439,14 +1442,15 @@ async def get_user_profile(
     user = await db.users.find_one({"_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User profile not registered")
+    # Use .get() with defaults — a user doc created via the chat-profile/upsert
+    # path may not carry every field, and hard subscripts would 500.
+    created_at = user.get("created_at")
     return {
         "id": user["_id"],
-        "username": user["username"],
-        "instrument": user["instrument"],
-        "difficulty": user["difficulty"],
-        "created_at": user["created_at"].isoformat()
-        if isinstance(user["created_at"], datetime)
-        else user["created_at"],
+        "username": user.get("username", ""),
+        "instrument": user.get("instrument", "guitar"),
+        "difficulty": user.get("difficulty", "beginner"),
+        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else created_at,
     }
 
 
