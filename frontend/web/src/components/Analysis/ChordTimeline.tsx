@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
@@ -89,6 +89,28 @@ export const ChordTimeline: React.FC = () => {
     c.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
   }, [activeIdx]);
 
+  // Per-chord-index lookup maps from the time-aligned Roman entries. These
+  // depend only on the analysis, so memoize them — otherwise the O(entries ×
+  // chords) build reran on every currentTime tick (~10×/sec) during playback.
+  const { entryByChordIdx, modulationBeforeIdx } = useMemo(() => {
+    const chords = analysis?.chords ?? [];
+    const entries: RomanEntry[] = analysis?.roman?.entries ?? [];
+    const modulations: RomanModulation[] = analysis?.roman?.modulations ?? [];
+    const ebci = new Map<number, RomanEntry>();
+    for (const entry of entries) {
+      const idx = chords.findIndex((c) => Math.abs(c.start - entry.start) < 0.15);
+      if (idx !== -1) ebci.set(idx, entry);
+    }
+    const mbi = new Map<number, RomanModulation>();
+    for (const mod of modulations) {
+      const entry = entries[mod.at_index];
+      if (!entry) continue;
+      const chordIdx = chords.findIndex((c) => Math.abs(c.start - entry.start) < 0.15);
+      if (chordIdx !== -1) mbi.set(chordIdx, mod);
+    }
+    return { entryByChordIdx: ebci, modulationBeforeIdx: mbi };
+  }, [analysis]);
+
   if (!analysis?.chords || analysis.chords.length === 0) {
     return (
       <section className="glass-panel rounded-xl p-4">
@@ -99,39 +121,8 @@ export const ChordTimeline: React.FC = () => {
     );
   }
 
-  const entries: RomanEntry[] = analysis.roman?.entries ?? [];
-  const modulations: RomanModulation[] = analysis.roman?.modulations ?? [];
-
-  // Build per-chord-index lookup maps from time-aligned entries.
-  // An entry's [start,end) bracket maps to the chord with closest start.
-  const entryByChordIdx = new Map<number, RomanEntry>();
-  for (const entry of entries) {
-    const idx = analysis.chords.findIndex(
-      (c) => Math.abs(c.start - entry.start) < 0.15
-    );
-    if (idx !== -1) entryByChordIdx.set(idx, entry);
-  }
-
-  // I1 fix: cadence and modulation indices are in entries[] space (N.C.-stripped),
-  // NOT chords[] space. Convert via time-alignment.
-
-  // Cadence badges: entry.cadence is already time-aligned per-entry (set by
-  // the backend cadence pass). We read it directly from entryByChordIdx — no
-  // index-space conversion needed.
-
-  // Modulation chips: mod.at_index -> entries[at_index] -> .start -> chords[] idx.
-  const modulationBeforeIdx = new Map<number, RomanModulation>();
-  for (const mod of modulations) {
-    const entry = entries[mod.at_index];
-    if (!entry) continue;
-    // Find chords[] index whose start is within ±0.15s of this entry's start.
-    const chordIdx = analysis.chords.findIndex(
-      (c) => Math.abs(c.start - entry.start) < 0.15
-    );
-    if (chordIdx !== -1) {
-      modulationBeforeIdx.set(chordIdx, mod);
-    }
-  }
+  // entryByChordIdx / modulationBeforeIdx are memoized above. Cadence comes
+  // from entry.cadence (already time-aligned per-entry by the backend).
 
   const handleChordClick = (startTime: number, idx: number, e: React.MouseEvent) => {
     if (e.shiftKey && analysis?.chords) {
