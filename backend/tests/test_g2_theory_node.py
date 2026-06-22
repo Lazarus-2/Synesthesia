@@ -24,7 +24,7 @@ def _make_state(key="C major", tempo=120.0, chords=None, roman=None):
 
 
 class TestTheoryNodeStructuredOutput:
-    def test_theory_node_returns_theory_typed_key(self):
+    async def test_theory_node_returns_theory_typed_key(self):
         """theory_node must write state key 'theory' (a TheoryExplanation), not just
         'theory_explanation' (a str)."""
         from langchain_core.runnables import RunnableLambda
@@ -38,7 +38,7 @@ class TestTheoryNodeStructuredOutput:
         )
 
         with patch("backend.chains.theory_chain.build_theory_chain", return_value=RunnableLambda(lambda _x: te)):
-            result = nodes.theory_node(_make_state())
+            result = await nodes.theory_node(_make_state())
 
         assert "theory" in result, (
             f"theory_node must write 'theory' key; got keys: {list(result.keys())}"
@@ -46,7 +46,7 @@ class TestTheoryNodeStructuredOutput:
         assert isinstance(result["theory"], TheoryExplanation)
         assert result["theory"].key_summary == "C major."
 
-    def test_theory_node_also_writes_theory_explanation_for_back_compat(self):
+    async def test_theory_node_also_writes_theory_explanation_for_back_compat(self):
         """theory_node must also write theory_explanation=str for legacy consumers
         (AnalysisState.theory_explanation, tasks.py assembly)."""
         from langchain_core.runnables import RunnableLambda
@@ -61,14 +61,14 @@ class TestTheoryNodeStructuredOutput:
         )
 
         with patch("backend.chains.theory_chain.build_theory_chain", return_value=RunnableLambda(lambda _x: te)):
-            result = nodes.theory_node(_make_state(key="G major"))
+            result = await nodes.theory_node(_make_state(key="G major"))
 
         assert "theory_explanation" in result
         assert isinstance(result["theory_explanation"], str)
         assert "G major" in result["theory_explanation"]
         assert "Blues" in result["theory_explanation"]
 
-    def test_theory_node_offline_fallback_still_writes_str(self):
+    async def test_theory_node_offline_fallback_still_writes_str(self):
         """When the LLM call raises, theory_node must still write theory_explanation
         as a degraded str message (no change to offline path)."""
         from backend.graph import nodes
@@ -77,7 +77,7 @@ class TestTheoryNodeStructuredOutput:
             "backend.chains.theory_chain.build_theory_chain",
             side_effect=RuntimeError("LLM offline"),
         ):
-            result = nodes.theory_node(_make_state())
+            result = await nodes.theory_node(_make_state())
 
         # Offline path writes a string, not a TheoryExplanation
         assert "theory_explanation" in result

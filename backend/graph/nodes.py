@@ -6,6 +6,7 @@ Vault ref: 04-LangGraph-Core/02-State-Nodes-Edges.md
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import socket
@@ -509,8 +510,12 @@ def roman_analysis_node(state: AnalysisState) -> dict:
         return {"roman": None}
 
 
-def theory_node(state: AnalysisState) -> dict:
-    """LLM call: generate structured theory explanation."""
+async def theory_node(state: AnalysisState) -> dict:
+    """LLM call: generate structured theory explanation.
+
+    Async so the fan-out (theory ∥ instrument ∥ stems) actually overlaps — the
+    LLM round-trip yields the event loop instead of blocking it.
+    """
     from backend.chains.theory_chain import build_theory_chain, to_text
     from backend.observability.tracing import trace
 
@@ -519,7 +524,7 @@ def theory_node(state: AnalysisState) -> dict:
     try:
         with trace("theory", job_id=state.get("job_id", "")):
             chain = build_theory_chain()
-            te = chain.invoke(song_obj)
+            te = await chain.ainvoke(song_obj)
         # Write both the structured object AND the back-compat string so
         # tasks.py, Mongo persistence, and old consumers all keep working.
         return {
@@ -548,8 +553,11 @@ def theory_node(state: AnalysisState) -> dict:
         }
 
 
-def instrument_node(state: AnalysisState) -> dict:
-    """LLM + deterministic chord-diagram merge -> InstrumentGuide."""
+async def instrument_node(state: AnalysisState) -> dict:
+    """LLM + deterministic chord-diagram merge -> InstrumentGuide.
+
+    Async so it overlaps with theory + stems in the fan-out.
+    """
     from backend.chains.instrument_chain import build_instrument_chain
     from backend.observability.tracing import trace
 
@@ -564,7 +572,7 @@ def instrument_node(state: AnalysisState) -> dict:
     try:
         with trace("instrument", job_id=state.get("job_id", "")):
             chain = build_instrument_chain()
-            guide: InstrumentGuide = chain.invoke(payload)
+            guide: InstrumentGuide = await chain.ainvoke(payload)
         return {"instrument_guide": guide}
     except Exception as e:
         # Fall back to a guide containing just the deterministic chord
@@ -589,7 +597,7 @@ def instrument_node(state: AnalysisState) -> dict:
         }
 
 
-def stems_node(state: AnalysisState) -> dict:
+async def stems_node(state: AnalysisState) -> dict:
     """Stem separation via demucs (Plan 3 A2).
 
     Gated by ``settings.enable_stems`` so dev boxes without a GPU can
@@ -621,7 +629,9 @@ def stems_node(state: AnalysisState) -> dict:
     out_dir = settings.stems_dir / job_id
     try:
         with trace("stems", job_id=job_id):
-            result = separate_stems(audio_path, out_dir)
+            # demucs is CPU-heavy + blocking — offload to a thread so it doesn't
+            # stall the event loop (and the parallel theory/instrument LLM calls).
+            result = await asyncio.to_thread(separate_stems, audio_path, out_dir)
     except Exception as e:
         logger.warning("stems_node: separation failed for %s: %s", job_id, e)
         return {"errors": [f"stems: separation failed for job {job_id} ({e})"]}

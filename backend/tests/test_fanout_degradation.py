@@ -23,33 +23,33 @@ def _base_state():
 
 
 class TestTheoryDegradation:
-    def test_llm_down_records_error_and_still_returns_text(self, monkeypatch):
+    async def test_llm_down_records_error_and_still_returns_text(self, monkeypatch):
         def boom(*_a, **_k):
             raise RuntimeError("ollama refused connection")
 
         monkeypatch.setattr("backend.chains.theory_chain.build_theory_chain", boom)
-        out = nodes_mod.theory_node(_base_state())
+        out = await nodes_mod.theory_node(_base_state())
         assert out["theory_explanation"]  # fallback prose present
         assert out.get("errors"), "theory_node must append a degradation error"
         assert any("theory" in e.lower() for e in out["errors"])
 
 
 class TestInstrumentDegradation:
-    def test_llm_down_records_error_and_still_returns_guide(self, monkeypatch):
+    async def test_llm_down_records_error_and_still_returns_guide(self, monkeypatch):
         def boom(*_a, **_k):
             raise RuntimeError("ollama refused connection")
 
         monkeypatch.setattr(
             "backend.chains.instrument_chain.build_instrument_chain", boom
         )
-        out = nodes_mod.instrument_node(_base_state())
+        out = await nodes_mod.instrument_node(_base_state())
         assert out["instrument_guide"] is not None  # fallback guide present
         assert out.get("errors")
         assert any("instrument" in e.lower() for e in out["errors"])
 
 
 class TestStemsDegradation:
-    def test_stems_failure_records_error(self, monkeypatch):
+    async def test_stems_failure_records_error(self, monkeypatch):
         from backend.config import get_settings
 
         s = get_settings()
@@ -59,7 +59,7 @@ class TestStemsDegradation:
             raise RuntimeError("demucs CUDA OOM")
 
         monkeypatch.setattr("backend.ml.stem_separation.separate_stems", boom)
-        out = nodes_mod.stems_node({"audio_path": "/tmp/job123_x.wav"})
+        out = await nodes_mod.stems_node({"audio_path": "/tmp/job123_x.wav"})
         assert out.get("stems", {}) == {}
         assert out.get("errors")
         assert any("stem" in e.lower() for e in out["errors"])

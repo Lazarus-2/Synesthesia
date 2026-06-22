@@ -130,7 +130,7 @@ def test_analysis_state_has_job_id_key():
     assert resolved["job_id"] is str
 
 
-def test_stems_node_keys_output_dir_on_job_id(monkeypatch, tmp_path):
+async def test_stems_node_keys_output_dir_on_job_id(monkeypatch, tmp_path):
     """stems_node must put stems under stems_dir/{job_id}/, derived from the
     job_id on state — NOT from splitting the (video-id-named) audio filename."""
     from backend.config import get_settings
@@ -166,7 +166,7 @@ def test_stems_node_keys_output_dir_on_job_id(monkeypatch, tmp_path):
         "job_id": "job-abc",
         "audio_path": str(audio),
     }
-    out = nodes.stems_node(state)
+    out = await nodes.stems_node(state)
 
     # Stems written under {job_id}, returned as relative-under-stems_dir paths.
     assert (stems_dir / "job-abc" / "vocals.wav").exists()
