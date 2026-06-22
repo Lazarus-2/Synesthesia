@@ -25,6 +25,9 @@ export const Header: React.FC = () => {
         <button
           className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors group shrink-0"
           onClick={() => {
+            // Close any in-flight progress SSE first, else its onDone could
+            // later overwrite analysis/audioFileUrl for the song we're leaving.
+            useAnalysisStore.getState().stopProgressStream();
             useAnalysisStore.getState().setAnalysis(null);
             useAnalysisStore.getState().setJobStatus("idle");
           }}

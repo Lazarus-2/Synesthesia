@@ -21,8 +21,12 @@ function scheduleClick(ctx: AudioContext, time: number, accent: boolean): void {
 }
 
 export const BottomBar: React.FC = () => {
-  const { isPlaying, setIsPlaying, wavesurfer } = usePlayerStore();
-  const { analysis } = useAnalysisStore();
+  // Field selectors (not the whole store) so the footer doesn't re-render on
+  // every currentTime tick (~10/sec) — it never displays the time.
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const wavesurfer = usePlayerStore((s) => s.wavesurfer);
+  const analysis = useAnalysisStore((s) => s.analysis);
   const {
     practiceMode, togglePracticeMode,
     loopStart, loopEnd, setLoopStart, setLoopEnd, clearLoop,

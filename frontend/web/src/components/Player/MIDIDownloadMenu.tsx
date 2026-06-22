@@ -37,10 +37,13 @@ export const MIDIDownloadMenu: React.FC = () => {
         </span>
       </button>
       {open && (
-        <ul
-          className="absolute z-50 mt-2 right-0 min-w-[180px] glass-panel border border-white/10 rounded-lg overflow-hidden shadow-2xl"
-          role="menu"
-        >
+        <>
+          {/* click-away backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
+          <ul
+            className="absolute z-50 mt-2 right-0 min-w-[180px] glass-panel border border-white/10 rounded-lg overflow-hidden shadow-2xl"
+            role="menu"
+          >
           {_STEMS.map((s) => (
             <li key={s.key}>
               <a
@@ -57,7 +60,8 @@ export const MIDIDownloadMenu: React.FC = () => {
               </a>
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
     </div>
   );

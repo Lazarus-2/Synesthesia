@@ -12,9 +12,39 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/** The elapsed / remaining time labels. Isolated so ONLY this tiny node
+ *  re-renders on each currentTime tick (~10/sec) — the parent WaveformPlayer
+ *  (waveform + section ribbon) doesn't subscribe to currentTime and so stays
+ *  put while playing. */
+const TransportTime: React.FC<{ side: "elapsed" | "remaining" }> = ({ side }) => {
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const duration = usePlayerStore((s) => s.duration);
+  if (side === "elapsed") {
+    return (
+      <span className="text-xs font-medium text-primary-container tabular-nums">
+        {formatTime(currentTime)}
+      </span>
+    );
+  }
+  const remaining = duration - currentTime;
+  return (
+    <span className="text-xs font-medium text-on-surface-variant tabular-nums">
+      -{formatTime(remaining > 0 ? remaining : 0)}
+    </span>
+  );
+};
+
 export const WaveformPlayer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { isPlaying, setIsPlaying, currentTime, duration, setCurrentTime, setDuration, audioFileUrl, setWavesurfer } = usePlayerStore();
+  // Field selectors (no currentTime) so the player body + section ribbon don't
+  // re-render 10×/sec; the time labels live in <TransportTime> which does.
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const duration = usePlayerStore((s) => s.duration);
+  const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
+  const setDuration = usePlayerStore((s) => s.setDuration);
+  const audioFileUrl = usePlayerStore((s) => s.audioFileUrl);
+  const setWavesurfer = usePlayerStore((s) => s.setWavesurfer);
   const { analysis } = useAnalysisStore();
   const { practiceMode, loopStart, loopEnd, setLoopStart, setLoopEnd } = usePracticeStore();
   const wsRef = useRef<WaveSurfer | null>(null);
@@ -73,8 +103,6 @@ export const WaveformPlayer: React.FC = () => {
 
     return () => { cleanup?.(); };
   }, [audioFileUrl, setDuration, setWavesurfer, setCurrentTime, setIsPlaying]);
-
-  const remaining = duration - currentTime;
 
   return (
     <section className="glass-panel rounded-xl p-6 relative overflow-hidden flex flex-col gap-4">
@@ -159,9 +187,7 @@ export const WaveformPlayer: React.FC = () => {
 
       {/* Transport Controls */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-primary-container tabular-nums">
-          {formatTime(currentTime)}
-        </span>
+        <TransportTime side="elapsed" />
 
         <button
           aria-label={isPlaying ? "Pause" : "Play"}
@@ -190,9 +216,7 @@ export const WaveformPlayer: React.FC = () => {
           </span>
         </button>
 
-        <span className="text-xs font-medium text-on-surface-variant tabular-nums">
-          -{formatTime(remaining > 0 ? remaining : 0)}
-        </span>
+        <TransportTime side="remaining" />
       </div>
     </section>
   );
