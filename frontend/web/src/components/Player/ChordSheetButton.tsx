@@ -4,6 +4,7 @@ import React from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 import { transposeChord } from "../../lib/music";
+import { formatTime } from "../../lib/format";
 import type { RomanEntry } from "../../types";
 
 /** Escape text destined for the printable popup's innerHTML. */
@@ -13,12 +14,6 @@ function esc(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function fmtTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 /**
@@ -67,7 +62,7 @@ export const ChordSheetButton: React.FC = () => {
       return `<div class="cell">
         <div class="chord">${esc(labelFor(chord.chord))}</div>
         ${rn ? `<div class="roman">${esc(rn)}</div>` : ""}
-        <div class="t">${fmtTime(chord.start)}</div>
+        <div class="t">${formatTime(chord.start)}</div>
       </div>`;
     };
 

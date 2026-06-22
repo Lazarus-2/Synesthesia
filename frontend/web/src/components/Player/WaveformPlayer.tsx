@@ -5,12 +5,7 @@ import type WaveSurfer from "wavesurfer.js";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { formatTime } from "../../lib/format";
 
 /** The elapsed / remaining time labels. Isolated so ONLY this tiny node
  *  re-renders on each currentTime tick (~10/sec) — the parent WaveformPlayer
