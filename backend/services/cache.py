@@ -41,6 +41,8 @@ class HybridCache:
         self._breaker_open_until: float = 0.0
         self._breaker_state: str = _STATE_CLOSED
         self._lock = asyncio.Lock()
+        # Guards the read-modify-write of the in-memory counter fallback in incr().
+        self._incr_lock = asyncio.Lock()
 
         if settings.redis_url:
             self._connect()
@@ -202,6 +204,39 @@ class HybridCache:
                 return True  # evicted from memory; best-effort on Redis
 
         return True
+
+    async def incr(self, key: str, delta: int = 1, ttl_seconds: int | None = None) -> int | None:
+        """Atomically add ``delta`` to an integer counter and return the new total.
+
+        Uses Redis INCRBY (atomic across processes/coroutines) + EXPIRE; on a
+        Redis outage falls back to a lock-guarded in-process counter. Returns
+        ``None`` only on a hard cache error so callers can fail-open.
+        """
+        if await self._redis_ready():
+            try:
+                new_total = await self.redis_client.incrby(key, delta)
+                if ttl_seconds:
+                    await self.redis_client.expire(key, ttl_seconds)
+                expires = time.time() + ttl_seconds if ttl_seconds else None
+                self.memory_store[key] = (str(new_total), expires)
+                return int(new_total)
+            except Exception as err:
+                self._trip_breaker(err)
+
+        # Memory fallback — lock the RMW so concurrent coroutines don't race.
+        async with self._incr_lock:
+            cur = 0
+            if key in self.memory_store:
+                val, expires = self.memory_store[key]
+                if expires is None or expires > time.time():
+                    try:
+                        cur = int(val)
+                    except (TypeError, ValueError):
+                        cur = 0
+            new_total = cur + delta
+            expires = time.time() + ttl_seconds if ttl_seconds else None
+            self.memory_store[key] = (str(new_total), expires)
+            return new_total
 
     async def ping(self) -> bool:
         """Liveness probe. Reconnects through the breaker if cooldown elapsed."""

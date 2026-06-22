@@ -15,19 +15,15 @@ from backend.services import token_budget
 
 
 class FakeCache:
-    """Minimal async stand-in for HybridCache: get/set over a dict."""
+    """Minimal async stand-in for HybridCache: atomic incr over a dict."""
 
     def __init__(self) -> None:
         self.store: dict[str, str] = {}
-        self.set_calls: list[tuple[str, str, int | None]] = []
 
-    async def get(self, key: str):
-        return self.store.get(key)
-
-    async def set(self, key: str, value: str, ttl_seconds: int | None = 1800):
-        self.store[key] = value
-        self.set_calls.append((key, value, ttl_seconds))
-        return True
+    async def incr(self, key: str, delta: int = 1, ttl_seconds: int | None = None) -> int:
+        new_total = int(self.store.get(key, "0") or "0") + delta
+        self.store[key] = str(new_total)
+        return new_total
 
 
 @pytest.fixture
