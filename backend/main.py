@@ -690,6 +690,8 @@ async def signup(request: Request, req: SignUpRequest, db=Depends(get_mongodb)) 
     ``REQUIRE_AUTH=true`` — sign-up is opt-in for users who want
     persistent libraries / preferences.
     """
+    from pymongo.errors import DuplicateKeyError
+
     from backend.auth import hash_password, issue_token
 
     if not req.username.strip() or len(req.password) < 8:
@@ -700,16 +702,21 @@ async def signup(request: Request, req: SignUpRequest, db=Depends(get_mongodb)) 
     if await db.users.find_one({"username": req.username}):
         raise HTTPException(status_code=409, detail="Username already taken")
     user_id = str(uuid.uuid4())
-    await db.users.insert_one(
-        {
-            "_id": user_id,
-            "username": req.username,
-            "instrument": "guitar",
-            "difficulty": "beginner",
-            "password_hash": hash_password(req.password),
-            "created_at": datetime.now(UTC),
-        }
-    )
+    try:
+        await db.users.insert_one(
+            {
+                "_id": user_id,
+                "username": req.username,
+                "instrument": "guitar",
+                "difficulty": "beginner",
+                "password_hash": hash_password(req.password),
+                "created_at": datetime.now(UTC),
+            }
+        )
+    except DuplicateKeyError:
+        # Lost a concurrent signup race — the unique username index is the
+        # authoritative guard (the find_one check above is not atomic).
+        raise HTTPException(status_code=409, detail="Username already taken")
     try:
         token = issue_token(user_id=user_id, username=req.username)
     except RuntimeError as e:

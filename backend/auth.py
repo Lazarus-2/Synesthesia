@@ -87,7 +87,16 @@ def decode_token(token: str) -> UserPrincipal:
     if not s.auth_secret_key:
         raise HTTPException(status_code=401, detail="Authentication is not configured")
     try:
-        payload = jwt.decode(token, s.auth_secret_key, algorithms=[s.auth_jwt_algorithm])
+        # algorithms is a single-element allowlist (HS256 by default) so PyJWT
+        # rejects any other alg — including "none" — closing alg-confusion.
+        # require=[exp,sub] rejects tokens lacking an expiry (never-expiring) or
+        # subject, rather than silently accepting them.
+        payload = jwt.decode(
+            token,
+            s.auth_secret_key,
+            algorithms=[s.auth_jwt_algorithm],
+            options={"require": ["exp", "sub"]},
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:

@@ -108,6 +108,25 @@ def _resolve_analysis_repo() -> AnalysisRepo:
     return AnalysisRepo(get_mongodb())
 
 
+async def _read_owned_or_public(
+    repo: AnalysisRepo, job_id: str, uid: str | None
+) -> dict | None:
+    """Resolve an analysis honoring ownership.
+
+    With a ``uid`` → owner-scoped read. Without one: in anonymous mode
+    (``require_auth=False``) fall back to a public read, but when auth IS
+    required a missing uid means the ownership ContextVar failed to propagate
+    into this tool's task — REFUSE rather than serve an unowned doc (IDOR).
+    """
+    if uid is not None:
+        return await repo.get_owned(job_id, uid)
+    from backend.config import get_settings
+
+    if get_settings().require_auth:
+        return None
+    return await repo.get(job_id)
+
+
 class SongAnalysisArgs(BaseModel):
     job_id: str = Field(description="The analysis job id for the current song.")
 
@@ -125,8 +144,7 @@ async def get_song_analysis(job_id: str) -> dict:
     injected.
     """
     repo = _resolve_analysis_repo()
-    uid = current_user_id.get()
-    doc = await repo.get_owned(job_id, uid) if uid is not None else await repo.get(job_id)
+    doc = await _read_owned_or_public(repo, job_id, current_user_id.get())
     if not doc:
         return {"error": f"No analysis found for job_id '{job_id}'."}
 
@@ -180,12 +198,7 @@ async def find_similar_songs(analysis_job_id: str) -> list[dict] | dict:
     Returns a ranked list of {title, artist, url, image, source, match}.
     Use this for 'what sounds like this?' / 'songs with similar chords' questions."""
     repo = _resolve_analysis_repo()
-    uid = current_user_id.get()
-    doc = (
-        await repo.get_owned(analysis_job_id, uid)
-        if uid is not None
-        else await repo.get(analysis_job_id)
-    )
+    doc = await _read_owned_or_public(repo, analysis_job_id, current_user_id.get())
     if not doc:
         return {"error": f"No analysis found for job_id '{analysis_job_id}'."}
 

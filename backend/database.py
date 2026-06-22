@@ -11,9 +11,13 @@ create multiple Motor clients.
 
 from __future__ import annotations
 
+import logging
+
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from backend.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _client: AsyncIOMotorClient | None = None
 _db: AsyncIOMotorDatabase | None = None
@@ -28,8 +32,23 @@ _TTL_SECONDS_90_DAYS = 60 * 60 * 24 * 90
 async def _create_indexes(db) -> None:
     """Create all Mongo indexes used by the app. Idempotent — Mongo
     silently no-ops re-creating an identical index."""
-    # User lookup by username (login flow, future auth).
-    await db.users.create_index("username")
+    # User lookup by username (login flow) — UNIQUE so concurrent signups can't
+    # create duplicate accounts (the endpoint's check-then-insert isn't atomic;
+    # the DB constraint is the real guard). Migrate from the original non-unique
+    # index, and tolerate failure (a legacy non-unique index or pre-existing
+    # duplicate usernames) so startup never breaks.
+    try:
+        await db.users.create_index("username", unique=True, name="uniq_username")
+    except Exception as e:  # noqa: BLE001
+        try:
+            await db.users.drop_index("username_1")
+            await db.users.create_index("username", unique=True, name="uniq_username")
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Could not create unique username index (legacy index or duplicate "
+                "usernames present — dedupe then retry): %s",
+                e,
+            )
 
     # Chat sessions: list/lookup by user; sorted-by-recency.
     await db.chat_sessions.create_index([("user_id", 1), ("created_at", -1)])
