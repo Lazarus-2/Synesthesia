@@ -143,9 +143,11 @@ async def lifespan(application: FastAPI):
     # Structured JSON logs as the very first thing so subsequent startup
     # messages land in the same format.
     from backend.observability.logging_config import configure_logging
+    from backend.observability.sentry import init_sentry
     from backend.observability.tracing import configure_tracing
 
     configure_logging()
+    init_sentry()  # opt-in; no-op unless SENTRY_DSN is set
     configure_tracing()
     if not broker.is_worker_process:
         await broker.startup()

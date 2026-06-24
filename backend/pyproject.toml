@@ -86,6 +86,9 @@ dependencies = [
     "opentelemetry-api>=1.27.0",
     "opentelemetry-sdk>=1.27.0",
     "opentelemetry-exporter-otlp-proto-http>=1.27.0",
+    # Error tracking — opt-in, no-op unless SENTRY_DSN is set (see
+    # backend/observability/sentry.py).
+    "sentry-sdk[fastapi]>=2.0.0",
 
     # YAML (prompt registry)
     "PyYAML>=6.0",

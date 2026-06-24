@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = "synesthesia"
 
+    # --- Error tracking (Sentry, opt-in) ---
+    # Unset (default) == fully disabled: init_sentry() is a no-op and the SDK
+    # is never imported, so local/dev/test runs stay clean. Set SENTRY_DSN per
+    # deploy to enable. Same graceful-when-unset pattern as LangSmith above.
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.0
+    sentry_environment: str = "development"
+
     # --- Data Stores ---
     redis_url: str = "redis://localhost:6379/0"
     database_url: str = "sqlite:///./storage/synesthesia.db"
