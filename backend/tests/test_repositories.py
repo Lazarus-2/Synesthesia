@@ -40,11 +40,16 @@ class TestIndexes:
         mock_mongo.chat_sessions.create_index = AsyncMock()
         mock_mongo.song_analyses.create_index = AsyncMock()
         mock_mongo.failed_jobs.create_index = AsyncMock()
+        mock_mongo.collections.create_index = AsyncMock()
 
         await _create_indexes(mock_mongo)
 
         created = [c.args[0] for c in mock_mongo.song_analyses.create_index.call_args_list]
         assert "user_id" in created
+
+        # Collections: compound (user_id, created_at) index for owner listing.
+        coll_created = [c.args[0] for c in mock_mongo.collections.create_index.call_args_list]
+        assert [("user_id", 1), ("created_at", -1)] in coll_created
 
 
 class TestAnalysisRepo:
