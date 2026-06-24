@@ -267,7 +267,7 @@ export default function CollectionDetailPage() {
                     <span className="material-symbols-outlined text-lg">arrow_downward</span>
                   </button>
                   <Link
-                    href={`/s/${s.job_id}`}
+                    href={`/?job=${encodeURIComponent(s.job_id)}`}
                     className="px-3 py-1.5 rounded-full glass-panel text-xs hover:border-primary/30 ml-1"
                   >
                     Open
