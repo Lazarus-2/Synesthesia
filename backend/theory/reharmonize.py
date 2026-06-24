@@ -75,7 +75,7 @@ def _key_obj(key: str):
 def _prefers_flats(key_obj) -> bool:
     """True if the key signature uses flats (negative ``sharps``)."""
     try:
-        return key_obj.sharps < 0
+        return bool(key_obj.sharps < 0)
     except Exception:  # pragma: no cover
         return False
 

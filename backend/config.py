@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     user_rate_limit: str = "30/minute"  # /user writes + preference reads/writes
     read_rate_limit: str = "120/minute"  # GET /analyze polling + progress init
     collection_rate_limit: str = "60/minute"  # collections/setlists CRUD
+    theory_rate_limit: str = "60/minute"  # stateless /theory/* deterministic endpoints
     enable_stems: bool = True
     # Phase 6 G5 — storage lifecycle. Reaper deletes upload/stem files older
     # than this (matches the 90-day Mongo TTL). max_disk_usage_gb=0 disables
