@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from backend.schemas import ChordDiagram, Instrument
 from backend.tools.chords import parse_chord
+from backend.tools.music_constants import FLAT_TO_SHARP as _FLAT_TO_SHARP
+from backend.tools.music_constants import NOTES as _NOTES_SHARP
 
 _GUITAR_SHAPES: dict[str, dict] = {
     "C": {"frets": [-1, 3, 2, 0, 1, 0], "fingers": [0, 3, 2, 0, 1, 0]},
@@ -141,10 +143,6 @@ def _candidate_labels(label: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # G3.1 — Movable-shape generator
 # ---------------------------------------------------------------------------
-
-_NOTES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-_FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
-
 
 def _root_semitone(root: str) -> int | None:
     """Return 0-11 semitone index for a root note name, or None if unrecognised."""

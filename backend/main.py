@@ -14,10 +14,8 @@ import hashlib
 import inspect
 import json
 import logging
-import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -33,9 +31,8 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
@@ -88,31 +85,49 @@ def _is_audio_magic(head: bytes) -> bool:
 
 import taskiq_fastapi
 
+from backend.api_common import _enforce_owned_read, _reject_job_id_traversal  # noqa: F401
 from backend.auth import UserPrincipal, current_user, require_user
 from backend.chains.aura_agent import run_aura, stream_aura
 from backend.chains.aura_tools import current_user_id
 from backend.config import ANALYZER_VERSION, get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
-from backend.repositories import AnalysisRepo, ChatSessionRepo, CollectionRepo, UserRepo
+from backend.ratelimit import limiter
+from backend.repositories import AnalysisRepo, ChatSessionRepo, UserRepo
+from backend.routers.auth import login, signup  # noqa: F401  (re-export: test coupling)
+from backend.routers.auth import router as auth_router
+from backend.routers.collections import router as collections_router
+from backend.routers.health import router as health_router
+from backend.routers.library import router as library_router
+from backend.routers.media import (  # noqa: F401  (re-export: test coupling)
+    export_midi,
+    serve_audio,
+    serve_stem,
+)
+from backend.routers.media import router as media_router
+from backend.routers.search_lyrics import router as search_lyrics_router
+from backend.routers.share import router as share_router
+from backend.routers.theory import router as theory_router
+from backend.routers.user import (  # noqa: F401  (re-export: test coupling)
+    create_or_update_user,
+    get_user_preferences,
+    get_user_profile,
+    update_user_preferences,
+)
+from backend.routers.user import router as user_router
 from backend.schemas import (
-    AddSongRequest,
     AnalyzeResponse,
     ChatRequest,
     ChatResponse,
-    CollectionCreateRequest,
-    CollectionUpdateRequest,
-    ReharmonizeRequest,
     SongAnalysis,
 )
-from backend.services.cache import cache
+from backend.services.cache import cache  # noqa: F401  (re-export: tests patch backend.main.cache)
 from backend.services.job_store import (
     DEFAULT_HEARTBEAT_TIMEOUT_S,
     get_job_store,
 )
 from backend.services.token_budget import check_and_consume
 from backend.tasks import run_analysis_pipeline  # noqa: F401
-from backend.theory.reharmonize import reharmonize
 from backend.worker import broker
 
 # The worker entrypoint imports backend.tasks (not backend.main), so the
@@ -254,12 +269,6 @@ async def _generic_exception_handler(_request: Request, _exc: Exception):
 # storage URI shares counts across worker processes so the limit is global,
 # not per-container.
 
-_settings_for_limiter = get_settings()
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=_settings_for_limiter.redis_url,
-    strategy="fixed-window",
-)
 app.state.limiter = limiter
 
 
@@ -340,104 +349,6 @@ async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded):
 # and once at root (legacy alias kept for the existing frontend until it
 # migrates to the versioned base URL).
 router = APIRouter()
-
-
-class UserRequest(BaseModel):
-    # Optional: identity is taken from the auth token (Phase 6 G1). When
-    # present it must match the caller's own id, else the write is rejected.
-    id: str | None = None
-    username: str
-    instrument: str = "guitar"
-    difficulty: str = "beginner"
-
-
-class UserPreferences(BaseModel):
-    """Persistent personalization defaults (Plan 3 A8)."""
-
-    default_instrument: str | None = None
-    default_difficulty: str | None = None
-    default_capo: int | None = None
-
-
-# ----------------------------------------------------------------------------
-# Auth (Plan 3 A9) — sign-up / login over the JWT skeleton from Plan 2 D4
-# ----------------------------------------------------------------------------
-
-
-class SignUpRequest(BaseModel):
-    username: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class AuthResponse(BaseModel):
-    token: str
-    user_id: str
-    username: str
-
-
-@app.get("/health")
-async def health() -> dict:
-    """Liveness probe.
-
-    Cheap and always-200 so orchestrators can use this for "is the process
-    alive" without depending on downstream services. For dependency state,
-    see :func:`readiness`.
-    """
-    return {"status": "ok"}
-
-
-@app.get("/health/ready")
-async def readiness(db=Depends(get_mongodb)) -> JSONResponse:
-    """Readiness probe — pings Mongo and Redis, surfaces per-dependency state.
-
-    Returns 200 only when every required dependency is reachable, 503
-    otherwise with the per-dep breakdown. Use this for Kubernetes
-    ``readinessProbe`` so traffic doesn't hit a node whose Mongo connection
-    is wedged.
-    """
-    checks: dict[str, dict] = {}
-    overall_ok = True
-
-    # Mongo ping
-    t0 = time.perf_counter()
-    try:
-        await db.command("ping")
-        checks["mongodb"] = {
-            "ok": True,
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        overall_ok = False
-        checks["mongodb"] = {"ok": False, "error": type(e).__name__, "msg": str(e)[:120]}
-
-    # Redis ping
-    t0 = time.perf_counter()
-    try:
-        from backend.services.cache import cache
-
-        if await cache.ping():
-            checks["redis"] = {
-                "ok": True,
-                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
-            }
-        else:
-            checks["redis"] = {
-                "ok": False,
-                "error": "unreachable",
-                "msg": "Redis unreachable or breaker open; fell back to in-memory",
-            }
-            overall_ok = False
-    except Exception as e:
-        overall_ok = False
-        checks["redis"] = {"ok": False, "error": type(e).__name__, "msg": str(e)[:120]}
-
-    body = {"status": "ok" if overall_ok else "degraded", "checks": checks}
-    return JSONResponse(status_code=200 if overall_ok else 503, content=body)
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -690,473 +601,6 @@ async def get_analysis(
     return response
 
 
-@router.post("/auth/signup", response_model=AuthResponse)
-@limiter.limit(lambda: get_settings().auth_rate_limit)
-async def signup(request: Request, req: SignUpRequest, db=Depends(get_mongodb)) -> AuthResponse:
-    """Create a user with a hashed password and return a JWT (Plan 3 A9).
-
-    Idempotency: returns 409 if the username is already taken. Note that
-    the server still operates in anonymous-friendly mode unless
-    ``REQUIRE_AUTH=true`` — sign-up is opt-in for users who want
-    persistent libraries / preferences.
-    """
-    from pymongo.errors import DuplicateKeyError
-
-    from backend.auth import hash_password, issue_token
-
-    if not req.username.strip() or len(req.password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Username required and password must be at least 8 characters",
-        )
-    if await db.users.find_one({"username": req.username}):
-        raise HTTPException(status_code=409, detail="Username already taken")
-    user_id = str(uuid.uuid4())
-    try:
-        await db.users.insert_one(
-            {
-                "_id": user_id,
-                "username": req.username,
-                "instrument": "guitar",
-                "difficulty": "beginner",
-                "password_hash": hash_password(req.password),
-                "created_at": datetime.now(UTC),
-            }
-        )
-    except DuplicateKeyError:
-        # Lost a concurrent signup race — the unique username index is the
-        # authoritative guard (the find_one check above is not atomic).
-        raise HTTPException(status_code=409, detail="Username already taken")
-    try:
-        token = issue_token(user_id=user_id, username=req.username)
-    except RuntimeError as e:
-        # auth_secret_key not configured — still create the user, but the
-        # client gets a clear 503 instead of a cryptic 500.
-        raise HTTPException(status_code=503, detail=str(e))
-    return AuthResponse(token=token, user_id=user_id, username=req.username)
-
-
-@router.post("/auth/login", response_model=AuthResponse)
-@limiter.limit(lambda: get_settings().auth_rate_limit)
-async def login(request: Request, req: LoginRequest, db=Depends(get_mongodb)) -> AuthResponse:
-    """Verify password and return a JWT (Plan 3 A9)."""
-    from backend.auth import issue_token, verify_password
-
-    user = await db.users.find_one({"username": req.username})
-    if not user or not user.get("password_hash"):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not verify_password(req.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    try:
-        token = issue_token(user_id=user["_id"], username=user["username"])
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    return AuthResponse(token=token, user_id=user["_id"], username=user["username"])
-
-
-@router.get("/auth/me")
-async def whoami(request: Request) -> dict:
-    """Return the authenticated principal, or ``null`` when anonymous."""
-    from backend.auth import current_user
-
-    principal = current_user(request)
-    if principal is None:
-        return {"user": None}
-    return {"user": {"user_id": principal.user_id, "username": principal.username}}
-
-
-class LibraryEntry(BaseModel):
-    """Summary row for the library page (Plan 3 A7)."""
-
-    job_id: str
-    title: str | None = None
-    artist: str | None = None
-    key: str
-    tempo: float
-    duration: float
-    created_at: datetime | None = None
-    vibe_palette: list[str] = []
-
-
-class LibraryResponse(BaseModel):
-    items: list[LibraryEntry]
-    total: int
-    limit: int
-    offset: int
-
-
-@router.get("/library", response_model=LibraryResponse)
-async def list_library(
-    limit: int = 24,
-    offset: int = 0,
-    principal: UserPrincipal | None = Depends(current_user),
-    db=Depends(get_mongodb),
-) -> LibraryResponse:
-    """List previously-analyzed songs (Plan 3 A7), newest first.
-
-    Identity comes from the JWT, never the query string (a client-supplied
-    ``user_id`` could otherwise enumerate another user's library — BOLA). When
-    a user is authenticated we filter to analyses they own; in anonymous mode
-    (no principal, ``require_auth=False``) we surface the shared collection,
-    matching single-tenant local use.
-    """
-    limit = max(1, min(limit, 100))
-    offset = max(0, offset)
-    projection = {
-        "_id": 1,
-        "title": 1,
-        "artist": 1,
-        "key": 1,
-        "tempo": 1,
-        "duration": 1,
-        "created_at": 1,
-        "vibe_palette": 1,
-    }
-    query: dict = {}
-    if principal is not None:
-        # Authenticated: only this user's analyses. (Anonymous mode leaves the
-        # query open so a local single-tenant deployment still lists everything.)
-        query["user_id"] = principal.user_id
-    total = await db.song_analyses.count_documents(query)
-    cursor = (
-        db.song_analyses.find(query, projection).sort("created_at", -1).skip(offset).limit(limit)
-    )
-    items: list[LibraryEntry] = []
-    async for doc in cursor:
-        items.append(
-            LibraryEntry(
-                job_id=doc["_id"],
-                title=doc.get("title"),
-                artist=doc.get("artist"),
-                key=doc.get("key", "Unknown"),
-                tempo=float(doc.get("tempo", 0.0)),
-                duration=float(doc.get("duration", 0.0)),
-                created_at=doc.get("created_at"),
-                vibe_palette=doc.get("vibe_palette") or [],
-            )
-        )
-    return LibraryResponse(items=items, total=total, limit=limit, offset=offset)
-
-
-# ----------------------------------------------------------------------
-# Cross-platform search (Plan v2 C5) and synced lyrics (Plan v2 C6)
-# ----------------------------------------------------------------------
-
-
-@router.get("/search")
-@limiter.limit("30/minute")
-async def search_tracks(request: Request, q: str, limit: int = 10) -> dict:
-    """Search the merged Deezer + MusicBrainz catalog.
-
-    Returns ``{results: [...]}`` where each entry has at minimum
-    ``title``, ``artist``, plus whichever of ``deezer_id``, ``mbid``,
-    ``preview_url``, ``image_url``, ``album``, ``year`` were resolved.
-
-    Deezer (no auth, rich metadata) + MusicBrainz (rate-limited 1/sec,
-    authoritative MBIDs) run in parallel. Merged and deduped by
-    ``(title.lower, artist.lower)``.
-
-    Cached for 1h via HybridCache — search queries are stable, and
-    the upstream APIs (especially MusicBrainz) have aggressive rate
-    limits we should respect.
-    """
-    if not q or len(q) > 200:
-        raise HTTPException(status_code=400, detail="Query must be 1-200 characters")
-    limit = max(1, min(limit, 25))
-
-    import json as _json
-
-    from backend.search import merged_search
-
-    cache_key = f"search:q={q.lower().strip()}:limit={limit}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return {"results": _json.loads(cached), "cached": True}
-    results = await merged_search(q, limit=limit)
-    await cache.set(cache_key, _json.dumps(results), ttl_seconds=3600)
-    return {"results": results, "cached": False}
-
-
-@router.get("/lyrics")
-@limiter.limit("60/minute")
-async def get_lyrics(
-    request: Request,
-    track_name: str,
-    artist_name: str,
-    duration: int | None = None,
-) -> dict:
-    """Fetch synced + plain lyrics from LRCLIB.
-
-    Returns ``{synced_lyrics, plain_lyrics, source}``. Both lyric
-    fields are empty strings on a no-match — the frontend interprets
-    that as "no lyrics available for this track".
-
-    ``duration`` (seconds) is optional but helps LRCLIB disambiguate
-    covers and live versions.
-    """
-    if not track_name or not artist_name:
-        raise HTTPException(status_code=400, detail="track_name and artist_name are required")
-
-    import json as _json
-
-    from backend.lyrics import fetch_lyrics
-
-    cache_key = (
-        f"lyrics:t={track_name.lower().strip()}"
-        f":a={artist_name.lower().strip()}:d={duration or 'any'}"
-    )
-    cached = await cache.get(cache_key)
-    if cached:
-        return _json.loads(cached) | {"cached": True}
-    payload = await fetch_lyrics(track_name, artist_name, duration)
-    # Cache hits AND misses (both are valuable). 6h TTL.
-    await cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
-    return payload | {"cached": False}
-
-
-@router.post("/theory/reharmonize")
-@limiter.limit(lambda: get_settings().theory_rate_limit)
-async def theory_reharmonize(request: Request, req: ReharmonizeRequest) -> dict:
-    """Deterministic reharmonization suggestions (Theory Lab).
-
-    Stateless: no auth, no db. Returns ``{"suggestions": [...]}`` where each
-    suggestion is ``{type, label, chord, explanation}``. ``request`` is required
-    by the slowapi limiter (keys the rate limit by IP).
-    """
-    key = (req.key or "").strip()
-    chord = (req.chord or "").strip()
-    if not key or not chord:
-        raise HTTPException(status_code=400, detail="key and chord are required")
-    return {"suggestions": reharmonize(key, chord, req.next_chord)}
-
-
-@router.get("/share/{job_id}", response_model=AnalyzeResponse)
-async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeResponse:
-    """Read-only public view of a completed analysis (Plan 3 B8).
-
-    Same shape as ``GET /analyze/{job_id}`` but explicitly read-only,
-    requires no instrument selector, and is the documented stable URL for
-    "show this analysis to someone." Frontend builds the share link as
-    ``/s/{job_id}`` which proxies here.
-    """
-    db_record = await AnalysisRepo(db).get(job_id)
-    if not db_record:
-        raise HTTPException(status_code=404, detail=f"Analysis {job_id} not found")
-    song = SongAnalysisModel.model_validate(db_record)
-    analysis = SongAnalysis(
-        title=song.title,
-        artist=song.artist,
-        duration=song.duration,
-        key=song.key,
-        key_confidence=song.key_confidence,             # P4/P5 confidences
-        tempo=song.tempo,
-        tempo_confidence=song.tempo_confidence,
-        time_signature=song.time_signature,
-        time_signature_confidence=song.time_signature_confidence,
-        chords=song.chords,
-        beats=song.beats,
-        sections=song.sections,
-        roman=song.roman,
-        vibe_palette=song.vibe_palette,
-        theory=song.theory,                              # structured object (G2)
-        theory_explanation=song.theory_explanation,
-        similar_songs=song.similar_songs,               # online recommendations (G4)
-    )
-    return AnalyzeResponse(
-        job_id=job_id,
-        status="done",
-        analysis=analysis,
-        instrument_guide=None,
-        audio_url=f"/api/v1/audio/{job_id}",
-    )
-
-
-async def _enforce_owned_read(
-    job_id: str,
-    principal: UserPrincipal | None,
-    db,
-    *,
-    allow_missing: bool = False,
-) -> None:
-    """404 when an authenticated caller requests another user's OWNED job (Phase 6 G2).
-
-    No-op for anonymous callers (``principal is None``) — in the default
-    anonymous deployment every analysis is public, and the public ``/share``
-    player fetches media token-less, so those flows are unchanged. Anonymous
-    docs (``user_id is None``) stay readable for everyone. ``allow_missing``
-    lets the progress SSE keep streaming an in-flight job whose final doc is
-    not written yet (ownership isn't determinable then; low-sensitivity).
-    """
-    if principal is None:
-        return
-    doc = await db.song_analyses.find_one({"_id": job_id}, {"user_id": 1})
-    if doc is None:
-        if allow_missing:
-            return
-        raise HTTPException(status_code=404, detail="Not found")
-    owner = doc.get("user_id")
-    if owner is not None and owner != principal.user_id:
-        raise HTTPException(status_code=404, detail="Not found")
-
-
-def _reject_job_id_traversal(job_id: str) -> None:
-    """Reject a job_id that could escape its storage dir via path separators."""
-    if "/" in job_id or "\\" in job_id or ".." in job_id:
-        raise HTTPException(status_code=404, detail="Not found")
-
-
-@router.get("/midi/{job_id}/{stem}")
-@limiter.limit(lambda: get_settings().media_rate_limit)
-async def export_midi(
-    request: Request,
-    job_id: str,
-    stem: str,
-    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
-    db=Depends(get_mongodb),
-):
-    """Transcribe a stem (or the full mix) to MIDI (Plan 3 B10).
-
-    ``stem`` is one of ``vocals|drums|bass|other|full``. ``full`` runs
-    basic-pitch over the staged audio file (no stem separation required).
-    Other values look in ``stems_dir/{job_id}/{stem}.wav`` from the stem
-    separation step — if that file doesn't exist yet, returns 404.
-    """
-    _reject_job_id_traversal(job_id)
-    await _enforce_owned_read(job_id, principal, db)
-    settings = get_settings()
-    if stem == "full":
-        candidates = sorted(settings.audio_upload_dir.glob(f"{job_id}*"))
-        if not candidates:
-            raise HTTPException(status_code=404, detail="No staged audio for job")
-        source = candidates[0]
-        # Symlink guard (parity with /audio + /stems): glob can return a
-        # symlink pointing outside the upload dir — confirm the real path
-        # stays inside before transcribing it.
-        try:
-            source.resolve().relative_to(settings.audio_upload_dir.resolve())
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Audio file path escapes upload dir")
-    else:
-        if stem not in ("vocals", "drums", "bass", "other"):
-            raise HTTPException(status_code=400, detail=f"Unknown stem {stem!r}")
-        source = settings.stems_dir / job_id / f"{stem}.wav"
-        if not source.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Stem {stem!r} not separated yet; run analysis with stems enabled",
-            )
-        try:
-            source.resolve().relative_to(settings.stems_dir.resolve())
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Stem path escapes stems dir")
-
-    midi_dir = settings.stems_dir / job_id / "midi"
-    midi_dir.mkdir(parents=True, exist_ok=True)
-    out_midi = midi_dir / f"{stem}.mid"
-
-    if not out_midi.exists():
-        from backend.ml.midi_transcription import transcribe_to_midi
-
-        result = await asyncio.to_thread(transcribe_to_midi, source, out_midi)
-        if result is None or not out_midi.exists():
-            raise HTTPException(
-                status_code=503,
-                detail="MIDI transcription failed. basic-pitch runs via a Python "
-                "3.11 interpreter (backend/.venv311, or set $MIDI_PYTHON) because "
-                "it pins tensorflow<2.15.1 (no 3.12 wheel). Check the worker logs.",
-            )
-    return FileResponse(
-        out_midi,
-        media_type="audio/midi",
-        filename=f"{job_id}_{stem}.mid",
-    )
-
-
-@router.get("/stems/{job_id}/{stem}")
-@limiter.limit(lambda: get_settings().media_rate_limit)
-async def serve_stem(
-    request: Request,
-    job_id: str,
-    stem: str,
-    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
-    db=Depends(get_mongodb),
-):
-    """Stream a separated stem WAV (Plan 3 A2 + B7).
-
-    ``stem`` is one of ``vocals|drums|bass|other``. Looks under
-    ``settings.stems_dir/{job_id}/{stem}.wav`` (the layout written by
-    ``stems_node`` via demucs).
-    """
-    _reject_job_id_traversal(job_id)
-    await _enforce_owned_read(job_id, principal, db)
-    if stem not in ("vocals", "drums", "bass", "other"):
-        raise HTTPException(status_code=400, detail=f"Unknown stem {stem!r}")
-    settings = get_settings()
-    src = settings.stems_dir / job_id / f"{stem}.wav"
-    if not src.exists():
-        raise HTTPException(status_code=404, detail=f"Stem {stem!r} not available for job {job_id}")
-    try:
-        src.resolve().relative_to(settings.stems_dir.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Stem path escapes stems dir")
-    return FileResponse(
-        src,
-        media_type="audio/wav",
-        filename=f"{job_id}_{stem}.wav",
-        headers={"Accept-Ranges": "bytes"},
-    )
-
-
-@router.get("/audio/{job_id}")
-@limiter.limit(lambda: get_settings().media_rate_limit)
-async def serve_audio(
-    request: Request,
-    job_id: str,
-    principal: Annotated[UserPrincipal | None, Depends(current_user)] = None,
-    db=Depends(get_mongodb),
-):
-    """Stream the analysed audio file by job id.
-
-    Looks for any file in ``audio_upload_dir`` whose name starts with the
-    job id (the upload pipeline stores them as ``{job_id}_{original_name}``,
-    and yt-dlp downloads are renamed to ``{job_id}_{video_id}.mp3`` by
-    ``ingest_node``). Falls back to a 404 envelope if nothing matches —
-    better than serving an arbitrary file.
-
-    Security (Phase 6 G2): owned audio is gated to its owner; anonymous audio
-    stays public so the ``/share`` player (which embeds ``/audio/{job_id}``
-    token-less) keeps working.
-    """
-    _reject_job_id_traversal(job_id)
-    await _enforce_owned_read(job_id, principal, db)
-    settings = get_settings()
-    candidates = sorted(settings.audio_upload_dir.glob(f"{job_id}*"))
-    if not candidates:
-        raise HTTPException(status_code=404, detail=f"No audio file for job {job_id}")
-    audio_file = candidates[0]
-    # Guard against ``..`` shenanigans in case a malicious job_id slipped past
-    # earlier validation: resolve and confirm we're still inside upload_dir.
-    try:
-        audio_file.resolve().relative_to(settings.audio_upload_dir.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Audio file path escapes upload dir")
-    media_type = {
-        "mp3": "audio/mpeg",
-        "wav": "audio/wav",
-        "flac": "audio/flac",
-        "ogg": "audio/ogg",
-        "m4a": "audio/mp4",
-        "aac": "audio/aac",
-        "opus": "audio/opus",
-    }.get(audio_file.suffix.lstrip(".").lower(), "application/octet-stream")
-    return FileResponse(
-        audio_file,
-        media_type=media_type,
-        filename=audio_file.name,
-        headers={"Accept-Ranges": "bytes"},
-    )
-
-
 def _sse_frame(event: str, data: dict | str) -> str:
     """Format a tagged SSE frame (Plan 2 D6).
 
@@ -1338,144 +782,6 @@ async def get_analysis_progress(
         ping=15,  # keepalive comment frame every 15s to defeat idle proxies
         headers={"X-Accel-Buffering": "no"},  # disable nginx response buffering
     )
-
-
-@router.post("/user")
-@limiter.limit(lambda: get_settings().user_rate_limit)
-async def create_or_update_user(
-    request: Request,
-    req: UserRequest,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Update the *caller's own* identity/musical-preference fields.
-
-    Security (Phase 6 G1): identity is taken from the auth token, never the
-    client-supplied ``req.id`` (which is ignored — a body id that differs is
-    rejected). Uses ``update_one``/``$set`` on only the mutable fields so a
-    call can never clobber ``password_hash`` (which the old whole-document
-    ``replace_one`` silently wiped — an unauthenticated account-lockout).
-    """
-    user_id = principal.user_id
-    if req.id and req.id != user_id:
-        raise HTTPException(status_code=403, detail="Cannot modify another user")
-    await db.users.update_one(
-        {"_id": user_id},
-        {
-            "$set": {
-                "username": req.username,
-                "instrument": req.instrument,
-                "difficulty": req.difficulty,
-                "updated_at": datetime.now(UTC),
-            },
-            "$setOnInsert": {"_id": user_id, "created_at": datetime.now(UTC)},
-        },
-        upsert=True,
-    )
-    return {
-        "id": user_id,
-        "username": req.username,
-        "instrument": req.instrument,
-        "difficulty": req.difficulty,
-    }
-
-
-@router.get("/user/{user_id}/preferences")
-@limiter.limit(lambda: get_settings().user_rate_limit)
-async def get_user_preferences(
-    request: Request,
-    user_id: str,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-) -> UserPreferences:
-    """Read the user's persisted analyze/playback defaults (Plan 3 A8).
-
-    Security (Phase 6 G3): a caller may only read their own preferences. The
-    id mismatch is rejected (403) *before* the DB lookup so it can't be used
-    to probe which user_ids exist.
-    """
-    if user_id != principal.user_id:
-        raise HTTPException(status_code=403, detail="Cannot access another user's preferences")
-    user = await db.users.find_one({"_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User profile not registered")
-    return UserPreferences(
-        default_instrument=user.get("default_instrument") or user.get("instrument"),
-        default_difficulty=user.get("default_difficulty") or user.get("difficulty"),
-        default_capo=user.get("default_capo"),
-    )
-
-
-@router.put("/user/{user_id}/preferences", response_model=UserPreferences)
-@limiter.limit(lambda: get_settings().user_rate_limit)
-async def update_user_preferences(
-    request: Request,
-    user_id: str,
-    prefs: UserPreferences,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-) -> UserPreferences:
-    """Persist analyze/playback defaults (Plan 3 A8). Upserts the user row.
-
-    Security (Phase 6 G3): a caller may only modify their own preferences
-    (403 on id mismatch, checked before any write).
-    """
-    if user_id != principal.user_id:
-        raise HTTPException(status_code=403, detail="Cannot modify another user's preferences")
-    update: dict[str, object] = {"updated_at": datetime.now(UTC)}
-    if prefs.default_instrument is not None:
-        update["default_instrument"] = prefs.default_instrument
-    if prefs.default_difficulty is not None:
-        update["default_difficulty"] = prefs.default_difficulty
-    if prefs.default_capo is not None:
-        update["default_capo"] = prefs.default_capo
-    # Upsert the user row so a preferences-only client (no prior /user POST)
-    # still gets a record.
-    await db.users.update_one(
-        {"_id": user_id},
-        {
-            "$set": update,
-            "$setOnInsert": {
-                "_id": user_id,
-                "username": f"User-{user_id[:6]}",
-                "instrument": "guitar",
-                "difficulty": "beginner",
-                "created_at": datetime.now(UTC),
-            },
-        },
-        upsert=True,
-    )
-    return prefs
-
-
-@router.get("/user/{user_id}")
-@limiter.limit(lambda: get_settings().user_rate_limit)
-async def get_user_profile(
-    request: Request,
-    user_id: str,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Fetches registered profile metadata from MongoDB.
-
-    Security (Phase 6 G3): a caller may only read their own profile (403 on
-    id mismatch before the lookup).
-    """
-    if user_id != principal.user_id:
-        raise HTTPException(status_code=403, detail="Cannot access another user's profile")
-    user = await db.users.find_one({"_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User profile not registered")
-    # Use .get() with defaults — a user doc created via the chat-profile/upsert
-    # path may not carry every field, and hard subscripts would 500.
-    created_at = user.get("created_at")
-    return {
-        "id": user["_id"],
-        "username": user.get("username", ""),
-        "instrument": user.get("instrument", "guitar"),
-        "difficulty": user.get("difficulty", "beginner"),
-        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else created_at,
-    }
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -1719,212 +1025,6 @@ async def get_chat_history(
 
 
 # ----------------------------------------------------------------------------
-# Collections & setlists (feat/collections-setlists)
-# ----------------------------------------------------------------------------
-# A single ``collections`` Mongo collection holds both kinds, discriminated by
-# ``kind``. Every endpoint requires auth; the ownership rule is 404 for missing
-# or unowned (never 403 — don't confirm another user's collection exists).
-
-
-@router.post("/collections")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def create_collection(
-    request: Request,
-    req: CollectionCreateRequest,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Create a collection or ordered setlist owned by the caller."""
-    name = req.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name must not be empty")
-    repo = CollectionRepo(db)
-    cid = uuid.uuid4().hex
-    created_at = datetime.now(UTC)
-    doc = {
-        "_id": cid,
-        "user_id": principal.user_id,
-        "name": name,
-        "kind": req.kind,
-        "description": req.description,
-        "song_ids": req.song_ids,
-        "created_at": created_at,
-    }
-    await repo.save(cid, doc)
-    return {"id": cid, "created_at": created_at}
-
-
-@router.get("/collections")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def list_collections(
-    request: Request,
-    limit: int = 50,
-    offset: int = 0,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """List the caller's collections/setlists, newest first."""
-    limit = max(1, min(limit, 100))
-    offset = max(0, offset)
-    repo = CollectionRepo(db)
-    docs, total = await repo.list_owned(principal.user_id, skip=offset, limit=limit)
-    items = [
-        {
-            "id": d["_id"],
-            "name": d.get("name"),
-            "kind": d.get("kind", "collection"),
-            "description": d.get("description"),
-            "song_count": len(d.get("song_ids", [])),
-            "created_at": d.get("created_at"),
-        }
-        for d in docs
-    ]
-    return {"items": items, "total": total, "limit": limit, "offset": offset}
-
-
-@router.get("/collections/{cid}")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def get_collection(
-    request: Request,
-    cid: str,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Return a collection with its songs hydrated in ``song_ids`` order.
-
-    Songs the caller can't read (owned by another user) are filtered out, and
-    ids with no matching analysis are skipped — but ``song_ids`` is returned
-    verbatim so the client can tell which entries dropped.
-    """
-    repo = CollectionRepo(db)
-    doc = await repo.get_owned(cid, principal.user_id)
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Collection not found")
-
-    ids = doc.get("song_ids", [])
-    by_id: dict[str, dict] = {}
-    if ids:
-        projection = {
-            "_id": 1,
-            "title": 1,
-            "artist": 1,
-            "key": 1,
-            "tempo": 1,
-            "duration": 1,
-            "user_id": 1,
-        }
-        cursor = db.song_analyses.find({"_id": {"$in": ids}}, projection)
-        async for s in cursor:
-            owner = s.get("user_id")
-            if owner is None or owner == principal.user_id:
-                by_id[s["_id"]] = s
-
-    songs = []
-    for sid in ids:
-        s = by_id.get(sid)
-        if s is None:
-            continue
-        songs.append(
-            {
-                "job_id": sid,
-                "title": s.get("title"),
-                "artist": s.get("artist"),
-                "key": s.get("key"),
-                "tempo": s.get("tempo"),
-                "duration": s.get("duration"),
-            }
-        )
-
-    return {
-        "id": doc["_id"],
-        "name": doc.get("name"),
-        "kind": doc.get("kind", "collection"),
-        "description": doc.get("description"),
-        "song_ids": ids,
-        "songs": songs,
-        "created_at": doc.get("created_at"),
-        "updated_at": doc.get("updated_at"),
-    }
-
-
-@router.put("/collections/{cid}")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def update_collection(
-    request: Request,
-    cid: str,
-    req: CollectionUpdateRequest,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Update the provided (non-None) fields of a collection the caller owns."""
-    fields: dict[str, Any] = {}
-    if req.name is not None:
-        name = req.name.strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="Name must not be empty")
-        fields["name"] = name
-    if req.description is not None:
-        fields["description"] = req.description
-    if req.song_ids is not None:
-        fields["song_ids"] = req.song_ids
-    repo = CollectionRepo(db)
-    ok = await repo.update(cid, principal.user_id, fields)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    return {"updated": True}
-
-
-@router.delete("/collections/{cid}")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def delete_collection(
-    request: Request,
-    cid: str,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Delete a collection the caller owns."""
-    repo = CollectionRepo(db)
-    ok = await repo.delete(cid, principal.user_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    return {"deleted": True}
-
-
-@router.post("/collections/{cid}/songs")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def add_song_to_collection(
-    request: Request,
-    cid: str,
-    req: AddSongRequest,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Append a song (by job_id) to a collection the caller owns (idempotent)."""
-    repo = CollectionRepo(db)
-    ok = await repo.add_song(cid, principal.user_id, req.job_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    return {"added": True}
-
-
-@router.delete("/collections/{cid}/songs/{job_id}")
-@limiter.limit(lambda: get_settings().collection_rate_limit)
-async def remove_song_from_collection(
-    request: Request,
-    cid: str,
-    job_id: str,
-    principal: UserPrincipal = Depends(require_user),
-    db=Depends(get_mongodb),
-):
-    """Remove a song from a collection the caller owns."""
-    repo = CollectionRepo(db)
-    ok = await repo.remove_song(cid, principal.user_id, job_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    return {"removed": True}
-
-
-# ----------------------------------------------------------------------------
 # Mount the router (Plan 2 D1)
 # ----------------------------------------------------------------------------
 # Canonical: every endpoint lives at /api/v1/<path>. We also include the same
@@ -1933,3 +1033,23 @@ async def remove_song_from_collection(
 # (or any other client) has migrated to /api/v1.
 app.include_router(router, prefix="/api/v1")
 app.include_router(router)  # legacy alias — remove after frontend migration
+
+# Domain routers — each dual-mounted (canonical /api/v1 + legacy root) to
+# match the historical behaviour of the single combined router.
+for _domain_router in (
+    theory_router,
+    collections_router,
+    auth_router,
+    user_router,
+    library_router,
+    search_lyrics_router,
+    share_router,
+    media_router,
+):
+    app.include_router(_domain_router, prefix="/api/v1")
+    app.include_router(_domain_router)
+
+# Health probes are intentionally root-only (no /api/v1 variant) so
+# orchestrators hit a stable, unversioned path.
+app.include_router(health_router)
+

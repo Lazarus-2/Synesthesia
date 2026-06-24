@@ -8,9 +8,8 @@ from __future__ import annotations
 from langchain_core.tools import tool
 
 from backend.tools.chords import parse_chord
-
-_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-_FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
+from backend.tools.music_constants import FLAT_TO_SHARP as _FLAT_TO_SHARP
+from backend.tools.music_constants import NOTES as _NOTES
 
 # Canonical quality -> printable suffix (inverse of parse_chord's normalization).
 # Every quality that parse_chord can emit must have an explicit entry here so

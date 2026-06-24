@@ -8,31 +8,7 @@ from __future__ import annotations
 import colorsys
 
 from backend.tools.chords import parse_chord
-
-# Base Scriabin Circle of Fifths mapping for note pitch classes
-SCRIABIN_COLORS = {
-    "C": "#FF0000",  # Red
-    "G": "#FF7F00",  # Orange
-    "D": "#FFFF00",  # Yellow
-    "A": "#00FF00",  # Green
-    "E": "#00BFFF",  # Sky Blue (Moonshine)
-    "B": "#0000FF",  # Blue
-    "F#": "#4B0082",  # Violet-Blue / Indigo
-    "C#": "#8B00FF",  # Violet / Purple
-    "G#": "#D8BFD8",  # Purple / Lilac / Thistle
-    "D#": "#FFC0CB",  # Pink / Flesh
-    "A#": "#708090",  # Steel Gray
-    "F": "#8B0000",  # Deep Red
-}
-
-# Enharmonic normalization
-ENHARMONICS = {
-    "DB": "C#",
-    "EB": "D#",
-    "GB": "F#",
-    "AB": "G#",
-    "BB": "A#",
-}
+from backend.tools.music_constants import ENHARMONICS, SCRIABIN_COLORS
 
 
 def hex_to_hls(hex_str: str) -> tuple[float, float, float]:
