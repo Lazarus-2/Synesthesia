@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { API_V1 } from "../../lib/apiClient";
+import { usePlayAlongStore } from "../../store/usePlayAlongStore";
+import { PlayAlongPresets } from "./PlayAlongPresets";
+import type { StemId } from "../../lib/practice";
 
 interface Stem {
   id: "vocals" | "drums" | "bass" | "other";
@@ -35,6 +38,8 @@ export const StemMixer: React.FC = () => {
   // ignored while soloing). The classic mixer behaviour.
   const [soloed, setSoloed] = useState<Record<string, boolean>>({});
 
+  const playAlongMuted = usePlayAlongStore((s) => (s.engaged ? s.mutedStem : null));
+
   // Lazy WebAudio routing — one HTMLAudioElement + GainNode per stem so
   // the user can blend without re-fetching. Created the first time a stem
   // has both a URL and isn't muted; teardown on unmount.
@@ -53,10 +58,14 @@ export const StemMixer: React.FC = () => {
     for (const s of availableStems) {
       const gain = gainNodesRef.current[s.id];
       if (!gain) continue;
+      if (playAlongMuted === s.id) {
+        gain.gain.value = 0; // Play-Along: user's instrument is silenced
+        continue;
+      }
       const audible = anySolo ? Boolean(soloed[s.id]) : !muted[s.id];
       gain.gain.value = audible ? volumes[s.id] / 100 : 0;
     }
-  }, [volumes, muted, soloed, availableStems]);
+  }, [volumes, muted, soloed, availableStems, playAlongMuted]);
 
   // Build the audio graph when stems first arrive.
   useEffect(() => {
@@ -150,6 +159,9 @@ export const StemMixer: React.FC = () => {
           </div>
         )}
       </div>
+
+      <PlayAlongPresets availableStems={availableStems.map((s) => s.id) as StemId[]} />
+
       <p className="text-sm text-on-surface-variant -mt-2">
         {availableStems.length === 0
           ? "No isolated stems for this track. Stem separation runs the Demucs model on the backend — it isn't installed in this deployment, so vocals/drums/bass/other couldn't be split out."
