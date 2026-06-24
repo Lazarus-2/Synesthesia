@@ -96,6 +96,7 @@ from backend.models import SongAnalysisModel
 from backend.ratelimit import limiter
 from backend.repositories import AnalysisRepo, ChatSessionRepo, CollectionRepo, UserRepo
 from backend.routers.health import router as health_router
+from backend.routers.theory import router as theory_router
 from backend.schemas import (
     AddSongRequest,
     AnalyzeResponse,
@@ -103,7 +104,6 @@ from backend.schemas import (
     ChatResponse,
     CollectionCreateRequest,
     CollectionUpdateRequest,
-    ReharmonizeRequest,
     SongAnalysis,
 )
 from backend.services.cache import cache
@@ -113,7 +113,6 @@ from backend.services.job_store import (
 )
 from backend.services.token_budget import check_and_consume
 from backend.tasks import run_analysis_pipeline  # noqa: F401
-from backend.theory.reharmonize import reharmonize
 from backend.worker import broker
 
 # The worker entrypoint imports backend.tasks (not backend.main), so the
@@ -847,22 +846,6 @@ async def get_lyrics(
     # Cache hits AND misses (both are valuable). 6h TTL.
     await cache.set(cache_key, _json.dumps(payload), ttl_seconds=6 * 3600)
     return payload | {"cached": False}
-
-
-@router.post("/theory/reharmonize")
-@limiter.limit(lambda: get_settings().theory_rate_limit)
-async def theory_reharmonize(request: Request, req: ReharmonizeRequest) -> dict:
-    """Deterministic reharmonization suggestions (Theory Lab).
-
-    Stateless: no auth, no db. Returns ``{"suggestions": [...]}`` where each
-    suggestion is ``{type, label, chord, explanation}``. ``request`` is required
-    by the slowapi limiter (keys the rate limit by IP).
-    """
-    key = (req.key or "").strip()
-    chord = (req.chord or "").strip()
-    if not key or not chord:
-        raise HTTPException(status_code=400, detail="key and chord are required")
-    return {"suggestions": reharmonize(key, chord, req.next_chord)}
 
 
 @router.get("/share/{job_id}", response_model=AnalyzeResponse)
@@ -1834,6 +1817,12 @@ async def remove_song_from_collection(
 # (or any other client) has migrated to /api/v1.
 app.include_router(router, prefix="/api/v1")
 app.include_router(router)  # legacy alias — remove after frontend migration
+
+# Domain routers — each dual-mounted (canonical /api/v1 + legacy root) to
+# match the historical behaviour of the single combined router.
+for _domain_router in (theory_router,):
+    app.include_router(_domain_router, prefix="/api/v1")
+    app.include_router(_domain_router)
 
 # Health probes are intentionally root-only (no /api/v1 variant) so
 # orchestrators hit a stable, unversioned path.
