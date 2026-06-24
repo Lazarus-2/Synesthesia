@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
+import { usePracticeLogStore } from "../../store/usePracticeLogStore";
 import { useSpeedTrainerStore } from "../../store/useSpeedTrainerStore";
 import { SpeedTrainer } from "./SpeedTrainer";
 import { SavedLoops } from "./SavedLoops";
@@ -73,6 +74,18 @@ export const BottomBar: React.FC = () => {
       }
     };
   }, [wavesurfer, practiceMode, loopStart, loopEnd, setPlaybackRate]);
+
+  // Accrue practice time: +5s every 5s while playing in practice mode.
+  useEffect(() => {
+    if (!isPlaying || !practiceMode) return;
+    const jobId = useAnalysisStore.getState().jobId;
+    if (!jobId) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const t = window.setInterval(() => {
+      usePracticeLogStore.getState().addTime(jobId, 5, today);
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [isPlaying, practiceMode]);
 
   // Metronome — a Web Audio lookahead scheduler (the canonical "two clocks"
   // pattern: a coarse setInterval wakes up and schedules any clicks due within
