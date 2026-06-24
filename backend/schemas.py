@@ -333,3 +333,33 @@ class ChatResponse(BaseModel):
 
     reply: str
     session_id: str | None = None
+
+
+# =============================================================================
+# Collections & setlists -- Module 5
+# =============================================================================
+
+
+class CollectionCreateRequest(BaseModel):
+    """Client → POST /collections. Identity (user_id) comes from the JWT, never
+    the body; ``_id`` is server-generated."""
+
+    name: str
+    kind: Literal["collection", "setlist"] = "collection"
+    description: str | None = None
+    song_ids: list[str] = []
+
+
+class CollectionUpdateRequest(BaseModel):
+    """Client → PUT /collections/{cid}. Only the provided (non-None) fields are
+    applied."""
+
+    name: str | None = None
+    description: str | None = None
+    song_ids: list[str] | None = None
+
+
+class AddSongRequest(BaseModel):
+    """Client → POST /collections/{cid}/songs."""
+
+    job_id: str
