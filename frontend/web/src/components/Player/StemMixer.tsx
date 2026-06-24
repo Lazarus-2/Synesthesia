@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { API_V1 } from "../../lib/apiClient";
 import { usePlayAlongStore } from "../../store/usePlayAlongStore";
+import { usePlayerStore } from "../../store/usePlayerStore";
 import { PlayAlongPresets } from "./PlayAlongPresets";
 
 interface Stem {
@@ -38,6 +39,7 @@ export const StemMixer: React.FC = () => {
   const [soloed, setSoloed] = useState<Record<string, boolean>>({});
 
   const playAlongMuted = usePlayAlongStore((s) => (s.engaged ? s.mutedStem : null));
+  const playAlongEngaged = usePlayAlongStore((s) => s.engaged);
 
   // Lazy WebAudio routing — one HTMLAudioElement + GainNode per stem so
   // the user can blend without re-fetching. Created the first time a stem
@@ -128,14 +130,118 @@ export const StemMixer: React.FC = () => {
   const toggleSolo = (id: string) =>
     setSoloed((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const allPlay = () => {
+  const allPlay = useCallback(() => {
+    // The stem AudioContext starts suspended (no user gesture in the stem
+    // graph itself). Resume it so the stems are actually audible — mirrors the
+    // Tone.start() resume the main transport does on its play button.
+    void ctxRef.current?.resume().catch(() => undefined);
     for (const el of Object.values(audioElementsRef.current)) {
       el?.play().catch(() => undefined);
     }
-  };
-  const allPause = () => {
+  }, []);
+  const allPause = useCallback(() => {
     for (const el of Object.values(audioElementsRef.current)) el?.pause();
-  };
+  }, []);
+
+  // ── Play-Along: single-transport sync ──────────────────────────────────
+  // When Play-Along is engaged the stem mixer becomes the SOLE audible source:
+  // the main WaveSurfer track is muted and the stems follow the main player's
+  // play/pause/seek. Without this, the StemMixer's 4 <audio> elements and the
+  // main track are two independent transports → doubled audio + drift.
+  // All three effects below are gated on `playAlongEngaged && stems available`;
+  // when disengaged the manual Play/Pause buttons remain the only driver.
+
+  // Authoritative "main track time" — prefer the live wavesurfer clock, fall
+  // back to the throttled store value.
+  const mainTime = useCallback((): number => {
+    const ws = usePlayerStore.getState().wavesurfer as unknown as
+      | { getCurrentTime?: () => number }
+      | null;
+    const t = ws?.getCurrentTime?.();
+    return typeof t === "number" && Number.isFinite(t)
+      ? t
+      : usePlayerStore.getState().currentTime;
+  }, []);
+
+  // (1) Mute the main media element while engaged; restore exactly on cleanup.
+  useEffect(() => {
+    if (!playAlongEngaged || availableStems.length === 0) return;
+    const ws = usePlayerStore.getState().wavesurfer as unknown as
+      | { getMediaElement?: () => HTMLMediaElement; setMuted?: (m: boolean) => void }
+      | null;
+    const media = ws?.getMediaElement?.();
+    if (media) {
+      const prevMuted = media.muted;
+      media.muted = true;
+      return () => {
+        media.muted = prevMuted;
+      };
+    }
+    // Fallback path: no media element exposed → mute via the store volume and
+    // restore the prior volume on disengage.
+    const prevVolume = usePlayerStore.getState().volume;
+    if (ws?.setMuted) {
+      ws.setMuted(true);
+      return () => {
+        ws.setMuted?.(false);
+        usePlayerStore.getState().setVolume(prevVolume);
+      };
+    }
+    usePlayerStore.getState().setVolume(0);
+    return () => {
+      usePlayerStore.getState().setVolume(prevVolume);
+    };
+  }, [playAlongEngaged, availableStems.length]);
+
+  // (2) Stems follow the main transport's play/pause. Subscribe to isPlaying
+  // (transient subscription so this effect doesn't re-render the component).
+  useEffect(() => {
+    if (!playAlongEngaged || availableStems.length === 0) return;
+    const apply = (playing: boolean) => {
+      if (playing) {
+        // Align before starting so the stems begin from the main track's spot.
+        const t = mainTime();
+        for (const el of Object.values(audioElementsRef.current)) {
+          if (el && Number.isFinite(t)) {
+            try { el.currentTime = t; } catch { /* not seekable yet */ }
+          }
+        }
+        allPlay();
+      } else {
+        allPause();
+      }
+    };
+    // Apply current state immediately, then on every change.
+    apply(usePlayerStore.getState().isPlaying);
+    const unsub = usePlayerStore.subscribe((state, prev) => {
+      if (state.isPlaying !== prev.isPlaying) apply(state.isPlaying);
+    });
+    return () => {
+      unsub();
+      allPause();
+    };
+  }, [playAlongEngaged, availableStems.length, allPlay, allPause, mainTime]);
+
+  // (3) Stems follow the clock / seeks. currentTime is throttled to ~10/sec;
+  // only re-align a stem when it has drifted from the main track by >0.3s
+  // (i.e. a seek), so we don't fight normal playback drift every tick.
+  useEffect(() => {
+    if (!playAlongEngaged || availableStems.length === 0) return;
+    const realign = () => {
+      const t = mainTime();
+      if (!Number.isFinite(t)) return;
+      for (const el of Object.values(audioElementsRef.current)) {
+        if (el && Math.abs(el.currentTime - t) > 0.3) {
+          try { el.currentTime = t; } catch { /* not seekable yet */ }
+        }
+      }
+    };
+    realign(); // align on engage
+    const unsub = usePlayerStore.subscribe((state, prev) => {
+      if (state.currentTime !== prev.currentTime) realign();
+    });
+    return unsub;
+  }, [playAlongEngaged, availableStems.length, mainTime]);
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
