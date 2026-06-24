@@ -18,10 +18,9 @@ from pathlib import Path
 
 from backend.config import MAX_AUDIO_DURATION_S
 from backend.schemas import ChordEvent
+from backend.tools.music_constants import NOTES
 
 logger = logging.getLogger(__name__)
-
-NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 # Quality suffix -> weighted (interval, weight) pairs. Root and the
 # quality-defining tones (3rd/4th/7th, the dim 5th) weigh 1.0-0.9; the

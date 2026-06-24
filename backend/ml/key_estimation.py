@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.config import MAX_AUDIO_DURATION_S
+from backend.tools.music_constants import FLAT_TO_SHARP_KEYS as _FLAT_TO_SHARP
+from backend.tools.music_constants import NOTES as _NOTES
 
 
 @dataclass(frozen=True)
@@ -48,9 +50,6 @@ _FOLD_CV_MAX = 0.2
 # fallback tempo confidence for the single unverified librosa estimate
 _FALLBACK_TEMPO_CONFIDENCE = 0.4
 
-_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-_FLAT_TO_SHARP = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#",
-                  "CB": "B", "FB": "E"}
 _KEY_RE = re.compile(r"^([A-G][b#]?)\s+(major|minor)$", re.IGNORECASE)
 
 # Chord qualities counted as minor/major tonic evidence (dim/aug/sus are
