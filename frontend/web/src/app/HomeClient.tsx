@@ -8,7 +8,7 @@
 // future server-fetched data (initial analysis, user prefs from D4) pass
 // down as props without a hooks dance.
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useAnalysisStore } from "../store/useAnalysisStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -40,6 +40,7 @@ const RIGHT_TABS = [
 export default function HomeClient() {
   const { activeTab, setActiveTab } = useAppStore();
   const { analysis, jobStatus } = useAnalysisStore();
+  const loadExisting = useAnalysisStore((s) => s.loadExisting);
   const loadAuth = useAuthStore((s) => s.loadFromStorage);
 
   // Rehydrate the JWT from localStorage once on mount so an authed user who
@@ -47,6 +48,21 @@ export default function HomeClient() {
   useEffect(() => {
     loadAuth();
   }, [loadAuth]);
+
+  // Open an already-analyzed song in the full player via `/?job=<id>` (Library
+  // and Collections link here). Read the query param client-only from
+  // window.location — NOT useSearchParams, which would force a Suspense
+  // boundary and fail the static build for this page. Guard so it runs once
+  // and only when nothing is already loaded.
+  const jobLoadAttempted = useRef(false);
+  useEffect(() => {
+    if (jobLoadAttempted.current) return;
+    if (useAnalysisStore.getState().analysis) return;
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (!jobId) return;
+    jobLoadAttempted.current = true;
+    void loadExisting(jobId);
+  }, [loadExisting]);
 
   // Show analyzing overlay when processing
   const isProcessing = jobStatus === "queued" || jobStatus === "processing" || jobStatus === "error";
