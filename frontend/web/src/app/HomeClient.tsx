@@ -8,7 +8,7 @@
 // future server-fetched data (initial analysis, user prefs from D4) pass
 // down as props without a hooks dance.
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useAnalysisStore } from "../store/useAnalysisStore";
 import { useAuthStore } from "../store/useAuthStore";
@@ -16,6 +16,7 @@ import { UploadModal } from "../components/Upload/UploadModal";
 import { AnalyzingView } from "../components/Analysis/AnalyzingView";
 import { Header } from "../components/Layout/Header";
 import { WaveformPlayer } from "../components/Player/WaveformPlayer";
+import { RehearseBanner } from "../components/Player/RehearseBanner";
 import { ChordTimeline } from "../components/Analysis/ChordTimeline";
 import { TheoryPanel } from "../components/Analysis/TheoryPanel";
 import { ComparePanel } from "../components/Analysis/ComparePanel";
@@ -40,6 +41,7 @@ const RIGHT_TABS = [
 export default function HomeClient() {
   const { activeTab, setActiveTab } = useAppStore();
   const { analysis, jobStatus } = useAnalysisStore();
+  const loadExisting = useAnalysisStore((s) => s.loadExisting);
   const loadAuth = useAuthStore((s) => s.loadFromStorage);
 
   // Rehydrate the JWT from localStorage once on mount so an authed user who
@@ -47,6 +49,21 @@ export default function HomeClient() {
   useEffect(() => {
     loadAuth();
   }, [loadAuth]);
+
+  // Open an already-analyzed song in the full player via `/?job=<id>` (Library
+  // and Collections link here). Read the query param client-only from
+  // window.location — NOT useSearchParams, which would force a Suspense
+  // boundary and fail the static build for this page. Guard so it runs once
+  // and only when nothing is already loaded.
+  const jobLoadAttempted = useRef(false);
+  useEffect(() => {
+    if (jobLoadAttempted.current) return;
+    if (useAnalysisStore.getState().analysis) return;
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (!jobId) return;
+    jobLoadAttempted.current = true;
+    void loadExisting(jobId);
+  }, [loadExisting]);
 
   // Show analyzing overlay when processing
   const isProcessing = jobStatus === "queued" || jobStatus === "processing" || jobStatus === "error";
@@ -88,6 +105,7 @@ export default function HomeClient() {
       <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0">
         {/* Left Panel — Waveform, Chord Timeline (8 cols) */}
         <div className="lg:col-span-8 flex flex-col gap-0 p-4 lg:p-6 lg:pr-3 lg:overflow-y-auto hide-scrollbar reveal-up">
+          <RehearseBanner />
           <WaveformPlayer />
           <div className="mt-4">
             <ChordTimeline />

@@ -248,16 +248,15 @@ export const BottomBar: React.FC = () => {
         <button
           className="flex items-center gap-2 hover:text-primary transition-colors"
           onClick={handleSpeed}
-          title="Cycle playback speed (note: changes pitch — pitch-preserving stretch is deferred)"
+          title="Cycle playback speed (enable Pitch lock to keep pitch)"
         >
           <span className="material-symbols-outlined text-lg text-on-surface-variant">speed</span>
           <span className="text-sm font-semibold text-on-surface tabular-nums">{playbackRate}x</span>
         </button>
 
-        {/* Pitch-lock toggle — when on, playback-rate keeps pitch via SoundTouch Worklet.
-            Plumbing the audio chain through the Worklet ships in a follow-up; the toggle
-            controls whether the existing wavesurfer.setPlaybackRate call fires (pitch shifts)
-            or not (pitch lock means user only changes perceived tempo via slowdown). */}
+        {/* Pitch-lock toggle — when on, playback-rate changes preserve pitch via the
+            SoundTouch AudioWorklet in AudioEngine; when off, wavesurfer.setPlaybackRate
+            shifts pitch with tempo. */}
         <button
           className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
             pitchLock

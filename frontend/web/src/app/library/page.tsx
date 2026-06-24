@@ -313,10 +313,11 @@ export default function LibraryPage() {
           <>
             <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((it) => (
-                <li key={it.job_id}>
+                <li key={it.job_id} className="relative group h-full">
+                  {/* Primary action: open the saved song in the FULL player. */}
                   <Link
-                    href={`/s/${it.job_id}`}
-                    className="glass-panel rounded-xl p-5 flex flex-col gap-3 hover:border-primary/30 transition-all group h-full"
+                    href={`/?job=${encodeURIComponent(it.job_id)}`}
+                    className="glass-panel rounded-xl p-5 flex flex-col gap-3 hover:border-primary/30 transition-all h-full"
                   >
                     {/* Vibe palette stripe */}
                     {it.vibe_palette.length > 0 && (
@@ -345,6 +346,16 @@ export default function LibraryPage() {
                         {formatDuration(it.duration)}
                       </span>
                     </div>
+                  </Link>
+                  {/* Secondary: read-only share view. Sits above the card link
+                      (not nested — anchors can't nest) and only fades in on
+                      hover/focus so the card stays clean. */}
+                  <Link
+                    href={`/s/${it.job_id}`}
+                    className="absolute top-3 right-3 text-[10px] font-semibold tracking-wide px-2 py-1 rounded-full bg-surface/70 text-on-surface-variant opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-opacity hover:text-on-surface"
+                    title="Open read-only share view"
+                  >
+                    Share view
                   </Link>
                 </li>
               ))}

@@ -19,6 +19,13 @@ interface AnalysisState {
   instrumentGuide: InstrumentGuide | null;
   setAnalysis: (analysis: SongAnalysis | null) => void;
 
+  // Load an already-analyzed song (by job_id) into the full interactive
+  // player. Used by Library/Collections links (`/?job=<id>`) so saved songs
+  // play back without re-running the pipeline. Fetches the cached analysis,
+  // wires the player audio URL, and on failure toasts + leaves state untouched
+  // (so the caller can fall back to the upload screen).
+  loadExisting: (jobId: string) => Promise<void>;
+
   // Active instrument (guitar | piano | ukulele | bass). Lets the user switch
   // instruments in the player without re-running the whole analysis — the
   // backend recomputes just the instrument guide for the cached song.
@@ -48,6 +55,39 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   analysis: null,
   instrumentGuide: null,
   setAnalysis: (analysis) => set({ analysis }),
+
+  loadExisting: async (jobId) => {
+    set({ jobId, jobStatus: 'processing', jobProgress: 0, jobMessage: 'Loading song…' });
+    try {
+      const resp = await apiGet<AnalyzeResponse>(
+        `/analyze/${encodeURIComponent(jobId)}`
+      );
+      if (!resp.analysis) {
+        throw new Error('No analysis available for this song.');
+      }
+      set({
+        jobId,
+        analysis: resp.analysis,
+        instrumentGuide: resp.instrument_guide ?? null,
+        instrument: resp.instrument_guide?.instrument || 'guitar',
+        jobStatus: 'done',
+        jobProgress: 100,
+        jobMessage: 'Analysis Complete!',
+      });
+      // Wire the player to the backend-served audio (mirrors onDone).
+      usePlayerStore
+        .getState()
+        .setAudioFileUrl(`${API_V1}/audio/${encodeURIComponent(jobId)}`);
+    } catch (e) {
+      // Leave analysis/jobId state effectively unloaded so the caller can fall
+      // back to the upload screen — reset to idle and surface the error.
+      set({ jobStatus: 'idle', jobProgress: 0, jobMessage: '' });
+      useToastStore.getState().error(
+        'Could not open song',
+        e instanceof Error ? e.message : 'Please try again.'
+      );
+    }
+  },
 
   instrument: 'guitar',
   instrumentLoading: false,
