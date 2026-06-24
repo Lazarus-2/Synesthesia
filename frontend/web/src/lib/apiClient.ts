@@ -125,6 +125,38 @@ export async function apiPostJson<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+/** PUT JSON body. */
+export async function apiPut<T = unknown>(
+  path: string, body: unknown, opts?: RequestOpts,
+): Promise<T> {
+  const res = await fetch(resolveUrl(path, opts), {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...authHeader(),
+      ...(opts?.headers || {}),
+    },
+    body: JSON.stringify(body),
+    signal: opts?.signal,
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseErrorBody(res));
+  return res.json() as Promise<T>;
+}
+
+/** DELETE (no body). */
+export async function apiDelete<T = unknown>(
+  path: string, opts?: RequestOpts,
+): Promise<T> {
+  const res = await fetch(resolveUrl(path, opts), {
+    method: "DELETE",
+    headers: { Accept: "application/json", ...authHeader(), ...(opts?.headers || {}) },
+    signal: opts?.signal,
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseErrorBody(res));
+  return res.json() as Promise<T>;
+}
+
 /** POST FormData (no Content-Type — browser sets the boundary). */
 export async function apiPostForm<T = unknown>(
   path: string, form: FormData, opts?: RequestOpts,
