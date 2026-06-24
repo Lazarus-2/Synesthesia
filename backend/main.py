@@ -35,7 +35,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
@@ -94,6 +93,7 @@ from backend.chains.aura_tools import current_user_id
 from backend.config import ANALYZER_VERSION, get_settings
 from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
+from backend.ratelimit import limiter
 from backend.repositories import AnalysisRepo, ChatSessionRepo, CollectionRepo, UserRepo
 from backend.schemas import (
     AddSongRequest,
@@ -254,12 +254,6 @@ async def _generic_exception_handler(_request: Request, _exc: Exception):
 # storage URI shares counts across worker processes so the limit is global,
 # not per-container.
 
-_settings_for_limiter = get_settings()
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=_settings_for_limiter.redis_url,
-    strategy="fixed-window",
-)
 app.state.limiter = limiter
 
 
