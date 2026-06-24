@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     collection_rate_limit: str = "60/minute"  # collections/setlists CRUD
     theory_rate_limit: str = "60/minute"  # stateless /theory/* deterministic endpoints
     enable_stems: bool = True
+    # Security headers. When non-empty, sent as the Content-Security-Policy
+    # header on every response; default off so the SPA isn't broken.
+    content_security_policy: str = ""
     # Phase 6 G5 — storage lifecycle. Reaper deletes upload/stem files older
     # than this (matches the 90-day Mongo TTL). max_disk_usage_gb=0 disables
     # the POST /analyze disk guard.
