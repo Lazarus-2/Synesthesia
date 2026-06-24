@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SentryInit } from "@/components/SentryInit";
 
 const inter = Inter({
   variable: "--font-body",
@@ -34,7 +36,8 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
       <body className="min-h-full flex flex-col bg-background text-on-surface">
-        {children}
+        <SentryInit />
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );

@@ -143,9 +143,11 @@ async def lifespan(application: FastAPI):
     # Structured JSON logs as the very first thing so subsequent startup
     # messages land in the same format.
     from backend.observability.logging_config import configure_logging
+    from backend.observability.sentry import init_sentry
     from backend.observability.tracing import configure_tracing
 
     configure_logging()
+    init_sentry()  # opt-in; no-op unless SENTRY_DSN is set
     configure_tracing()
     if not broker.is_worker_process:
         await broker.startup()
@@ -175,6 +177,28 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Attach baseline security headers to every response.
+
+    Uses ``setdefault`` throughout so a handler that deliberately set one of
+    these headers is never clobbered. CSP is opt-in via the
+    ``content_security_policy`` setting (default empty == off) so the SPA isn't
+    broken by an over-strict default policy.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    csp = get_settings().content_security_policy
+    if csp:
+        response.headers.setdefault("Content-Security-Policy", csp)
+    return response
 
 
 # ----------------------------------------------------------------------------
