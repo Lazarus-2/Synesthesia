@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
+import { useSpeedTrainerStore } from "../../store/useSpeedTrainerStore";
+import { SpeedTrainer } from "./SpeedTrainer";
 
 /** Schedule a single metronome click at ``time`` (ctx clock). Accented clicks
  *  (downbeats / count-in start) are higher + louder. Shared by the metronome
@@ -46,12 +48,21 @@ export const BottomBar: React.FC = () => {
     }
     const ws = wavesurfer;
     const onProcess = () => {
-      if (ws.getCurrentTime() >= loopEnd) {
+      const t = ws.getCurrentTime();
+      if (t >= loopEnd) {
         const duration = ws.getDuration();
         if (duration > 0) ws.seekTo(loopStart / duration);
+        // Speed Trainer: each wrap may raise the playback rate. registerLoopWrap
+        // returns null when the trainer is disabled (no-op).
+        const rate = useSpeedTrainerStore.getState().registerLoopWrap();
+        if (rate !== null) {
+          // Force pitch-lock during a ramp so slow passes don't chipmunk.
+          if (!usePracticeStore.getState().pitchLock) usePracticeStore.getState().setPitchLock(true);
+          setPlaybackRate(rate);
+          ws.setPlaybackRate(1.0); // pitchLock on => SoundTouch handles tempo
+        }
       }
     };
-    // WaveSurfer v7 .on() returns an unsubscribe function.
     const unsub = ws.on("audioprocess", onProcess);
     return () => {
       try {
@@ -60,7 +71,7 @@ export const BottomBar: React.FC = () => {
         /* older builds: no-op */
       }
     };
-  }, [wavesurfer, practiceMode, loopStart, loopEnd]);
+  }, [wavesurfer, practiceMode, loopStart, loopEnd, setPlaybackRate]);
 
   // Metronome — a Web Audio lookahead scheduler (the canonical "two clocks"
   // pattern: a coarse setInterval wakes up and schedules any clicks due within
@@ -304,6 +315,12 @@ export const BottomBar: React.FC = () => {
                 ✕
               </button>
             )}
+          </div>
+        )}
+
+        {practiceMode && (
+          <div className="hidden lg:block absolute bottom-16 left-2 w-64">
+            <SpeedTrainer />
           </div>
         )}
       </div>
