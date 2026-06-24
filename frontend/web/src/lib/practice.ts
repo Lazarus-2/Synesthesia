@@ -24,3 +24,32 @@ export function nextRampRate(pass: number, c: RampConfig): number {
   const pct = Math.min(target, start + steps * step);
   return pct / 100;
 }
+
+export interface SavedLoop {
+  id: string;
+  name: string;
+  start: number;
+  end: number;
+}
+
+/** jobId -> saved loops. Immutable helpers (return a new map). */
+export type LoopMap = Record<string, SavedLoop[]>;
+
+export function loopsFor(map: LoopMap, jobId: string): SavedLoop[] {
+  return map[jobId] ?? [];
+}
+
+export function addLoop(map: LoopMap, jobId: string, loop: SavedLoop): LoopMap {
+  return { ...map, [jobId]: [...loopsFor(map, jobId), loop] };
+}
+
+export function removeLoop(map: LoopMap, jobId: string, id: string): LoopMap {
+  return { ...map, [jobId]: loopsFor(map, jobId).filter((l) => l.id !== id) };
+}
+
+export function renameLoop(map: LoopMap, jobId: string, id: string, name: string): LoopMap {
+  return {
+    ...map,
+    [jobId]: loopsFor(map, jobId).map((l) => (l.id === id ? { ...l, name } : l)),
+  };
+}
