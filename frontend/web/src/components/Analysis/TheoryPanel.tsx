@@ -3,6 +3,7 @@
 import React from "react";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { SimilarSongs } from "./SimilarSongs";
+import { analyzeForm } from "../../lib/songForm";
 
 // ---- sub-components ----
 
@@ -47,6 +48,7 @@ export const TheoryPanel: React.FC = () => {
   const roman = analysis.roman;
   const theory = analysis.theory;
   const cadences = roman?.cadences ?? [];
+  const form = analyzeForm(analysis.sections ?? []);
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto hide-scrollbar flex-grow">
@@ -203,6 +205,30 @@ export const TheoryPanel: React.FC = () => {
             </p>
           </div>
         )
+      )}
+
+      {/* Song-form card — deterministic structure labelling from sections */}
+      {form.sequence.length > 0 && (
+        <div className="bg-surface-container-high rounded-lg p-4 border border-white/5">
+          <div className="flex items-baseline gap-2 mb-3">
+            <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">
+              Form
+            </h3>
+            <span className="font-headline text-base font-semibold text-primary">
+              {form.label}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {form.sequence.map((name, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 text-on-surface-variant border border-white/10"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Vibe Palette — unchanged */}
