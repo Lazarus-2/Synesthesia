@@ -87,6 +87,7 @@ def _is_audio_magic(head: bytes) -> bool:
 
 import taskiq_fastapi
 
+from backend.api_common import _enforce_owned_read, _reject_job_id_traversal  # noqa: F401
 from backend.auth import UserPrincipal, current_user, require_user
 from backend.chains.aura_agent import run_aura, stream_aura
 from backend.chains.aura_tools import current_user_id
@@ -963,40 +964,6 @@ async def share_analysis(job_id: str, db=Depends(get_mongodb)) -> AnalyzeRespons
         instrument_guide=None,
         audio_url=f"/api/v1/audio/{job_id}",
     )
-
-
-async def _enforce_owned_read(
-    job_id: str,
-    principal: UserPrincipal | None,
-    db,
-    *,
-    allow_missing: bool = False,
-) -> None:
-    """404 when an authenticated caller requests another user's OWNED job (Phase 6 G2).
-
-    No-op for anonymous callers (``principal is None``) — in the default
-    anonymous deployment every analysis is public, and the public ``/share``
-    player fetches media token-less, so those flows are unchanged. Anonymous
-    docs (``user_id is None``) stay readable for everyone. ``allow_missing``
-    lets the progress SSE keep streaming an in-flight job whose final doc is
-    not written yet (ownership isn't determinable then; low-sensitivity).
-    """
-    if principal is None:
-        return
-    doc = await db.song_analyses.find_one({"_id": job_id}, {"user_id": 1})
-    if doc is None:
-        if allow_missing:
-            return
-        raise HTTPException(status_code=404, detail="Not found")
-    owner = doc.get("user_id")
-    if owner is not None and owner != principal.user_id:
-        raise HTTPException(status_code=404, detail="Not found")
-
-
-def _reject_job_id_traversal(job_id: str) -> None:
-    """Reject a job_id that could escape its storage dir via path separators."""
-    if "/" in job_id or "\\" in job_id or ".." in job_id:
-        raise HTTPException(status_code=404, detail="Not found")
 
 
 @router.get("/midi/{job_id}/{stem}")
