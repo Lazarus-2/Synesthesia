@@ -64,3 +64,23 @@ export function instrumentToStem(instrument: string): StemId {
   if (i.includes("drum") || i.includes("perc")) return "drums";
   return "other"; // guitar, piano, keys, ukulele, etc. (melodics)
 }
+
+export interface StreakState {
+  streakDays: number;
+  lastActiveDate: string | null; // "YYYY-MM-DD"
+}
+
+/** Pure streak update. `today` is injected ("YYYY-MM-DD") so it is testable. */
+export function updateStreak(prev: StreakState, today: string): StreakState {
+  if (prev.lastActiveDate === today) return prev;
+  const yesterday = addDays(today, -1);
+  const streakDays = prev.lastActiveDate === yesterday ? prev.streakDays + 1 : 1;
+  return { streakDays, lastActiveDate: today };
+}
+
+function addDays(isoDate: string, delta: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}

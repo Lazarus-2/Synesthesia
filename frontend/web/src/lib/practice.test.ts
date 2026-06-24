@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { nextRampRate, type RampConfig } from "./practice";
 import { addLoop, removeLoop, renameLoop, loopsFor, type SavedLoop, type LoopMap } from "./practice";
 import { instrumentToStem } from "./practice";
+import { updateStreak, type StreakState } from "./practice";
 
 const base: RampConfig = { startPct: 60, targetPct: 100, stepPct: 10, loopsPerStep: 1 };
 
@@ -78,5 +79,25 @@ describe("instrumentToStem", () => {
     expect(instrumentToStem("guitar")).toBe("other");
     expect(instrumentToStem("piano")).toBe("other");
     expect(instrumentToStem("ukulele")).toBe("other");
+  });
+});
+
+describe("updateStreak", () => {
+  const s0: StreakState = { streakDays: 0, lastActiveDate: null };
+
+  it("starts a streak at 1 on first activity", () => {
+    expect(updateStreak(s0, "2026-06-24")).toEqual({ streakDays: 1, lastActiveDate: "2026-06-24" });
+  });
+  it("does not double-count the same day", () => {
+    const s = { streakDays: 3, lastActiveDate: "2026-06-24" };
+    expect(updateStreak(s, "2026-06-24")).toEqual(s);
+  });
+  it("increments on a consecutive day", () => {
+    const s = { streakDays: 3, lastActiveDate: "2026-06-23" };
+    expect(updateStreak(s, "2026-06-24")).toEqual({ streakDays: 4, lastActiveDate: "2026-06-24" });
+  });
+  it("resets to 1 after a gap", () => {
+    const s = { streakDays: 3, lastActiveDate: "2026-06-20" };
+    expect(updateStreak(s, "2026-06-24")).toEqual({ streakDays: 1, lastActiveDate: "2026-06-24" });
   });
 });
