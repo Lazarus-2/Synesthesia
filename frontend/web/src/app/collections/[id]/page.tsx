@@ -39,27 +39,31 @@ export default function CollectionDetailPage() {
 
   const [detail, setDetail] = useState<CollectionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // ``loadedId`` tracks the collection id whose fetch has settled; loading is
+  // derived by comparing it to the requested ``id``. This avoids a synchronous
+  // setState in the effect body (React 19 / react-hooks/set-state-in-effect).
+  const [loadedId, setLoadedId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const loading = !!token && !!id && loadedId !== id;
 
   useEffect(() => {
     if (!id || !token) return;
     let cancelled = false;
-    setLoading(true);
     apiGet<CollectionDetail>(`/collections/${encodeURIComponent(id)}`)
       .then((r) => {
         if (cancelled) return;
+        setError(null);
         setDetail(r);
         setNameDraft(r.name);
-        setLoading(false);
+        setLoadedId(id);
       })
       .catch((err) => {
         if (cancelled) return;
         const message = err instanceof ApiError ? err.message : "Could not load collection.";
         setError(message);
         useToastStore.getState().error("Collection unavailable", message);
-        setLoading(false);
+        setLoadedId(id);
       });
     return () => { cancelled = true; };
   }, [id, token]);
