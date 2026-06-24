@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { apiGet, ApiError } from "../../../lib/apiClient";
 import { useAuthStore } from "../../../store/useAuthStore";
 import { useCollectionsStore } from "../../../store/useCollectionsStore";
+import { useRehearseStore } from "../../../store/useRehearseStore";
 import { useToastStore } from "../../../store/useToastStore";
 import type { CollectionDetail, CollectionSong } from "../../../types";
 
@@ -151,6 +152,14 @@ export default function CollectionDetailPage() {
     if (!ok) setDetail(prev);
   };
 
+  // Rehearse mode — queue the whole setlist and jump to the player on the
+  // first song. The player auto-advances through the rest as each finishes.
+  const startRehearse = () => {
+    if (d.song_ids.length === 0) return;
+    useRehearseStore.getState().start(d.song_ids);
+    router.push(`/?job=${encodeURIComponent(d.song_ids[0])}`);
+  };
+
   const removeSong = async (jobId: string) => {
     const prev = d;
     const songs = d.songs.filter((s) => s.job_id !== jobId);
@@ -205,13 +214,27 @@ export default function CollectionDetailPage() {
               {d.songs.length} song{d.songs.length === 1 ? "" : "s"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="px-4 py-2 glass-panel rounded-full text-sm text-error hover:border-error/40 shrink-0"
-          >
-            Delete
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {d.song_ids.length > 0 && (
+              <button
+                type="button"
+                onClick={startRehearse}
+                className="px-4 py-2 primary-gradient text-on-primary rounded-full text-sm font-semibold flex items-center gap-1.5 hover:scale-105 active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  play_arrow
+                </span>
+                {d.kind === "setlist" ? "Rehearse setlist" : "Play through"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="px-4 py-2 glass-panel rounded-full text-sm text-error hover:border-error/40"
+            >
+              Delete
+            </button>
+          </div>
         </div>
 
         {/* Song list */}
