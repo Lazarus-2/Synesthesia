@@ -8,6 +8,7 @@ them.
 
 from backend.repositories.analysis_repo import AnalysisRepo
 from backend.repositories.chat_session_repo import ChatSessionRepo
+from backend.repositories.collection_repo import CollectionRepo
 from backend.repositories.user_repo import UserRepo
 
-__all__ = ["AnalysisRepo", "ChatSessionRepo", "UserRepo"]
+__all__ = ["AnalysisRepo", "ChatSessionRepo", "CollectionRepo", "UserRepo"]

@@ -158,12 +158,13 @@ def mock_mongo() -> MagicMock:
     return value per call: ``mock_mongo.users.find_one.return_value = {...}``.
     """
     db = MagicMock()
-    for coll in ("users", "chat_sessions", "song_analyses", "failed_jobs"):
+    for coll in ("users", "chat_sessions", "song_analyses", "failed_jobs", "collections"):
         c = getattr(db, coll)
         c.find_one = AsyncMock(return_value=None)
         c.insert_one = AsyncMock()
         c.update_one = AsyncMock()
         c.replace_one = AsyncMock()
+        c.delete_one = AsyncMock()
         c.count_documents = AsyncMock(return_value=0)
         # ``find`` returns a chain object (find().sort().skip().limit()) that
         # is itself async-iterable. We model it as an AsyncMock returning

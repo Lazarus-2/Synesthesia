@@ -139,6 +139,35 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+// Collections & Setlists (Plan v2)
+export type CollectionKind = "collection" | "setlist";
+export interface CollectionSummary {
+  id: string;
+  name: string;
+  kind: CollectionKind;
+  description: string | null;
+  song_count: number;
+  created_at: string;
+}
+export interface CollectionSong {
+  job_id: string;
+  title: string | null;
+  artist: string | null;
+  key: string | null;
+  tempo: number | null;
+  duration: number | null;
+}
+export interface CollectionDetail {
+  id: string;
+  name: string;
+  kind: CollectionKind;
+  description: string | null;
+  song_ids: string[];
+  songs: CollectionSong[];
+  created_at: string;
+  updated_at: string | null;
+}
+
 // Analysis job response (mirrors backend AnalyzeResponse)
 export interface AnalyzeResponse {
   job_id: string;

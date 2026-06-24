@@ -54,6 +54,21 @@ class ChatSession(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class Collection(BaseModel):
+    """A user-owned collection or ordered setlist of analyzed songs."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
+    user_id: str
+    name: str
+    kind: Literal["collection", "setlist"] = "collection"
+    description: str | None = None
+    song_ids: list[str] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime | None = None
+
+
 class SongAnalysisModel(BaseModel):
     """Song analyzer cache document in MongoDB."""
 

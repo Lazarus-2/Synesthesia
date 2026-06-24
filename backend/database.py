@@ -71,6 +71,9 @@ async def _create_indexes(db) -> None:
         expireAfterSeconds=_TTL_SECONDS_90_DAYS,
     )
 
+    # Collections / setlists: list/lookup by owner, sorted-by-recency.
+    await db.collections.create_index([("user_id", 1), ("created_at", -1)])
+
     # Dead-letter queue (failed_jobs): lookup by job_id for triage; TTL on
     # created_at so the collection self-bounds.
     await db.failed_jobs.create_index("job_id")
