@@ -14,7 +14,6 @@ import hashlib
 import inspect
 import json
 import logging
-import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -96,6 +95,7 @@ from backend.database import get_mongodb
 from backend.models import SongAnalysisModel
 from backend.ratelimit import limiter
 from backend.repositories import AnalysisRepo, ChatSessionRepo, CollectionRepo, UserRepo
+from backend.routers.health import router as health_router
 from backend.schemas import (
     AddSongRequest,
     AnalyzeResponse,
@@ -373,66 +373,6 @@ class AuthResponse(BaseModel):
     token: str
     user_id: str
     username: str
-
-
-@app.get("/health")
-async def health() -> dict:
-    """Liveness probe.
-
-    Cheap and always-200 so orchestrators can use this for "is the process
-    alive" without depending on downstream services. For dependency state,
-    see :func:`readiness`.
-    """
-    return {"status": "ok"}
-
-
-@app.get("/health/ready")
-async def readiness(db=Depends(get_mongodb)) -> JSONResponse:
-    """Readiness probe — pings Mongo and Redis, surfaces per-dependency state.
-
-    Returns 200 only when every required dependency is reachable, 503
-    otherwise with the per-dep breakdown. Use this for Kubernetes
-    ``readinessProbe`` so traffic doesn't hit a node whose Mongo connection
-    is wedged.
-    """
-    checks: dict[str, dict] = {}
-    overall_ok = True
-
-    # Mongo ping
-    t0 = time.perf_counter()
-    try:
-        await db.command("ping")
-        checks["mongodb"] = {
-            "ok": True,
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
-        }
-    except Exception as e:
-        overall_ok = False
-        checks["mongodb"] = {"ok": False, "error": type(e).__name__, "msg": str(e)[:120]}
-
-    # Redis ping
-    t0 = time.perf_counter()
-    try:
-        from backend.services.cache import cache
-
-        if await cache.ping():
-            checks["redis"] = {
-                "ok": True,
-                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
-            }
-        else:
-            checks["redis"] = {
-                "ok": False,
-                "error": "unreachable",
-                "msg": "Redis unreachable or breaker open; fell back to in-memory",
-            }
-            overall_ok = False
-    except Exception as e:
-        overall_ok = False
-        checks["redis"] = {"ok": False, "error": type(e).__name__, "msg": str(e)[:120]}
-
-    body = {"status": "ok" if overall_ok else "degraded", "checks": checks}
-    return JSONResponse(status_code=200 if overall_ok else 503, content=body)
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -1894,3 +1834,7 @@ async def remove_song_from_collection(
 # (or any other client) has migrated to /api/v1.
 app.include_router(router, prefix="/api/v1")
 app.include_router(router)  # legacy alias — remove after frontend migration
+
+# Health probes are intentionally root-only (no /api/v1 variant) so
+# orchestrators hit a stable, unversioned path.
+app.include_router(health_router)
