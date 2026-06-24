@@ -2,6 +2,7 @@
 
 import React from "react";
 import { ConfidenceDot } from "../Analysis/ConfidenceDot";
+import { PracticeLog } from "../Player/PracticeLog";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { useAppStore } from "../../store/useAppStore";
 import { useFavoritesStore } from "../../store/useFavoritesStore";
@@ -80,6 +81,8 @@ export const Header: React.FC = () => {
           </span>
           <ConfidenceDot value={analysis.time_signature_confidence} label="Meter detection" />
         </div>
+        {/* Practice Log Badge */}
+        <PracticeLog />
         {/* Favorite Button */}
         <button
           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group ml-1 sm:ml-2 shrink-0 disabled:opacity-40"
