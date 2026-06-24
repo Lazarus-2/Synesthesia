@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import type WaveSurfer from "wavesurfer.js";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
+import { useRehearseStore } from "../../store/useRehearseStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 import { formatTime } from "../../lib/format";
 
@@ -74,6 +75,14 @@ export const WaveformPlayer: React.FC = () => {
       ws.on("ready", () => {
         setDuration(ws.getDuration());
         setWavesurfer(ws);
+        // During rehearse, each queued song auto-plays as it becomes ready.
+        // Rehearse is always user-initiated (the "Rehearse" button → navigation
+        // → first user gesture), so the AudioContext is already running and a
+        // programmatic play is allowed. Guarded on `active` so ordinary
+        // single-song loads (Library/Collections "Open") never auto-play.
+        if (useRehearseStore.getState().active) {
+          setIsPlaying(true);
+        }
       });
       // ``audioprocess`` fires ~60×/sec. Pushing every tick into the store
       // re-renders every currentTime subscriber (section ribbon, chord strip,
@@ -91,7 +100,29 @@ export const WaveformPlayer: React.FC = () => {
       });
       // Seeks are discrete + need an immediate label update.
       ws.on("seeking", () => setCurrentTime(ws.getCurrentTime()));
-      ws.on("finish", () => setIsPlaying(false));
+      ws.on("finish", () => {
+        setIsPlaying(false);
+        // Rehearse mode: when a song finishes, advance to the next queued song.
+        // next() returns null (and self-deactivates) at the end of the queue.
+        if (useRehearseStore.getState().active) {
+          const nextId = useRehearseStore.getState().next();
+          if (nextId) {
+            // loadExisting swaps analysis + audioFileUrl, which re-runs this
+            // effect for the new song (new WaveSurfer instance). It catches its
+            // own errors and resets jobStatus to 'idle' on failure rather than
+            // throwing — so detect that and stop rehearse cleanly so we don't
+            // get stuck on a song that won't load.
+            void useAnalysisStore
+              .getState()
+              .loadExisting(nextId)
+              .then(() => {
+                if (useAnalysisStore.getState().jobStatus !== "done") {
+                  useRehearseStore.getState().stop();
+                }
+              });
+          }
+        }
+      });
       wsRef.current = ws;
       cleanup = () => ws.destroy();
     })();

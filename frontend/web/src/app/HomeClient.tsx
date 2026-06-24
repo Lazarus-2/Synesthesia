@@ -16,6 +16,7 @@ import { UploadModal } from "../components/Upload/UploadModal";
 import { AnalyzingView } from "../components/Analysis/AnalyzingView";
 import { Header } from "../components/Layout/Header";
 import { WaveformPlayer } from "../components/Player/WaveformPlayer";
+import { RehearseBanner } from "../components/Player/RehearseBanner";
 import { ChordTimeline } from "../components/Analysis/ChordTimeline";
 import { TheoryPanel } from "../components/Analysis/TheoryPanel";
 import { ComparePanel } from "../components/Analysis/ComparePanel";
@@ -104,6 +105,7 @@ export default function HomeClient() {
       <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto lg:overflow-hidden pb-24 lg:pb-0">
         {/* Left Panel — Waveform, Chord Timeline (8 cols) */}
         <div className="lg:col-span-8 flex flex-col gap-0 p-4 lg:p-6 lg:pr-3 lg:overflow-y-auto hide-scrollbar reveal-up">
+          <RehearseBanner />
           <WaveformPlayer />
           <div className="mt-4">
             <ChordTimeline />
