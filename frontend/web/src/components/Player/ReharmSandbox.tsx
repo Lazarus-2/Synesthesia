@@ -2,9 +2,19 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useReharmStore } from "../../store/useReharmStore";
+import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { transposeChord } from "../../lib/music";
+import { apiPostJson } from "../../lib/apiClient";
 
 type Tone = typeof import("tone");
+
+/** One backend reharmonization suggestion (mirrors POST /theory/reharmonize). */
+interface BackendSuggestion {
+  type: string;
+  label: string;
+  chord: string;
+  explanation: string;
+}
 
 /** "What if?" chord-swap explorer.
  *
@@ -15,11 +25,49 @@ type Tone = typeof import("tone");
  *  loading). Apply just closes the modal — we don't mutate the
  *  analysis, this is exploratory. */
 export const ReharmSandbox: React.FC = () => {
-  const { open, chord, close } = useReharmStore();
+  const { open, chord, chordIndex } = useReharmStore();
+  const close = useReharmStore((s) => s.close);
+  const analysis = useAnalysisStore((s) => s.analysis);
   const openChord = chord?.chord ?? null;
+  const songKey = analysis?.key ?? null;
+  const nextChord = analysis?.chords?.[chordIndex + 1]?.chord ?? null;
   const toneRef = useRef<Tone | null>(null);
   const synthRef = useRef<InstanceType<Tone["PolySynth"]> | null>(null);
   const [, setReady] = useState(false);
+
+  // Backend suggestions + load/fallback state. Reset whenever the chord changes.
+  const [suggestions, setSuggestions] = useState<BackendSuggestion[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
+
+  // Fetch backend suggestions when the modal opens for a chord.
+  useEffect(() => {
+    if (!open || !openChord) return;
+    let cancelled = false;
+    (async () => {
+      // Reset inside the async body so the effect doesn't call setState
+      // synchronously (avoids the react-hooks/set-state-in-effect cascade).
+      setSuggestions(null);
+      setUseFallback(false);
+      setLoading(true);
+      try {
+        const resp = await apiPostJson<{ suggestions: BackendSuggestion[] }>(
+          "/theory/reharmonize",
+          { key: songKey ?? "C major", chord: openChord, next_chord: nextChord },
+        );
+        if (cancelled) return;
+        setSuggestions(resp.suggestions ?? []);
+      } catch {
+        // ApiError, network TypeError, or anything else → fall back to the
+        // offline client swap math so the modal still works.
+        if (cancelled) return;
+        setUseFallback(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, openChord, songKey, nextChord]);
 
   // Lazy-init Tone — has to be inside a user gesture (open is one).
   useEffect(() => {
@@ -91,31 +139,77 @@ export const ReharmSandbox: React.FC = () => {
           </button>
         </div>
 
-        <ul className="flex flex-col gap-2">
-          {swaps.map((s) => (
-            <li
-              key={s.name}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-high border border-white/5"
-            >
-              <div className="flex-grow">
-                <div className="font-headline text-lg text-on-surface">
-                  → <span className="primary-gradient-text">{s.result}</span>
-                </div>
-                <div className="text-xs text-on-surface-variant">
-                  <span className="font-semibold text-on-surface mr-1">{s.name}.</span>
-                  {s.blurb}
-                </div>
-              </div>
-              <button
-                className="px-3 py-2 rounded-full glass-panel hover:border-primary/30 text-primary"
-                onClick={() => playChord(s.result)}
-                title={`Preview ${s.result}`}
+        {/* Loading placeholder while the backend responds. */}
+        {loading && (
+          <div className="flex items-center gap-2 px-3 py-6 text-sm text-on-surface-variant">
+            <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+            Finding substitutions…
+          </div>
+        )}
+
+        {/* Backend suggestions (preferred path). */}
+        {!loading && !useFallback && suggestions && (
+          suggestions.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {suggestions.map((s) => (
+                <li
+                  key={`${s.type}-${s.chord}`}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-high border border-white/5"
+                >
+                  <div className="flex-grow">
+                    <div className="font-headline text-lg text-on-surface">
+                      → <span className="primary-gradient-text">{s.chord}</span>
+                    </div>
+                    <div className="text-xs text-on-surface-variant">
+                      <span className="font-semibold text-on-surface mr-1">{s.label}.</span>
+                      {s.explanation}
+                    </div>
+                  </div>
+                  <button
+                    className="px-3 py-2 rounded-full glass-panel hover:border-primary/30 text-primary"
+                    onClick={() => playChord(s.chord)}
+                    title={`Preview ${s.chord}`}
+                  >
+                    <span className="material-symbols-outlined text-lg">volume_up</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-3 py-6 text-sm text-on-surface-variant">
+              No substitutions for this chord.
+            </div>
+          )
+        )}
+
+        {/* Offline fallback — client-side swap math. */}
+        {!loading && useFallback && (
+          <ul className="flex flex-col gap-2">
+            {swaps.map((s) => (
+              <li
+                key={s.name}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-high border border-white/5"
               >
-                <span className="material-symbols-outlined text-lg">volume_up</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                <div className="flex-grow">
+                  <div className="font-headline text-lg text-on-surface">
+                    → <span className="primary-gradient-text">{s.result}</span>
+                  </div>
+                  <div className="text-xs text-on-surface-variant">
+                    <span className="font-semibold text-on-surface mr-1">{s.name}.</span>
+                    {s.blurb}
+                  </div>
+                </div>
+                <button
+                  className="px-3 py-2 rounded-full glass-panel hover:border-primary/30 text-primary"
+                  onClick={() => playChord(s.result)}
+                  title={`Preview ${s.result}`}
+                >
+                  <span className="material-symbols-outlined text-lg">volume_up</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
