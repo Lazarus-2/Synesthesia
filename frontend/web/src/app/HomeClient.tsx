@@ -18,6 +18,7 @@ import { Header } from "../components/Layout/Header";
 import { WaveformPlayer } from "../components/Player/WaveformPlayer";
 import { ChordTimeline } from "../components/Analysis/ChordTimeline";
 import { TheoryPanel } from "../components/Analysis/TheoryPanel";
+import { ComparePanel } from "../components/Analysis/ComparePanel";
 import { PlayPanel } from "../components/Player/PlayPanel";
 import { ChatPanel } from "../components/Chat/ChatPanel";
 import { SettingsPanel } from "../components/Settings/SettingsPanel";
@@ -123,6 +124,22 @@ export default function HomeClient() {
             {/* Extra tabs outside the "Play/Theory/Stems" group */}
             <button
               role="tab"
+              aria-selected={activeTab === "compare"}
+              aria-controls="analysis-tabpanel"
+              className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                activeTab === "compare"
+                  ? "text-on-surface"
+                  : "text-on-surface-variant hover:text-on-surface"
+              }`}
+              onClick={() => setActiveTab("compare")}
+            >
+              COMPARE
+              {activeTab === "compare" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-container" />
+              )}
+            </button>
+            <button
+              role="tab"
               aria-selected={activeTab === "chat"}
               aria-controls="analysis-tabpanel"
               className={`flex-1 py-4 text-center text-xs font-semibold tracking-widest transition-colors relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
@@ -159,6 +176,7 @@ export default function HomeClient() {
             {activeTab === "theory" && <TheoryPanel />}
             {activeTab === "stems" && <StemMixer />}
             {activeTab === "lyrics" && <LyricsPanel />}
+            {activeTab === "compare" && <ComparePanel />}
             {activeTab === "chat" && <ChatPanel />}
             {activeTab === "settings" && <SettingsPanel />}
           </div>

@@ -335,6 +335,17 @@ class ChatResponse(BaseModel):
     session_id: str | None = None
 
 
+class ReharmonizeRequest(BaseModel):
+    """Client → POST /theory/reharmonize. Stateless deterministic theory —
+    no auth, no db. ``next_chord`` enables the secondary-dominant suggestion."""
+
+    key: str = Field(max_length=32, description="Key, e.g. 'C major', 'A minor'")
+    chord: str = Field(max_length=32, description="Chord symbol to reharmonize, e.g. 'C7'")
+    next_chord: str | None = Field(
+        default=None, max_length=32, description="The following chord (enables V7/next)"
+    )
+
+
 # =============================================================================
 # Collections & setlists -- Module 5
 # =============================================================================
