@@ -5,7 +5,6 @@ import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { API_V1 } from "../../lib/apiClient";
 import { usePlayAlongStore } from "../../store/usePlayAlongStore";
 import { PlayAlongPresets } from "./PlayAlongPresets";
-import type { StemId } from "../../lib/practice";
 
 interface Stem {
   id: "vocals" | "drums" | "bass" | "other";
@@ -160,7 +159,7 @@ export const StemMixer: React.FC = () => {
         )}
       </div>
 
-      <PlayAlongPresets availableStems={availableStems.map((s) => s.id) as StemId[]} />
+      <PlayAlongPresets availableStems={availableStems.map((s) => s.id)} />
 
       <p className="text-sm text-on-surface-variant -mt-2">
         {availableStems.length === 0

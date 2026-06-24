@@ -13,7 +13,6 @@ interface SpeedTrainerState extends RampConfig {
    *  playback rate (fraction) if it changed this wrap, else the current rate.
    *  Returns null when disabled (caller should no-op). */
   registerLoopWrap: () => number | null;
-  reset: () => void;
 }
 
 export const useSpeedTrainerStore = create<SpeedTrainerState>((set, get) => ({
@@ -49,6 +48,4 @@ export const useSpeedTrainerStore = create<SpeedTrainerState>((set, get) => ({
     set({ currentPass: pass, currentPct: Math.round(rate * 100) });
     return rate;
   },
-
-  reset: () => set((s) => ({ currentPass: 0, currentPct: s.startPct })),
 }));

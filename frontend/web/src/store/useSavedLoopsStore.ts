@@ -10,7 +10,7 @@ function freshId(): string {
   idCounter += 1;
   // crypto.randomUUID when available; fall back to a counter (e.g. SSR/jsdom).
   const g = globalThis as unknown as { crypto?: { randomUUID?: () => string } };
-  return g.crypto?.randomUUID?.() ?? `loop_${idCounter}`;
+  return g.crypto?.randomUUID?.() ?? `loop_${Date.now()}_${idCounter}`;
 }
 
 interface SavedLoopsState {

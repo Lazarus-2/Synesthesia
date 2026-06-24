@@ -29,6 +29,7 @@ export const SavedLoops: React.FC = () => {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={canSave ? "Name this loop" : "Set A/B first"}
+          aria-label="Loop name"
           disabled={!canSave}
           className="flex-grow bg-white/5 rounded px-2 py-1 text-on-surface placeholder:text-on-surface-variant/60 disabled:opacity-40"
         />
