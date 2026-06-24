@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, ApiError } from "../../../lib/apiClient";
@@ -46,6 +46,11 @@ export default function CollectionDetailPage() {
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  // Native drag-and-drop reorder state. ``dragIndex`` is the row being dragged
+  // (kept in a ref so it survives re-renders without triggering them);
+  // ``dragOverIndex`` drives the drop-indicator highlight on the hovered row.
+  const dragIndex = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const loading = !!token && !!id && loadedId !== id;
 
   useEffect(() => {
@@ -140,16 +145,52 @@ export default function CollectionDetailPage() {
     router.push("/collections");
   };
 
+  // Shared optimistic-update-+-rollback for any reorder. Snapshots the current
+  // detail, applies ``newSongs`` immediately, persists via the store, and rolls
+  // back to the snapshot if the server rejects it.
+  const applyOrder = async (newSongs: CollectionSong[]) => {
+    const prev = d;
+    const songIds = newSongs.map((s) => s.job_id);
+    setDetail({ ...d, songs: newSongs, song_ids: songIds });
+    const ok = await useCollectionsStore.getState().reorder(d.id, songIds);
+    if (!ok) setDetail(prev);
+  };
+
   const moveSong = async (index: number, dir: -1 | 1) => {
     const target = index + dir;
     if (target < 0 || target >= d.songs.length) return;
-    const prev = d;
     const songs = [...d.songs];
     [songs[index], songs[target]] = [songs[target], songs[index]];
-    const songIds = songs.map((s) => s.job_id);
-    setDetail({ ...d, songs, song_ids: songIds });
-    const ok = await useCollectionsStore.getState().reorder(d.id, songIds);
-    if (!ok) setDetail(prev);
+    await applyOrder(songs);
+  };
+
+  // Native HTML5 drag-and-drop reorder. ``moveSong`` (▲/▼ buttons) stays the
+  // keyboard-accessible fallback; this is the pointer-driven path.
+  const handleDragStart = (i: number) => (e: React.DragEvent) => {
+    dragIndex.current = i;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (i: number) => (e: React.DragEvent) => {
+    e.preventDefault(); // allow drop
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIndex !== i) setDragOverIndex(i);
+  };
+
+  const clearDrag = () => {
+    dragIndex.current = null;
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (dropIndex: number) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    const from = dragIndex.current;
+    clearDrag();
+    if (from === null || from === dropIndex) return;
+    const songs = [...d.songs];
+    const [moved] = songs.splice(from, 1);
+    songs.splice(dropIndex, 0, moved);
+    await applyOrder(songs);
   };
 
   // Rehearse mode — queue the whole setlist and jump to the player on the
@@ -253,8 +294,22 @@ export default function CollectionDetailPage() {
             {d.songs.map((s: CollectionSong, i) => (
               <li
                 key={s.job_id}
-                className="glass-panel rounded-xl p-4 flex items-center gap-3"
+                draggable
+                onDragStart={handleDragStart(i)}
+                onDragOver={handleDragOver(i)}
+                onDrop={handleDrop(i)}
+                onDragEnd={clearDrag}
+                className={`glass-panel rounded-xl p-4 flex items-center gap-3 cursor-grab active:cursor-grabbing ${
+                  dragOverIndex === i ? "border-t-2 border-primary" : ""
+                }`}
               >
+                <span
+                  className="material-symbols-outlined text-on-surface-variant/50 text-lg shrink-0 hidden sm:inline"
+                  aria-hidden="true"
+                  title="Drag to reorder"
+                >
+                  drag_indicator
+                </span>
                 <span className="text-sm font-semibold text-on-surface-variant w-6 text-center shrink-0">
                   {i + 1}
                 </span>
