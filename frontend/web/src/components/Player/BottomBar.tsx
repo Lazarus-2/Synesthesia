@@ -6,6 +6,7 @@ import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { usePracticeStore } from "../../store/usePracticeStore";
 import { useSpeedTrainerStore } from "../../store/useSpeedTrainerStore";
 import { SpeedTrainer } from "./SpeedTrainer";
+import { SavedLoops } from "./SavedLoops";
 
 /** Schedule a single metronome click at ``time`` (ctx clock). Accented clicks
  *  (downbeats / count-in start) are higher + louder. Shared by the metronome
@@ -319,8 +320,9 @@ export const BottomBar: React.FC = () => {
         )}
 
         {practiceMode && (
-          <div className="hidden lg:block absolute bottom-16 left-2 w-64">
+          <div className="hidden lg:flex flex-col gap-2 absolute bottom-16 left-2 w-64">
             <SpeedTrainer />
+            <SavedLoops />
           </div>
         )}
       </div>
