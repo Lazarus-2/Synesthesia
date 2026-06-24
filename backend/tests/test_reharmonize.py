@@ -111,6 +111,56 @@ def test_diatonic_third_substitution():
     assert _pc(_root_of(dt[0]["chord"])) == _pc("E")
 
 
+def test_diatonic_third_spells_diminished_degree():
+    # Regression: vii° in C major is B diminished (B-D-F), NOT Bm.
+    # The integer RomanNumeral constructor raised the third and produced "Bm".
+    out = reharmonize("C major", "G7")
+    dt = [s for s in out if s["type"] == "diatonic_third"]
+    assert dt, f"expected diatonic_third for G7 (V->vii), got {_types(out)}"
+    chord = dt[0]["chord"]
+    assert chord != "Bm", "vii° must not be mis-spelled as a minor triad"
+    assert chord[:1] == "B", f"expected a B-rooted chord, got {chord!r}"
+    lowered = chord.lower()
+    assert ("dim" in lowered) or chord.endswith("o") or "°" in chord, (
+        f"diatonic third of G7 must be diminished, got {chord!r}"
+    )
+
+
+def test_diatonic_third_diminished_in_flat_key():
+    # Bb major, F7 (V7) -> vii° is A diminished, not "Am".
+    out = reharmonize("Bb major", "F7")
+    dt = [s for s in out if s["type"] == "diatonic_third"]
+    assert dt, f"expected diatonic_third for F7 in Bb, got {_types(out)}"
+    chord = dt[0]["chord"]
+    assert chord != "Am"
+    assert chord[:1] == "A"
+    lowered = chord.lower()
+    assert ("dim" in lowered) or chord.endswith("o") or "°" in chord, (
+        f"diatonic third of F7 in Bb must be diminished, got {chord!r}"
+    )
+
+
+def test_diatonic_third_minor_degree_unchanged():
+    # I -> iii in C major must remain Em (correct minor degree).
+    out = reharmonize("C major", "C")
+    dt = [s for s in out if s["type"] == "diatonic_third"]
+    assert dt, f"expected diatonic_third for C, got {_types(out)}"
+    assert dt[0]["chord"] == "Em"
+
+
+def test_malformed_chord_returns_empty():
+    # Unparseable chord input must not crash; returns [].
+    assert reharmonize("C major", "???") == []
+
+
+def test_slash_chord_does_not_raise():
+    # A slash chord should produce suggestions without raising.
+    out = reharmonize("C major", "G/B")
+    assert isinstance(out, list)
+    for s in out:
+        assert set(s.keys()) >= {"type", "label", "chord", "explanation"}
+
+
 def test_no_chord_returns_empty():
     assert reharmonize("C major", "N.C.") == []
     assert reharmonize("C major", "N") == []

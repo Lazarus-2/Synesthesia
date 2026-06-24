@@ -23,8 +23,8 @@ from backend.tools.chords import parse_chord
 from backend.tools.transpose import _FLAT_TO_SHARP, transpose_chord
 
 try:
+    from music21 import chord as m21_chord
     from music21 import key as m21_key_mod
-    from music21 import roman as m21_roman
     from music21.harmony import chordSymbolFigureFromChord
     _MUSIC21_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -226,10 +226,36 @@ def _diatonic_third(chord: str, key_obj) -> str | None:
     # Degree a third above (wrap within 1..7).
     target = ((deg + 2 - 1) % 7) + 1
     try:
-        rn_target = m21_roman.RomanNumeral(target, key_obj)
-        figure = chordSymbolFigureFromChord(rn_target)
+        # Build the diatonic triad directly from the scale so the triad
+        # carries the correct diatonic quality (e.g. vii° is diminished,
+        # not minor). The integer ``RomanNumeral`` constructor raises the
+        # third by default and mis-spells diminished/augmented degrees.
+        triad = _diatonic_triad(key_obj, target)
+        if triad is None:
+            return None
+        figure = chordSymbolFigureFromChord(m21_chord.Chord(triad))
     except Exception:
         return None
     if not figure or figure in ("Chord Symbol Cannot Be Identified",):
         return None
     return _from_m21(figure)
+
+
+def _diatonic_triad(key_obj, degree: int):
+    """Return the diatonic triad pitches built on *degree* (1-based) of *key_obj*.
+
+    Stacks scale degrees ``degree``, ``degree+2``, ``degree+4`` from the key's
+    scale, so the resulting triad has the correct diatonic quality (major,
+    minor, **or diminished**). Returns ``None`` if pitches can't be derived.
+    """
+    try:
+        scale_obj = key_obj.getScale()
+        tonic_name = key_obj.tonic.name
+        # Two octaves so degree+4 never runs off the end (degree <= 7).
+        scale_pitches = scale_obj.getPitches(tonic_name + "4", tonic_name + "6")
+    except Exception:
+        return None
+    idx = degree - 1
+    if idx < 0 or idx + 4 >= len(scale_pitches):
+        return None
+    return [scale_pitches[idx], scale_pitches[idx + 2], scale_pitches[idx + 4]]
