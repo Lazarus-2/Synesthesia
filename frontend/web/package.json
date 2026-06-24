@@ -9,7 +9,9 @@
     "lint": "eslint",
     "openapi:dump": "(cd ../.. && python backend/scripts/dump_openapi.py -o frontend/web/src/types/openapi.json)",
     "openapi:codegen": "openapi-typescript src/types/openapi.json -o src/types/api.gen.ts",
-    "codegen": "npm run openapi:dump && npm run openapi:codegen"
+    "codegen": "npm run openapi:dump && npm run openapi:codegen",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@soundtouchjs/audio-worklet": "^2.0.3",
@@ -27,8 +29,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "jsdom": "^25.0.1",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.6"
   }
 }
