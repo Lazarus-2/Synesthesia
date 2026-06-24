@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { nextRampRate, type RampConfig } from "./practice";
 import { addLoop, removeLoop, renameLoop, loopsFor, type SavedLoop, type LoopMap } from "./practice";
+import { instrumentToStem } from "./practice";
 
 const base: RampConfig = { startPct: 60, targetPct: 100, stepPct: 10, loopsPerStep: 1 };
 
@@ -61,5 +62,21 @@ describe("saved-loop CRUD", () => {
 
   it("loopsFor returns [] for unknown jobId", () => {
     expect(loopsFor({}, "nope")).toEqual([]);
+  });
+});
+
+describe("instrumentToStem", () => {
+  it("maps vocals/singing to vocals", () => {
+    expect(instrumentToStem("vocals")).toBe("vocals");
+    expect(instrumentToStem("Singing")).toBe("vocals");
+  });
+  it("maps bass to bass and drums to drums", () => {
+    expect(instrumentToStem("bass")).toBe("bass");
+    expect(instrumentToStem("Drums")).toBe("drums");
+  });
+  it("maps melodic instruments to other", () => {
+    expect(instrumentToStem("guitar")).toBe("other");
+    expect(instrumentToStem("piano")).toBe("other");
+    expect(instrumentToStem("ukulele")).toBe("other");
   });
 });

@@ -53,3 +53,14 @@ export function renameLoop(map: LoopMap, jobId: string, id: string, name: string
     [jobId]: loopsFor(map, jobId).map((l) => (l.id === id ? { ...l, name } : l)),
   };
 }
+
+export type StemId = "vocals" | "drums" | "bass" | "other";
+
+/** Map a user's instrument preference to the stem to mute for play-along. */
+export function instrumentToStem(instrument: string): StemId {
+  const i = (instrument || "").toLowerCase();
+  if (i.includes("voc") || i.includes("sing")) return "vocals";
+  if (i.includes("bass")) return "bass";
+  if (i.includes("drum") || i.includes("perc")) return "drums";
+  return "other"; // guitar, piano, keys, ukulele, etc. (melodics)
+}
