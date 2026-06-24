@@ -1,11 +1,100 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import Link from "next/link";
 import { ConfidenceDot } from "../Analysis/ConfidenceDot";
 import { PracticeLog } from "../Player/PracticeLog";
 import { useAnalysisStore } from "../../store/useAnalysisStore";
 import { useAppStore } from "../../store/useAppStore";
 import { useFavoritesStore } from "../../store/useFavoritesStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { useCollectionsStore } from "../../store/useCollectionsStore";
+
+const AddToCollectionMenu: React.FC<{ jobId: string }> = ({ jobId }) => {
+  const [open, setOpen] = useState(false);
+  const items = useCollectionsStore((s) => s.items);
+  const loaded = useCollectionsStore((s) => s.loaded);
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      if (next && !loaded) useCollectionsStore.getState().fetchAll();
+      return next;
+    });
+  };
+
+  const handleNew = async () => {
+    const name = window.prompt("New collection name")?.trim();
+    if (!name) return;
+    await useCollectionsStore.getState().create(name, "collection", [jobId]);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative inline-block shrink-0">
+      <button
+        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group shrink-0"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Add to collection"
+      >
+        <span
+          className="material-symbols-outlined text-primary-container"
+          style={{ fontVariationSettings: "'wght' 400" }}
+        >
+          playlist_add
+        </span>
+      </button>
+      {open && (
+        <>
+          {/* click-away backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
+          <ul
+            className="absolute z-50 mt-2 right-0 min-w-[220px] max-h-80 overflow-y-auto glass-panel border border-white/10 rounded-lg overflow-hidden shadow-2xl"
+            role="menu"
+          >
+            <li className="px-3 py-2 text-[10px] uppercase tracking-wider text-on-surface-variant border-b border-white/5">
+              Add to collection
+            </li>
+            {loaded && items.length === 0 && (
+              <li className="px-3 py-2 text-sm text-on-surface-variant">No collections yet.</li>
+            )}
+            {items.map((c) => (
+              <li key={c.id}>
+                <button
+                  role="menuitem"
+                  type="button"
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-surface-container-high text-sm text-on-surface transition-colors text-left"
+                  onClick={async () => {
+                    await useCollectionsStore.getState().addSong(c.id, jobId);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="line-clamp-1">{c.name}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-on-surface-variant shrink-0">
+                    {c.kind === "setlist" ? "Setlist" : ""}
+                  </span>
+                </button>
+              </li>
+            ))}
+            <li className="border-t border-white/5">
+              <button
+                role="menuitem"
+                type="button"
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-container-high text-sm text-primary transition-colors"
+                onClick={handleNew}
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                New collection
+              </button>
+            </li>
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
 
 export const Header: React.FC = () => {
   const { analysis, jobId } = useAnalysisStore();
@@ -17,6 +106,7 @@ export const Header: React.FC = () => {
   // is a selector but doesn't trigger a re-render on its own.
   const favoriteIds = useFavoritesStore((s) => s.ids);
   const isFavorite = jobId ? favoriteIds.includes(jobId) : false;
+  const token = useAuthStore((s) => s.token);
 
   if (!analysis) return null;
 
@@ -83,6 +173,15 @@ export const Header: React.FC = () => {
         </div>
         {/* Practice Log Badge */}
         <PracticeLog />
+        {/* Collections nav link */}
+        <Link
+          href="/collections"
+          className="text-xs sm:text-sm text-on-surface-variant hover:text-primary transition-colors shrink-0 px-1"
+        >
+          Collections
+        </Link>
+        {/* Add to collection (auth-gated) */}
+        {token && jobId && <AddToCollectionMenu jobId={jobId} />}
         {/* Favorite Button */}
         <button
           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full glass-panel flex items-center justify-center hover:inner-glow-focus transition-all group ml-1 sm:ml-2 shrink-0 disabled:opacity-40"
