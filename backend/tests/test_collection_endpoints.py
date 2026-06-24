@@ -105,6 +105,13 @@ def test_create_empty_name_is_400(as_user):
     assert r.status_code == 400
 
 
+def test_create_name_too_long_is_422(as_user):
+    # Length violations surface as 422 from Pydantic (distinct from the
+    # endpoint's manual empty-name 400).
+    r = as_user.post("/api/v1/collections", json={"name": "x" * 121})
+    assert r.status_code == 422
+
+
 # --------------------------------------------------------------------------
 # List
 # --------------------------------------------------------------------------

@@ -124,8 +124,13 @@ export default function CollectionDetailPage() {
       setNameDraft(d.name);
       return;
     }
-    await useCollectionsStore.getState().rename(d.id, trimmed);
+    const prevName = d.name;
     setDetail({ ...d, name: trimmed });
+    const ok = await useCollectionsStore.getState().rename(d.id, trimmed);
+    if (!ok) {
+      setDetail({ ...d, name: prevName });
+      setNameDraft(prevName);
+    }
   };
 
   const handleDelete = async () => {
@@ -137,17 +142,21 @@ export default function CollectionDetailPage() {
   const moveSong = async (index: number, dir: -1 | 1) => {
     const target = index + dir;
     if (target < 0 || target >= d.songs.length) return;
+    const prev = d;
     const songs = [...d.songs];
     [songs[index], songs[target]] = [songs[target], songs[index]];
     const songIds = songs.map((s) => s.job_id);
     setDetail({ ...d, songs, song_ids: songIds });
-    await useCollectionsStore.getState().reorder(d.id, songIds);
+    const ok = await useCollectionsStore.getState().reorder(d.id, songIds);
+    if (!ok) setDetail(prev);
   };
 
   const removeSong = async (jobId: string) => {
+    const prev = d;
     const songs = d.songs.filter((s) => s.job_id !== jobId);
     setDetail({ ...d, songs, song_ids: songs.map((s) => s.job_id) });
-    await useCollectionsStore.getState().removeSong(d.id, jobId);
+    const ok = await useCollectionsStore.getState().removeSong(d.id, jobId);
+    if (!ok) setDetail(prev);
   };
 
   return (

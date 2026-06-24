@@ -344,19 +344,19 @@ class CollectionCreateRequest(BaseModel):
     """Client → POST /collections. Identity (user_id) comes from the JWT, never
     the body; ``_id`` is server-generated."""
 
-    name: str
+    name: str = Field(..., max_length=120)
     kind: Literal["collection", "setlist"] = "collection"
-    description: str | None = None
-    song_ids: list[str] = []
+    description: str | None = Field(default=None, max_length=2000)
+    song_ids: list[str] = Field(default=[], max_length=2000)
 
 
 class CollectionUpdateRequest(BaseModel):
     """Client → PUT /collections/{cid}. Only the provided (non-None) fields are
     applied."""
 
-    name: str | None = None
-    description: str | None = None
-    song_ids: list[str] | None = None
+    name: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=2000)
+    song_ids: list[str] | None = Field(default=None, max_length=2000)
 
 
 class AddSongRequest(BaseModel):

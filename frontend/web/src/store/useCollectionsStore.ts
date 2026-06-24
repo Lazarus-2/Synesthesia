@@ -9,11 +9,11 @@ interface CollectionsState {
   loaded: boolean;
   fetchAll: () => Promise<void>;
   create: (name: string, kind: CollectionKind, songIds?: string[]) => Promise<string | null>;
-  rename: (id: string, name: string) => Promise<void>;
+  rename: (id: string, name: string) => Promise<boolean>;
   remove: (id: string) => Promise<void>;
   addSong: (id: string, jobId: string) => Promise<void>;
-  removeSong: (id: string, jobId: string) => Promise<void>;
-  reorder: (id: string, songIds: string[]) => Promise<void>;
+  removeSong: (id: string, jobId: string) => Promise<boolean>;
+  reorder: (id: string, songIds: string[]) => Promise<boolean>;
 }
 
 function msg(e: unknown, fallback: string): string {
@@ -49,8 +49,10 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     try {
       await apiPut(`/collections/${encodeURIComponent(id)}`, { name });
       set({ items: get().items.map((c) => (c.id === id ? { ...c, name } : c)) });
+      return true;
     } catch (e) {
       useToastStore.getState().error("Could not rename", msg(e, "Please try again."));
+      return false;
     }
   },
   remove: async (id) => {
@@ -75,15 +77,19 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     try {
       await apiDelete(`/collections/${encodeURIComponent(id)}/songs/${encodeURIComponent(jobId)}`);
       set({ items: get().items.map((c) => (c.id === id ? { ...c, song_count: Math.max(0, c.song_count - 1) } : c)) });
+      return true;
     } catch (e) {
       useToastStore.getState().error("Could not remove", msg(e, "Please try again."));
+      return false;
     }
   },
   reorder: async (id, songIds) => {
     try {
       await apiPut(`/collections/${encodeURIComponent(id)}`, { song_ids: songIds });
+      return true;
     } catch (e) {
       useToastStore.getState().error("Could not reorder", msg(e, "Please try again."));
+      return false;
     }
   },
 }));

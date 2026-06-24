@@ -51,4 +51,24 @@ describe("useCollectionsStore", () => {
     await useCollectionsStore.getState().addSong("1", "j1");
     expect(useCollectionsStore.getState().items[0].song_count).toBe(1);
   });
+  it("reorder returns true and PUTs song_ids", async () => {
+    (apiPut as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const ok = await useCollectionsStore.getState().reorder("1", ["j2", "j1"]);
+    expect(ok).toBe(true);
+    expect(apiPut).toHaveBeenCalledWith("/collections/1", { song_ids: ["j2", "j1"] });
+  });
+  it("removeSong returns true and decrements song_count", async () => {
+    useCollectionsStore.setState({ items: [{ id: "1", name: "x", kind: "collection", description: null, song_count: 2, created_at: "" }] });
+    (apiDelete as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const ok = await useCollectionsStore.getState().removeSong("1", "j1");
+    expect(ok).toBe(true);
+    expect(useCollectionsStore.getState().items[0].song_count).toBe(1);
+  });
+  it("rename returns false and leaves name unchanged when the API rejects", async () => {
+    useCollectionsStore.setState({ items: [{ id: "1", name: "old", kind: "collection", description: null, song_count: 0, created_at: "" }] });
+    (apiPut as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("boom"));
+    const ok = await useCollectionsStore.getState().rename("1", "new");
+    expect(ok).toBe(false);
+    expect(useCollectionsStore.getState().items[0].name).toBe("old");
+  });
 });
